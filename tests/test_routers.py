@@ -27,3 +27,9 @@ def test_audit_endpoint():
         response = client.get("/v1/audit")
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+def test_audit_append_only_enforcement():
+    with TestClient(app) as client:
+        response = client.delete("/v1/audit/some_event_id")
+        assert response.status_code == 405
+        assert "append-only" in response.json()["detail"]
