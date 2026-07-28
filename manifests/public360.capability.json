@@ -1,0 +1,12 @@
+{
+  "adapter_id": "public360",
+  "name": "Public360",
+  "version": "1.0.0",
+  "conformance": "STANDARD",
+  "capabilities": [
+    { "action": "read", "resource": "document", "assurance": null },
+    { "action": "approve", "resource": "document", "assurance": "org_acting" },
+    { "action": "reject", "resource": "document", "assurance": "org_acting" },
+    { "action": "send", "resource": "document", "assurance": "eid_low" }
+  ]
+}

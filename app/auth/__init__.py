@@ -1,0 +1,1 @@
+"""Enterprise auth — OIDC / Entra."""

@@ -1,0 +1,10 @@
+{
+  "adapter_id": "erp-ordre",
+  "name": "ERP Ordre",
+  "version": "1.0.0",
+  "conformance": "CORE",
+  "capabilities": [
+    { "action": "read", "resource": "order", "assurance": null },
+    { "action": "status", "resource": "order", "assurance": null }
+  ]
+}
