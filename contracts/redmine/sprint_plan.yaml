@@ -1,0 +1,109 @@
+# Sprint-tildeling for EIRA CP-kontrakter
+# Bruges af sync_contracts.py til Target version i Redmine CSV
+#
+# sprint: skal matche version-navn i Redmine (Project → Versions)
+# tracker: Feature | Task
+# parent: Subject på parent issue (epic)
+
+sprints:
+  "P1 — Kontrakt-freeze":
+    due: "2026-07-11"
+    goal: "Verificér og fryse eksisterende CP-* + schemas"
+
+  "P1 — Uge 2":
+    due: "2026-07-18"
+    goal: "Nye kontrakter, governance-agent, CI"
+
+# Epics (oprettes som Feature — ændres ikke af sync)
+epics:
+  - subject: "[EIRA P1] Engineering kontrakter — oversigt"
+    tracker: Feature
+    sprint: "P1 — Kontrakt-freeze"
+    priority: High
+
+  - subject: "[EIRA] Onboarding — læs docs og kør phase1"
+    tracker: Task
+    sprint: "P1 — Kontrakt-freeze"
+    parent: "[EIRA P1] Engineering kontrakter — oversigt"
+    assignee: ""
+    hours: 2
+    priority: High
+
+  - subject: "[EIRA-A] Endpoint Runtime — Programmer A"
+    tracker: Feature
+    sprint: "P1 — Kontrakt-freeze"
+    parent: "[EIRA P1] Engineering kontrakter — oversigt"
+    assignee: programmer-a
+    priority: High
+
+  - subject: "[EIRA-B] Fleet & Integration — Programmer B"
+    tracker: Feature
+    sprint: "P1 — Kontrakt-freeze"
+    parent: "[EIRA P1] Engineering kontrakter — oversigt"
+    assignee: programmer-b
+    priority: High
+
+# Kontrakter uden prompt-fil endnu (planlagt)
+planned:
+  - contract_id: CP-GRAPH-001
+    subject_suffix: "Implementer graph IPC kontrakt"
+    owner: programmer-a
+    parent: "[EIRA-A] Endpoint Runtime — Programmer A"
+    sprint: "P1 — Uge 2"
+    hours: 8
+    priority: Normal
+    depends_on: [CP-INTENT-001]
+    prompt_path: ""
+    prototype_ref: prototype/phase1/app/daemons/graphd.py
+
+  - contract_id: CP-GOVERNANCE-AGENT-001
+    subject_suffix: "Heartbeat client til fleet-control"
+    owner: programmer-b
+    parent: "[EIRA-B] Fleet & Integration — Programmer B"
+    sprint: "P1 — Uge 2"
+    hours: 16
+    priority: High
+    depends_on: [CP-FLEET-001]
+    prompt_path: ""
+    prototype_ref: eira-governance-agent
+
+  - contract_id: CP-ADAPTER-001
+    subject_suffix: "Adapter sidecar transport (stub→HTTP)"
+    owner: programmer-b
+    parent: "[EIRA-B] Fleet & Integration — Programmer B"
+    sprint: "P1 — Uge 2"
+    hours: 12
+    priority: Normal
+    depends_on: [CP-EXECUTOR-001]
+    prompt_path: ""
+    prototype_ref: prototype/phase1/app/adapter_transport.py
+
+# Ikke-kontrakt leverancer
+tasks:
+  - subject: "Schema ipc-intent-v1.json — generér fra phase1 handlers"
+    owner: programmer-a
+    parent: "[EIRA-A] Endpoint Runtime — Programmer A"
+    sprint: "P1 — Kontrakt-freeze"
+    hours: 3
+    priority: Normal
+
+  - subject: "Schema ipc-fleet-v1.json — align med Fleet Agent Protocol"
+    owner: programmer-b
+    parent: "[EIRA-B] Fleet & Integration — Programmer B"
+    sprint: "P1 — Kontrakt-freeze"
+    hours: 3
+    priority: Normal
+
+  - subject: "EVENTS-001 — events-v1.yaml event catalog"
+    owner: programmer-a
+    parent: "[EIRA-A] Endpoint Runtime — Programmer A"
+    sprint: "P1 — Uge 2"
+    hours: 4
+    priority: Low
+
+  - subject: "CI — contract tests + jsonschema på PR"
+    owner: programmer-a
+    parent: "[EIRA-A] Endpoint Runtime — Programmer A"
+    sprint: "P1 — Uge 2"
+    hours: 6
+    priority: Normal

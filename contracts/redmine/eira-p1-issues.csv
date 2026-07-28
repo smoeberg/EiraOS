@@ -1,0 +1,245 @@
+Project,Tracker,Subject,Status,Priority,Assignee,Parent task,Target version,Estimated hours,Contract ID,Owner,Prompt path,Contract status,Depends on,Description
+eira-os,Feature,[EIRA P1] Engineering kontrakter — oversigt,New,High,,,P1 — Kontrakt-freeze,,,,,"h2. Mål
+
+Luk engineering-fasen med fryste kontrakter (CP-*) og grønne acceptance tests.
+
+h2. Dokumentation
+
+* Framework: {{eira-os/contracts/EIRA_Contract_Prompt_Framework_v0.1.md}}
+* Onboarding: {{eira-os/contracts/ONBOARDING_Programmoerer.md}}
+* Prompts: {{eira-os/contracts/prompts/}}
+
+h2. Definition of Done (projekt)
+
+* Alle P1 CP-* har status *frozen*
+* JSON schemas matcher phase1 handlers
+* {{pytest tests/contracts/}} grøn i CI
+"
+eira-os,Task,[EIRA] Onboarding — læs docs og kør phase1,New,High,,[EIRA P1] Engineering kontrakter — oversigt,P1 — Kontrakt-freeze,2,,,,,"h2. Opgave
+
+Alle hovedprogrammører gennemfører onboarding (~30 min) og får reference runtime til at køre.
+
+h2. Checklist
+
+* [ ] Læst {{contracts/EIRA_Contract_Prompt_Framework_v0.1.md}}
+* [ ] Læst {{contracts/prompts/README.md}}
+* [ ] Læst {{prototype/phase1/README.md}}
+* [ ] {{uvicorn app.http_bridge:app --port 8765}} kører
+* [ ] UI dev server kører (valgfrit)
+* [ ] {{pytest tests/contracts/}} — mindst 3 passed
+
+h2. Kommandoer (Windows)
+
+<pre>
+cd eira-os/prototype/phase1
+.venv\Scripts\activate
+Remove-Item data/eira.db -ErrorAction SilentlyContinue
+uvicorn app.http_bridge:app --reload --port 8765
+</pre>
+"
+eira-os,Feature,[EIRA-A] Endpoint Runtime — Programmer A,New,High,programmer-a,[EIRA P1] Engineering kontrakter — oversigt,P1 — Kontrakt-freeze,,,,,"h2. Ejer
+
+Programmer A — daemons, IPC, session, intent, identity, graph, HTTP bridge, Explorer API.
+
+h2. Konfliktregel
+
+Ejer {{database.py}} og {{ipc/client.py}}. Programmer B koordinerer via PR.
+
+h2. Kontrakter
+
+CP-SESSION, CP-IPC, CP-INTENT, CP-IDENTITY, CP-GRAPH, CP-EXECUTOR
+"
+eira-os,Feature,[EIRA-B] Fleet & Integration — Programmer B,New,High,programmer-b,[EIRA P1] Engineering kontrakter — oversigt,P1 — Kontrakt-freeze,,,,,"h2. Ejer
+
+Programmer B — fleetd, eira-governance-agent, adapters, eira-fleet-control alignment.
+
+h2. Kontrakter
+
+CP-FLEET, CP-GOVERNANCE-AGENT, CP-ADAPTER
+"
+eira-os,Task,CP-SESSION-001 — Verificer og freeze session isolation,New,High,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Kontrakt-freeze,4,CP-SESSION-001,A,contracts/prompts/CP-SESSION-001.prompt.md,active,,"h2. Kontrakt
+
+* ID: *CP-SESSION-001*
+* Prompt: {{contracts/prompts/CP-SESSION-001.prompt.md}}
+* Kode: {{prototype/phase1/app/session_store.py}}
+
+h2. Acceptance
+
+* GIVEN to sessions WHEN step_up på A THEN B assurance uændret
+* GIVEN session A WHEN builder mode THEN kun A er builder
+* GIVEN ukendt session_id WHEN dashboard.get THEN ny session persisteres
+
+h2. Done
+
+* [ ] pytest S1–S3 grøn
+* [ ] Ingen global _session / _presentation_mode
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,CP-IPC-001 — Verificer og freeze IPC transport + auth,New,High,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Kontrakt-freeze,4,CP-IPC-001,A,contracts/prompts/CP-IPC-001.prompt.md,active,CP-SESSION-001,"h2. Kontrakt
+
+* ID: *CP-IPC-001*
+* Prompt: {{contracts/prompts/CP-IPC-001.prompt.md}}
+* Kode: {{prototype/phase1/app/ipc/}}
+
+h2. Acceptance
+
+* GIVEN EIRA_IPC_TOKEN sat WHEN kald uden token THEN -32010
+* GIVEN korrekt token WHEN intent.parse THEN success
+* GIVEN daemon stopped WHEN client.call THEN ConnectionError
+
+h2. Done
+
+* [ ] pytest CP-IPC tests grønne
+* [ ] Schema {{schemas/ipc-transport-v1.json}} (opret)
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,CP-IDENTITY-001 — Verificer og freeze identity daemon,New,Normal,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Kontrakt-freeze,3,CP-IDENTITY-001,A,contracts/prompts/CP-IDENTITY-001.prompt.md,active,"CP-SESSION-001, CP-IPC-001","h2. Kontrakt
+
+* ID: *CP-IDENTITY-001*
+* Prompt: {{contracts/prompts/CP-IDENTITY-001.prompt.md}}
+* Kode: {{prototype/phase1/app/daemons/identityd.py}}
+* Depends on: CP-SESSION-001
+
+h2. Done
+
+* [ ] Step-up isolation test grøn
+* [ ] Schema {{schemas/ipc-identity-v1.json}}
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,CP-INTENT-001 — Verificer og freeze intent engine,New,High,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Kontrakt-freeze,6,CP-INTENT-001,A,contracts/prompts/CP-INTENT-001.prompt.md,active,"CP-SESSION-001, CP-IPC-001","h2. Kontrakt
+
+* ID: *CP-INTENT-001*
+* Prompt: {{contracts/prompts/CP-INTENT-001.prompt.md}}
+* Kode: {{prototype/phase1/app/daemons/intent_engine.py}}
+* Depends on: CP-SESSION-001, CP-IPC-001
+
+h2. Acceptance
+
+* Pending intents overlever daemon-genstart
+* Offline adapter blokerer plan
+* confirm på session A påvirker ikke session B
+
+h2. Done
+
+* [ ] pytest CP-INTENT tests
+* [ ] Schema {{schemas/ipc-intent-v1.json}}
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,CP-EXECUTOR-001 — Verificer og freeze execute path,New,Normal,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Kontrakt-freeze,4,CP-EXECUTOR-001,A,contracts/prompts/CP-EXECUTOR-001.prompt.md,active,CP-INTENT-001,"h2. Kontrakt
+
+* ID: *CP-EXECUTOR-001*
+* Prompt: {{contracts/prompts/CP-EXECUTOR-001.prompt.md}}
+* Kode: {{prototype/phase1/app/executor.py}}
+* Depends on: CP-INTENT-001
+
+h2. Acceptance
+
+* Offline adapter → -32014
+* approve_bundle → snapshot_required: true
+* Audit capability.executed skrives
+
+h2. Done
+
+* [ ] pytest CP-EXECUTOR tests
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,CP-GRAPH-001 — Implementer graph IPC kontrakt,New,Normal,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Uge 2,8,CP-GRAPH-001,A,,draft,CP-INTENT-001,"h2. Kontrakt (planlagt)
+
+* ID: *CP-GRAPH-001*
+* Kode: {{prototype/phase1/app/daemons/graphd.py}}, {{graph_context.py}}
+* Methods: graph.context, graph.temporal.query
+
+h2. Done
+
+* [ ] Opret {{prompts/CP-GRAPH-001.prompt.md}}
+* [ ] Schema {{schemas/ipc-graph-v1.json}}
+* [ ] pytest acceptance
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,Schema ipc-intent-v1.json — generér fra phase1 handlers,New,Normal,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Kontrakt-freeze,3,,A,,,,"h2. Opgave
+
+JSON Schema for alle intent.sock methods — autoritativ kontrakt for AI og CI.
+
+h2. Methods
+
+dashboard.get, intent.parse, intent.plan, intent.confirm, journey.*, capability.list, presentation.mode_*, health
+
+h2. Done
+
+* [ ] Fil: {{contracts/schemas/ipc-intent-v1.json}}
+* [ ] Validering mod phase1 responses (manuelt eller script)
+"
+eira-os,Task,EVENTS-001 — events-v1.yaml event catalog,New,Low,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Uge 2,4,,A,,,,"h2. Events (minimum)
+
+* intent.executed
+* capability.executed
+* device.enrolled
+
+h2. Done
+
+* [ ] {{contracts/events-v1.yaml}}
+* [ ] Matcher audit_events i database.py
+"
+eira-os,Task,CI — contract tests + jsonschema på PR,New,Normal,programmer-a,[EIRA-A] Endpoint Runtime — Programmer A,P1 — Uge 2,6,,A,,,,"h2. Opgave
+
+GitHub/GitLab CI kører {{pytest tests/contracts/}} og validerer IPC schemas.
+
+h2. Done
+
+* [ ] CI workflow fil
+* [ ] Blokerer merge ved rød contract test
+"
+eira-os,Task,CP-FLEET-001 — Verificer og freeze fleetd,New,High,programmer-b,[EIRA-B] Fleet & Integration — Programmer B,P1 — Kontrakt-freeze,6,CP-FLEET-001,B,contracts/prompts/CP-FLEET-001.prompt.md,active,CP-IPC-001,"h2. Kontrakt
+
+* ID: *CP-FLEET-001*
+* Prompt: {{contracts/prompts/CP-FLEET-001.prompt.md}}
+* Kode: {{prototype/phase1/app/daemons/fleetd.py}}
+* Spec: {{eira-fleet-control/docs/specs/EIRA_Fleet_Agent_Protocol_v0.1.md}} (KUN CORE)
+
+h2. Acceptance
+
+* enroll idempotent
+* heartbeat på ukendt device → fejl
+* fleet.list sorteret efter last_heartbeat
+
+h2. Done
+
+* [ ] pytest CP-FLEET tests
+* [ ] Schema {{schemas/ipc-fleet-v1.json}}
+* [ ] Prompt status: *frozen*
+"
+eira-os,Task,CP-GOVERNANCE-AGENT-001 — Heartbeat client til fleet-control,New,High,programmer-b,[EIRA-B] Fleet & Integration — Programmer B,P1 — Uge 2,16,CP-GOVERNANCE-AGENT-001,B,,draft,CP-FLEET-001,"h2. Kontrakt (opret prompt)
+
+* Ny repo/map: {{eira-governance-agent}}
+* Kalder fleet.enroll + fleet.heartbeat (lokalt) og senere fleet-control cloud API
+* Depends on: CP-FLEET-001
+
+h2. Done
+
+* [ ] Opret {{prompts/CP-GOVERNANCE-AGENT-001.prompt.md}}
+* [ ] Minimal daemon/service med periodic heartbeat
+* [ ] pytest eller integration test mod phase1 fleetd
+"
+eira-os,Task,CP-ADAPTER-001 — Adapter sidecar transport (stub→HTTP),New,Normal,programmer-b,[EIRA-B] Fleet & Integration — Programmer B,P1 — Uge 2,12,CP-ADAPTER-001,B,,draft,CP-EXECUTOR-001,"h2. Kontrakt (opret prompt)
+
+* Erstat executor stub med adapter_transport.call()
+* Bevar adapter_health check og fejl -32014
+
+h2. Out of scope
+
+* Rigtige SAP/BC/Public360 API — kun transport-lag
+
+h2. Done
+
+* [ ] {{prompts/CP-ADAPTER-001.prompt.md}}
+* [ ] {{adapter_transport.py}} med injectable backend
+"
+eira-os,Task,Schema ipc-fleet-v1.json — align med Fleet Agent Protocol,New,Normal,programmer-b,[EIRA-B] Fleet & Integration — Programmer B,P1 — Kontrakt-freeze,3,,B,,,,"h2. Opgave
+
+JSON Schema for fleet.sock — feltnavne aligned med Fleet Agent Protocol CORE.
+
+h2. Done
+
+* [ ] {{contracts/schemas/ipc-fleet-v1.json}}
+* [ ] Afvigelser dokumenteret i schema description
+"

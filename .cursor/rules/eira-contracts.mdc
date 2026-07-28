@@ -1,0 +1,20 @@
+---
+description: EIRA contract rules for AI-assisted development in phase1
+globs: eira-os/prototype/phase1/**/*
+alwaysApply: false
+---
+
+# EIRA Contract Rules (phase1)
+
+When implementing or modifying code under `eira-os/prototype/phase1/`:
+
+1. **Read the active contract prompt** in `eira-os/contracts/prompts/` (CP-*.prompt.md) for the area you touch.
+2. **Never introduce** global session state, global presentation_mode, or in-memory pending intents.
+3. **Always scope** user state by `session_id` (DB table `sessions`).
+4. **IPC calls** must pass `session_id`; HTTP uses header `X-EIRA-Session-Id`.
+5. **Respect OUT OF SCOPE** sections in contract prompts — do not add vision features.
+6. **Error codes** must match contracts: -32001 assurance, -32002 cannot_execute, -32010 ipc_auth, -32014 capability_unavailable.
+7. **Match** existing Python style: typed functions, sqlite3 via `get_connection()`, pydantic models.
+8. **Do not create** new architecture or vision markdown files unless explicitly requested.
+
+Contract index: `eira-os/contracts/prompts/README.md`
