@@ -1,0 +1,13 @@
+[package]
+name = "eira-core"
+version = "0.2.0"
+edition = "2021"
+authors = ["Soeren Moeberg <gye7h8@workspace.rool.app>"]
+description = "High-performance Rust IPC bridge and typesafe contracts for EiraOS 2.0 (Tauri <-> Six Daemons)"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.30", features = ["full", "net"] }
+async-trait = "0.1"
+thiserror = "1.0"
