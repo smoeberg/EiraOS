@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EiraOS Browser - Veritas Shield HUD Component</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-color: #f8fafc;
+            --muted-color: #94a3b8;
+            --border-color: #334155;
+            --green-shield: #22c55e;
+            --yellow-shield: #eab308;
+            --red-shield: #ef4444;
+            --accent-blue: #38bdf8;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .browser-window {
+            width: 100%;
+            max-width: 900px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Browser Bar UI */
+        .address-bar-container {
+            display: flex;
+            align-items: center;
+            background: #090d16;
+            padding: 10px 16px;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 8px;
+            color: var(--muted-color);
+            font-size: 14px;
+        }
+
+        .url-bar {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: #1e293b;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+            color: var(--text-color);
+        }
+
+        .url-bar input {
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            width: 100%;
+            outline: none;
+            font-size: 13px;
+        }
+
+        /* Veritas Shield Status Indicator Icon */
+        .veritas-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid var(--green-shield);
+            border-radius: 20px;
+            padding: 4px 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .veritas-indicator:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--green-shield);
+            box-shadow: 0 0 8px var(--green-shield);
+        }
+
+        .status-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--green-shield);
+        }
+
+        /* Slide-out Veritas Panel / HUD Overlay */
+        .veritas-hud-panel {
+            position: absolute;
+            top: 55px;
+            right: 16px;
+            width: 360px;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            padding: 18px;
+            z-index: 100;
+            display: none;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hud-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+        }
+
+        .hud-title {
+            font-size: 14px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hud-score {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--green-shield);
+        }
+
+        .section-box {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .section-title {
+            color: var(--muted-color);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .badge-verified {
+            color: var(--green-shield);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+
+        .checklist-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .checklist-item.pass { color: var(--green-shield); }
+        .checklist-item.warn { color: var(--yellow-shield); }
+
+        .btn-action {
+            width: 100%;
+            background: var(--accent-blue);
+            color: #0f172a;
+            border: none;
+            padding: 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        .btn-action:hover {
+            opacity: 0.9;
+        }
+
+        /* Mock Web Page Content */
+        .page-content {
+            padding: 30px;
+            line-height: 1.6;
+            min-height: 350px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            margin-top: 0;
+            color: #ffffff;
+        }
+
+        .controls-demo {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .demo-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>EiraOS Browser Interface & Veritas Shield HUD</h2>
+    <p style="color: var(--muted-color); font-size: 14px; max-width: 600px; text-align: center;">
+        Demonstration af den runde status-indikator i EiraOS browseren, der dynamisk skifter farve og tilbyder realtidsoversigt ved klik.
+    </p>
+
+    <div class="browser-window">
+        <!-- Address Bar -->
+        <div class="address-bar-container">
+            <div class="nav-buttons">◄ ► ↻</div>
+            <div class="url-bar">
+                <span style="color: var(--muted-color); margin-right: 6px;">🔒</span>
+                <input type="text" id="urlInput" value="https://nyheder.dk/klima-analyse-2026" readonly>
+            </div>
+            
+            <!-- Veritas Round Indicator Badge -->
+            <div class="veritas-indicator" id="veritasBadge" onclick="toggleHUD()">
+                <div class="status-dot" id="statusDot"></div>
+                <span class="status-label" id="statusLabel">Veritas 88%</span>
+            </div>
+        </div>
+
+        <!-- Veritas Overlay Panel -->
+        <div class="veritas-hud-panel" id="veritasPanel">
+            <div class="hud-header">
+                <div class="hud-title">🛡️ Veritas Audit Score</div>
+                <div class="hud-score" id="hudScore">88 / 100</div>
+            </div>
+
+            <!-- EUDI Wallet Status -->
+            <div class="section-box">
+                <div class="section-title">Kryptografisk Tillid (EUDI Wallet)</div>
+                <div class="badge-verified" id="hudEudi">
+                    ✓ Verificeret af DR Nyheder (QEAA)
+                </div>
+            </div>
+
+            <!-- Lag 1 Audit -->
+            <div class="section-box">
+                <div class="section-title">Lag 1 Risikoprofil</div>
+                <div class="checklist-item pass">
+                    <span>✓ Kildeforankring: Navngivet</span>
+                    <span>PASS</span>
+                </div>
+                <div class="checklist-item pass">
+                    <span>✓ Sproglig tone: Neutral</span>
+                    <span>PASS</span>
+                </div>
+                <div class="checklist-item warn" id="hudWarning">
+                    <span>⚠️ Partshøring: Uafklaret</span>
+                    <span>INFO</span>
+                </div>
+            </div>
+
+            <!-- Temporal Graph Narrative -->
+            <div class="section-box">
+                <div class="section-title">EiraOS Temporal Graph</div>
+                <div style="color: var(--muted-color); margin-bottom: 6px;">Narrativ: "Klimaplan 2030"</div>
+                <div style="font-size: 11px; color: var(--accent-blue); cursor: pointer;">
+                    🔗 Se historisk forløb i EiraOS Graf
+                </div>
+            </div>
+
+            <button class="btn-action" onclick="alert('Læse-tilstand aktiveret i EiraOS!')">
+                Aktiver Intentional Reading Mode
+            </button>
+        </div>
+
+        <!-- Page Content Mock -->
+        <div class="page-content" id="pageArticle">
+            <h1 class="page-title" id="articleTitle">Nye tal viser fremskridt i den danske klimaplan for 2030</h1>
+            <p style="color: var(--muted-color);">Udgivet af DR Nyheder | Signeret med eIDAS 2.0 Certifikat</p>
+            <p>
+                En ny rapport fra Energistyrelsen bekræfter i dag, at omstillingen til vedvarende energi i Danmark skrider fremmeste frem.
+                Eksperter og forskere peger på, at kildegrundlaget er solidt, og at målsætningerne kan nås før tid.
+            </p>
+        </div>
+    </div>
+
+    <!-- Demo Controls -->
+    <div class="controls-demo">
+        <button class="demo-btn" onclick="setMode('GREEN')">Test 🟢 Grønt Skjold</button>
+        <button class="demo-btn" onclick="setMode('YELLOW')">Test 🟡 Gult Skjold</button>
+        <button class="demo-btn" onclick="setMode('RED')">Test 🔴 Rødt Skjold</button>
+    </div>
+
+    <script>
+        function toggleHUD() {
+            const panel = document.getElementById('veritasPanel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function setMode(mode) {
+            const badge = document.getElementById('veritasBadge');
+            const dot = document.getElementById('statusDot');
+            const label = document.getElementById('statusLabel');
+            const score = document.getElementById('hudScore');
+            const eudi = document.getElementById('hudEudi');
+            const url = document.getElementById('urlInput');
+            const title = document.getElementById('articleTitle');
+
+            if (mode === 'GREEN') {
+                badge.style.borderColor = '#22c55e';
+                badge.style.background = 'rgba(34, 197, 94, 0.15)';
+                dot.style.backgroundColor = '#22c55e';
+                dot.style.boxShadow = '0 0 8px #22c55e';
+                label.style.color = '#22c55e';
+                label.innerText = 'Veritas 88%';
+                score.innerText = '88 / 100';
+                score.style.color = '#22c55e';
+                eudi.innerHTML = '✓ Verificeret af DR Nyheder (QEAA)';
+                eudi.style.color = '#22c55e';
+                url.value = 'https://dr.dk/nyheder/klima-analyse-2026';
+                title.innerText = 'Nye tal viser fremskridt i den danske klimaplan for 2030';
+            } else if (mode === 'YELLOW') {
+                badge.style.borderColor = '#eab308';
+                badge.style.background = 'rgba(234, 179, 8, 0.15)';
+                dot.style.backgroundColor = '#eab308';
+                dot.style.boxShadow = '0 0 8px #eab308';
+                label.style.color = '#eab308';
+                label.innerText = 'Veritas 58%';
+                score.innerText = '58 / 100';
+                score.style.color = '#eab308';
+                eudi.innerHTML = '⚠️ Uverificeret afsender (Ingen EUDI-signatur)';
+                eudi.style.color = '#eab308';
+                url.value = 'https://debat-bloggen.dk/klima-kommentar';
+                title.innerText = 'Er klimaplanen urealistisk? Analyse af omkostningerne';
+            } else if (mode === 'RED') {
+                badge.style.borderColor = '#ef4444';
+                badge.style.background = 'rgba(239, 68, 68, 0.15)';
+                dot.style.backgroundColor = '#ef4444';
+                dot.style.boxShadow = '0 0 8px #ef4444';
+                label.style.color = '#ef4444';
+                label.innerText = 'Veritas 22%';
+                score.innerText = '22 / 100';
+                score.style.color = '#ef4444';
+                eudi.innerHTML = '⛔ Blacklisted / Høj Risiko for Vildledning';
+                eudi.style.color = '#ef4444';
+                url.value = 'https://chok-nyheder.com/skandale-afsloeret';
+                title.innerText = 'CHOK: Klimaprojektet er en komplet katastrofe!';
+            }
+        }
+    </script>
+</body>
+</html>

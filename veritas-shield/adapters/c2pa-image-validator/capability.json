@@ -1,0 +1,18 @@
+{
+  "module_id": "c2pa-image-validator-v1",
+  "name": "EiraOS C2PA Content Credentials Validator",
+  "standard": "C2PA v1.3 (Coalition for Content Provenance and Authenticity)",
+  "capabilities": {
+    "jumbf_manifest_parsing": true,
+    "hardware_camera_signature_check": true,
+    "ai_generation_flagging": true,
+    "eidas_pki_verification": true,
+    "supported_formats": [
+      "image/jpeg",
+      "image/png",
+      "image/avif",
+      "image/webp",
+      "video/mp4"
+    ]
+  }
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "id": "PARAM_001",
+    "category": "Kildeforankring",
+    "name": "Navngiven prim\u00e6rkilde tilstede",
+    "weight": 1.5,
+    "type": "presence",
+    "keywords": [
+      "if\u00f8lge",
+      "udtaler",
+      "siger",
+      "kilde",
+      "dokument"
+    ]
+  },
+  {
+    "id": "PARAM_002",
+    "category": "Parts-h\u00f8ring",
+    "name": "Fors\u00f8g p\u00e5 indhentning af kommentar fra omtalte part",
+    "weight": 2.0,
+    "type": "presence",
+    "keywords": [
+      "har fors\u00f8gt at f\u00e5 en kommentar",
+      "afviser at udtale sig",
+      "svarer i en mail",
+      "er forelagt kritikken"
+    ]
+  },
+  {
+    "id": "PARAM_003",
+    "category": "Sproglig neutralitet",
+    "name": "Overforbrug af f\u00f8lelsesladede superlativer",
+    "weight": -1.0,
+    "type": "penalty",
+    "keywords": [
+      "skandal\u00f8st",
+      "chok",
+      "vanviddet",
+      "katastrofe uden lige",
+      "helt amok"
+    ]
+  },
+  {
+    "id": "PARAM_004",
+    "category": "Datasoliditet",
+    "name": "Henvisning til unders\u00f8gelse eller metode",
+    "weight": 1.5,
+    "type": "presence",
+    "keywords": [
+      "rapport",
+      "unders\u00f8gelse",
+      "data fra",
+      "stikpr\u00f8ve",
+      "analyse viser"
+    ]
+  }
+]

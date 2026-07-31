@@ -119,3 +119,16 @@ Rust commands: `dashboard_get`, `intent_plan` (kalder sockets direkte).
 
 - [EIRA_Desktop_Architecture_v1.0.md](../../docs/specs/EIRA_Desktop_Architecture_v1.0.md) §6 IPC
 - [EIRA_Cognitive_Runtime_v1.0.md](../../docs/specs/EIRA_Cognitive_Runtime_v1.0.md)
+
+
+---
+
+## 🛡️ Project Veritas-Skjoldet (Informations- & Billedvalidering)
+
+EiraOS indeholder en integreret, kryptografisk og narrativt intelligent modul for informations- og kildekritik (**`veritas-shield/`**):
+
+- **Lag 1: Artikelanalyse (Det Røde Skjold):** 200 regelbaserede parametre for kildeforankring, parthøring og sproglig tone uden AI-hallucination (`veritas-shield/lag1-article-analysis/`).
+- **Lag 2: EUDI Wallet Bridge (Det Grønne Skjold):** eIDAS 2.0 / QEAA validering af digitale afsendersignaturer (`veritas-shield/adapters/eudi-wallet-adapter/`).
+- **Lag 3: Narrativ Kortlægning (Det Blå Skjold):** Mønstergenkendelse og tidsmæssig provenance i EiraOS Temporal Graph (`veritas-shield/lag3-narrative-mapping/`).
+- **C2PA Billed- & Medievalidering:** Hardware-signaturer (Leica, Canon, Sony) og AI-genereringsdetektion (`veritas-shield/adapters/c2pa-image-validator/`).
+- **Browser HUD Component:** Interaktiv status-indikator (🟢/🟡/🔴) til EiraOS Tauri browser (`ui/veritas-hud/`).

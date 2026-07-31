@@ -1,0 +1,11 @@
+{
+  "adapter_id": "eudi-wallet-v1",
+  "adapter_name": "EUDI Wallet Bridge for EiraOS",
+  "spec_version": "1.0",
+  "capabilities": {
+    "can_verify_signature": true,
+    "can_fetch_issuer_info": true,
+    "supports_eudi_wallet": true,
+    "eidas_version": "2.0"
+  }
+}
