@@ -1,3 +1,29 @@
+
+
+---
+
+# 🐧 EiraOS — The Cognitive Overlay for Ubuntu 24.04 LTS
+
+EiraOS er udviklet specifikt som det **kognitive og intent-drevne lag oven på Ubuntu Linux**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        EiraOS UX / Intent Shell                         │
+│     (Spatial Canvas, Conversational UI, 100-Level Veritas Indicator)    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                     EiraOS 7 Core System Daemons                        │
+│   (identityd, walletd, veritasd, graphd, presenced, contextd, intentd)  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                   Ubuntu 24.04 LTS Substrate / Kernel                   │
+│   (Linux Kernel, Systemd, AppArmor, Hardware Drivers, APT / Snap)     │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Hvorfor Ubuntu som fundament?
+1. **Ubuntu leverer infrastrukturen:** Hardware-drivere, GPU/NPU-acceleration, sikkerhed (AppArmor) og Canonical LTS-stabilitet.
+2. **EiraOS leverer værdien:** Slut med det forældede 2000'er skrivebords-paradigme (filer/mapper/menuer). EiraOS forvandler Ubuntu til et **objekt-, tillids- og intent-drevet operativsystem**.
+3. **Native Systemd Integration:** Alle 7 dæmoner kører som indfødte Ubuntu `systemd` servicetjenester under `/etc/systemd/system/eira-*.service`.
+
 # EIRA Cognitive Runtime — Phase 1–3 Prototype
 
 Python IPC daemons + HTTP dev bridge + React Cognitive Dashboard (Tauri IPC-ready).
