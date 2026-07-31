@@ -15,7 +15,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from app.daemons.runner import start_daemons
-from app.routers import audit, auth, dashboard, fleet, graph, health, intent, veritas
+from app.routers import audit, auth, dashboard, fleet, graph, health, intent, veritas, wallet, presence
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
@@ -50,3 +50,6 @@ app.include_router(graph.router)
 app.include_router(audit.router)
 
 app.include_router(veritas.router)
+
+app.include_router(wallet.router)
+app.include_router(presence.router)

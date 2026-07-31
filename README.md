@@ -132,3 +132,40 @@ EiraOS indeholder en integreret, kryptografisk og narrativt intelligent modul fo
 - **Lag 3: Narrativ Kortlægning (Det Blå Skjold):** Mønstergenkendelse og tidsmæssig provenance i EiraOS Temporal Graph (`veritas-shield/lag3-narrative-mapping/`).
 - **C2PA Billed- & Medievalidering:** Hardware-signaturer (Leica, Canon, Sony) og AI-genereringsdetektion (`veritas-shield/adapters/c2pa-image-validator/`).
 - **Browser HUD Component:** Interaktiv status-indikator (🟢/🟡/🔴) til EiraOS Tauri browser (`ui/veritas-hud/`).
+
+
+---
+
+# 🚀 EiraOS 2.0 Architecture — The Six Core Daemons
+
+EiraOS 2.0 introducerer en revolutionerende operativsystem-model, hvor **Økonomi (Wallet)**, **Troværdighed (Veritas)** og **Samarbejde (Presence)** er dybe, integrerede system-daemons på linje med netværk og filsystem:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            EiraOS 2.0 Kernel                                │
+├───────────────┬─────────────────────────────────────────┬───────────────────┤
+│ 1. identityd  │ Bruger, Organisationer, Nøgler, EUDI   │ Identitets-lag    │
+├───────────────┼─────────────────────────────────────────┼───────────────────┤
+│ 2. walletd    │ SEPA Instant, Open Banking PSD3, EUDI  │ Økonomi & Agent   │
+├───────────────┼─────────────────────────────────────────┼───────────────────┤
+│ 3. veritasd   │ Evidence Engine, C2PA, Trust Score 0-100%│ Troværdighed      │
+├───────────────┼─────────────────────────────────────────┼───────────────────┤
+│ 4. graphd     │ Temporal Knowledge Graph, Objekter      │ Hukommelses-lag   │
+├───────────────┼─────────────────────────────────────────┼───────────────────┤
+│ 5. presenced  │ Conversation follows Object, Beslutninger│ Samarbejde        │
+├───────────────┼─────────────────────────────────────────┼───────────────────┤
+│ 6. intentd    │ Fortolker Intention & Orkestrerer       │ Eksekvering       │
+└───────────────┴─────────────────────────────────────────┴───────────────────┘
+```
+
+## Nøglesøjler i EiraOS 2.0
+
+### 1. `walletd` (Økonomisk Optimering & EUDI)
+- Omgår us-baserede kreditkortmonopoler (Visa/Mastercard) ved automatisk at vælge den billigste europæiske betalingsvej (**SEPA Instant**, **Digital Euro**, **Open Banking PSD3**).
+- Håndterer brugerens **EUDI Wallet** certifikater, samtykker og digitale nøgler.
+
+### 2. `veritasd` (Evidence & Trust Engine)
+- Beregner en præcis **Trust Score (0-100%)** for alle indkommende informationer, tekst, billeder (C2PA) og dokumenter før de indlejres i objektgrafen.
+
+### 3. `presenced` (Objektbaseret Samarbejde)
+- **"Conversation follows Object":** Drøftelser, beslutninger og ekspertise er forankret direkte på Objekterne i Knowledge Graph (Bygning, Projekt, Dokument), ikke i isolerede chat-kanaler.
