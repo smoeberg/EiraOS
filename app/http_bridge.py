@@ -53,3 +53,5 @@ app.include_router(veritas.router)
 
 app.include_router(wallet.router)
 app.include_router(presence.router)
+
+app.include_router(capability.router)
