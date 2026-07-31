@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EiraOS Browser - Veritas Shield HUD Component</title>
+    <title>EiraOS Browser - Veritas Shield HUD Component (100-Level Graduering)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -11,9 +11,6 @@
             --text-color: #f8fafc;
             --muted-color: #94a3b8;
             --border-color: #334155;
-            --green-shield: #22c55e;
-            --yellow-shield: #eab308;
-            --red-shield: #ef4444;
             --accent-blue: #38bdf8;
         }
 
@@ -30,7 +27,7 @@
 
         .browser-window {
             width: 100%;
-            max-width: 900px;
+            max-width: 920px;
             background: var(--panel-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
@@ -39,7 +36,7 @@
             position: relative;
         }
 
-        /* Browser Bar UI */
+        /* Address Bar Container */
         .address-bar-container {
             display: flex;
             align-items: center;
@@ -77,37 +74,52 @@
             font-size: 13px;
         }
 
-        /* Veritas Shield Status Indicator Icon */
+        /* Continuous 100-Level Veritas Status Indicator */
         .veritas-indicator {
             display: flex;
             align-items: center;
-            gap: 6px;
-            background: rgba(34, 197, 94, 0.15);
-            border: 1px solid var(--green-shield);
+            gap: 8px;
             border-radius: 20px;
-            padding: 4px 10px;
+            padding: 5px 12px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             user-select: none;
+            border: 1px solid transparent;
         }
 
         .veritas-indicator:hover {
-            transform: scale(1.03);
-            box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+            transform: scale(1.04);
         }
 
         .status-dot {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
-            background-color: var(--green-shield);
-            box-shadow: 0 0 8px var(--green-shield);
+            transition: all 0.25s ease;
         }
 
         .status-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--green-shield);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+        }
+
+        /* Score Meter Bar (Visual 100% Spectrum) */
+        .spectrum-bar-container {
+            width: 100%;
+            height: 6px;
+            background: #334155;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 8px 0;
+            position: relative;
+        }
+
+        .spectrum-fill {
+            height: 100%;
+            width: 88%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+            border-radius: 3px;
         }
 
         /* Slide-out Veritas Panel / HUD Overlay */
@@ -115,12 +127,12 @@
             position: absolute;
             top: 55px;
             right: 16px;
-            width: 360px;
+            width: 380px;
             background: #0f172a;
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-            padding: 18px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.85);
+            padding: 20px;
             z-index: 100;
             display: none;
             animation: fadeIn 0.2s ease-in-out;
@@ -137,7 +149,7 @@
             align-items: center;
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
         .hud-title {
@@ -148,10 +160,10 @@
             gap: 8px;
         }
 
-        .hud-score {
-            font-size: 16px;
-            font-weight: 800;
-            color: var(--green-shield);
+        .hud-score-number {
+            font-size: 22px;
+            font-weight: 900;
+            font-family: monospace;
         }
 
         .section-box {
@@ -172,7 +184,6 @@
         }
 
         .badge-verified {
-            color: var(--green-shield);
             display: flex;
             align-items: center;
             gap: 6px;
@@ -185,15 +196,12 @@
             margin-bottom: 4px;
         }
 
-        .checklist-item.pass { color: var(--green-shield); }
-        .checklist-item.warn { color: var(--yellow-shield); }
-
         .btn-action {
             width: 100%;
             background: var(--accent-blue);
             color: #0f172a;
             border: none;
-            padding: 8px;
+            padding: 10px;
             border-radius: 6px;
             font-weight: 700;
             font-size: 12px;
@@ -209,7 +217,7 @@
         .page-content {
             padding: 30px;
             line-height: 1.6;
-            min-height: 350px;
+            min-height: 320px;
         }
 
         .page-title {
@@ -218,28 +226,38 @@
             color: #ffffff;
         }
 
-        .controls-demo {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
+        /* Slider Control Demo */
+        .slider-control-box {
+            margin-top: 25px;
+            background: #1e293b;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            width: 100%;
+            max-width: 920px;
+            box-sizing: border-border-box;
         }
 
-        .demo-btn {
-            background: #334155;
-            color: white;
-            border: none;
-            padding: 8px 14px;
-            border-radius: 6px;
+        .slider-label {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .slider-input {
+            width: 100%;
+            accent-color: var(--accent-blue);
             cursor: pointer;
-            font-size: 12px;
         }
     </style>
 </head>
 <body>
 
-    <h2>EiraOS Browser Interface & Veritas Shield HUD</h2>
-    <p style="color: var(--muted-color); font-size: 14px; max-width: 600px; text-align: center;">
-        Demonstration af den runde status-indikator i EiraOS browseren, der dynamisk skifter farve og tilbyder realtidsoversigt ved klik.
+    <h2>EiraOS Browser - 100-Level Gradueret Veritas Indikator</h2>
+    <p style="color: var(--muted-color); font-size: 14px; max-width: 650px; text-align: center;">
+        Kontinuerlig farvegraduering fra 0% (Dyb Rød) til 100% (Smaragd Grøn) via dynamisk HSL-farverum. Undgår "alt er gult"-fælden og giver præcis kildekritisk finjustering.
     </p>
 
     <div class="browser-window">
@@ -248,10 +266,10 @@
             <div class="nav-buttons">◄ ► ↻</div>
             <div class="url-bar">
                 <span style="color: var(--muted-color); margin-right: 6px;">🔒</span>
-                <input type="text" id="urlInput" value="https://nyheder.dk/klima-analyse-2026" readonly>
+                <input type="text" id="urlInput" value="https://dr.dk/nyheder/klima-analyse-2026" readonly>
             </div>
             
-            <!-- Veritas Round Indicator Badge -->
+            <!-- Continuous Veritas Indicator -->
             <div class="veritas-indicator" id="veritasBadge" onclick="toggleHUD()">
                 <div class="status-dot" id="statusDot"></div>
                 <span class="status-label" id="statusLabel">Veritas 88%</span>
@@ -262,7 +280,12 @@
         <div class="veritas-hud-panel" id="veritasPanel">
             <div class="hud-header">
                 <div class="hud-title">🛡️ Veritas Audit Score</div>
-                <div class="hud-score" id="hudScore">88 / 100</div>
+                <div class="hud-score-number" id="hudScore">88%</div>
+            </div>
+
+            <!-- 100-Level Spectrum Bar -->
+            <div class="spectrum-bar-container">
+                <div class="spectrum-fill" id="spectrumFill"></div>
             </div>
 
             <!-- EUDI Wallet Status -->
@@ -273,27 +296,27 @@
                 </div>
             </div>
 
-            <!-- Lag 1 Audit -->
+            <!-- Lag 1 Audit Details -->
             <div class="section-box">
-                <div class="section-title">Lag 1 Risikoprofil</div>
-                <div class="checklist-item pass">
+                <div class="section-title">Lag 1 Risikoprofil (Finmasket Audit)</div>
+                <div class="checklist-item" style="color: #22c55e;">
                     <span>✓ Kildeforankring: Navngivet</span>
-                    <span>PASS</span>
+                    <span>100%</span>
                 </div>
-                <div class="checklist-item pass">
+                <div class="checklist-item" style="color: #22c55e;">
                     <span>✓ Sproglig tone: Neutral</span>
-                    <span>PASS</span>
+                    <span>95%</span>
                 </div>
-                <div class="checklist-item warn" id="hudWarning">
-                    <span>⚠️ Partshøring: Uafklaret</span>
-                    <span>INFO</span>
+                <div class="checklist-item" style="color: #eab308;" id="hudWarning">
+                    <span>⚠️ Partshøring: Afventer svar</span>
+                    <span>65%</span>
                 </div>
             </div>
 
-            <!-- Temporal Graph Narrative -->
+            <!-- Temporal Graph -->
             <div class="section-box">
                 <div class="section-title">EiraOS Temporal Graph</div>
-                <div style="color: var(--muted-color); margin-bottom: 6px;">Narrativ: "Klimaplan 2030"</div>
+                <div style="color: var(--muted-color); margin-bottom: 4px;">Narrativ: "Klimaplan 2030"</div>
                 <div style="font-size: 11px; color: var(--accent-blue); cursor: pointer;">
                     🔗 Se historisk forløb i EiraOS Graf
                 </div>
@@ -304,22 +327,24 @@
             </button>
         </div>
 
-        <!-- Page Content Mock -->
+        <!-- Article Mock -->
         <div class="page-content" id="pageArticle">
             <h1 class="page-title" id="articleTitle">Nye tal viser fremskridt i den danske klimaplan for 2030</h1>
             <p style="color: var(--muted-color);">Udgivet af DR Nyheder | Signeret med eIDAS 2.0 Certifikat</p>
             <p>
-                En ny rapport fra Energistyrelsen bekræfter i dag, at omstillingen til vedvarende energi i Danmark skrider fremmeste frem.
-                Eksperter og forskere peger på, at kildegrundlaget er solidt, og at målsætningerne kan nås før tid.
+                En ny rapport fra Energistyrelsen bekræfter i dag, at omstillingen til vedvarende energi i Danmark skrider frem.
+                Eksperter og forskere peger på, at kildegrundlaget er solidt.
             </p>
         </div>
     </div>
 
-    <!-- Demo Controls -->
-    <div class="controls-demo">
-        <button class="demo-btn" onclick="setMode('GREEN')">Test 🟢 Grønt Skjold</button>
-        <button class="demo-btn" onclick="setMode('YELLOW')">Test 🟡 Gult Skjold</button>
-        <button class="demo-btn" onclick="setMode('RED')">Test 🔴 Rødt Skjold</button>
+    <!-- Live 100-Level Slider Test Control -->
+    <div class="slider-control-box">
+        <div class="slider-label">
+            <span>Test 100-Level Graduering (Træk i slideren):</span>
+            <span id="sliderValLabel" style="color: var(--accent-blue);">88%</span>
+        </div>
+        <input type="range" min="0" max="100" value="88" class="slider-input" id="scoreSlider" oninput="updateScore(this.value)">
     </div>
 
     <script>
@@ -328,56 +353,49 @@
             panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
         }
 
-        function setMode(mode) {
+        function getHSLColor(score) {
+            // score 0 = 0deg (Red), score 100 = 120deg (Green)
+            const hue = (score / 100) * 120; 
+            return {
+                bg: `hsla(${hue}, 85%, 50%, 0.15)`,
+                border: `hsl(${hue}, 85%, 45%)`,
+                text: `hsl(${hue}, 90%, 50%)`,
+                solid: `hsl(${hue}, 85%, 48%)`,
+                glow: `0 0 10px hsla(${hue}, 85%, 50%, 0.4)`
+            };
+        }
+
+        function updateScore(scoreVal) {
+            const score = parseInt(scoreVal);
+            const colors = getHSLColor(score);
+
             const badge = document.getElementById('veritasBadge');
             const dot = document.getElementById('statusDot');
             const label = document.getElementById('statusLabel');
-            const score = document.getElementById('hudScore');
-            const eudi = document.getElementById('hudEudi');
-            const url = document.getElementById('urlInput');
-            const title = document.getElementById('articleTitle');
+            const scoreNum = document.getElementById('hudScore');
+            const fill = document.getElementById('spectrumFill');
+            const sliderLabel = document.getElementById('sliderValLabel');
 
-            if (mode === 'GREEN') {
-                badge.style.borderColor = '#22c55e';
-                badge.style.background = 'rgba(34, 197, 94, 0.15)';
-                dot.style.backgroundColor = '#22c55e';
-                dot.style.boxShadow = '0 0 8px #22c55e';
-                label.style.color = '#22c55e';
-                label.innerText = 'Veritas 88%';
-                score.innerText = '88 / 100';
-                score.style.color = '#22c55e';
-                eudi.innerHTML = '✓ Verificeret af DR Nyheder (QEAA)';
-                eudi.style.color = '#22c55e';
-                url.value = 'https://dr.dk/nyheder/klima-analyse-2026';
-                title.innerText = 'Nye tal viser fremskridt i den danske klimaplan for 2030';
-            } else if (mode === 'YELLOW') {
-                badge.style.borderColor = '#eab308';
-                badge.style.background = 'rgba(234, 179, 8, 0.15)';
-                dot.style.backgroundColor = '#eab308';
-                dot.style.boxShadow = '0 0 8px #eab308';
-                label.style.color = '#eab308';
-                label.innerText = 'Veritas 58%';
-                score.innerText = '58 / 100';
-                score.style.color = '#eab308';
-                eudi.innerHTML = '⚠️ Uverificeret afsender (Ingen EUDI-signatur)';
-                eudi.style.color = '#eab308';
-                url.value = 'https://debat-bloggen.dk/klima-kommentar';
-                title.innerText = 'Er klimaplanen urealistisk? Analyse af omkostningerne';
-            } else if (mode === 'RED') {
-                badge.style.borderColor = '#ef4444';
-                badge.style.background = 'rgba(239, 68, 68, 0.15)';
-                dot.style.backgroundColor = '#ef4444';
-                dot.style.boxShadow = '0 0 8px #ef4444';
-                label.style.color = '#ef4444';
-                label.innerText = 'Veritas 22%';
-                score.innerText = '22 / 100';
-                score.style.color = '#ef4444';
-                eudi.innerHTML = '⛔ Blacklisted / Høj Risiko for Vildledning';
-                eudi.style.color = '#ef4444';
-                url.value = 'https://chok-nyheder.com/skandale-afsloeret';
-                title.innerText = 'CHOK: Klimaprojektet er en komplet katastrofe!';
-            }
+            badge.style.backgroundColor = colors.bg;
+            badge.style.borderColor = colors.border;
+            
+            dot.style.backgroundColor = colors.solid;
+            dot.style.boxShadow = colors.glow;
+
+            label.style.color = colors.text;
+            label.innerText = `Veritas ${score}%`;
+
+            scoreNum.innerText = `${score}%`;
+            scoreNum.style.color = colors.text;
+
+            fill.style.width = `${score}%`;
+            fill.style.backgroundColor = colors.solid;
+
+            sliderLabel.innerText = `${score}%`;
         }
+
+        // Initialize at 88%
+        updateScore(88);
     </script>
 </body>
 </html>
