@@ -80,3 +80,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def start_veritasd():
+    from app.daemons.veritasd import VeritasDaemon
+    v = VeritasDaemon()
+    v.run_loop()
