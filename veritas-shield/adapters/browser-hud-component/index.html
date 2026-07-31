@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EiraOS Browser - Veritas Shield HUD Component (100-Level Graduering)</title>
+    <title>EiraOS Browser - 100 Diskrete Niveauer (0% - 100%)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -36,7 +36,6 @@
             position: relative;
         }
 
-        /* Address Bar Container */
         .address-bar-container {
             display: flex;
             align-items: center;
@@ -74,7 +73,7 @@
             font-size: 13px;
         }
 
-        /* Continuous 100-Level Veritas Status Indicator */
+        /* Pure 100-Level Individual Indicator */
         .veritas-indicator {
             display: flex;
             align-items: center;
@@ -82,7 +81,7 @@
             border-radius: 20px;
             padding: 5px 12px;
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
             user-select: none;
             border: 1px solid transparent;
         }
@@ -95,7 +94,7 @@
             width: 12px;
             height: 12px;
             border-radius: 50%;
-            transition: all 0.25s ease;
+            transition: all 0.15s ease;
         }
 
         .status-label {
@@ -104,25 +103,24 @@
             letter-spacing: -0.2px;
         }
 
-        /* Score Meter Bar (Visual 100% Spectrum) */
         .spectrum-bar-container {
             width: 100%;
-            height: 6px;
-            background: #334155;
-            border-radius: 3px;
+            height: 8px;
+            background: #090d16;
+            border-radius: 4px;
             overflow: hidden;
-            margin: 8px 0;
+            margin: 10px 0;
             position: relative;
+            border: 1px solid var(--border-color);
         }
 
         .spectrum-fill {
             height: 100%;
             width: 88%;
-            transition: width 0.3s ease, background-color 0.3s ease;
+            transition: width 0.1s ease, background-color 0.1s ease;
             border-radius: 3px;
         }
 
-        /* Slide-out Veritas Panel / HUD Overlay */
         .veritas-hud-panel {
             position: absolute;
             top: 55px;
@@ -161,7 +159,7 @@
         }
 
         .hud-score-number {
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 900;
             font-family: monospace;
         }
@@ -209,11 +207,6 @@
             margin-top: 6px;
         }
 
-        .btn-action:hover {
-            opacity: 0.9;
-        }
-
-        /* Mock Web Page Content */
         .page-content {
             padding: 30px;
             line-height: 1.6;
@@ -226,7 +219,6 @@
             color: #ffffff;
         }
 
-        /* Slider Control Demo */
         .slider-control-box {
             margin-top: 25px;
             background: #1e293b;
@@ -235,7 +227,7 @@
             padding: 16px;
             width: 100%;
             max-width: 920px;
-            box-sizing: border-border-box;
+            box-sizing: border-box;
         }
 
         .slider-label {
@@ -255,13 +247,12 @@
 </head>
 <body>
 
-    <h2>EiraOS Browser - 100-Level Gradueret Veritas Indikator</h2>
+    <h2>EiraOS Browser - Præcis 100-Level Skala (0 til 100)</h2>
     <p style="color: var(--muted-color); font-size: 14px; max-width: 650px; text-align: center;">
-        Kontinuerlig farvegraduering fra 0% (Dyb Rød) til 100% (Smaragd Grøn) via dynamisk HSL-farverum. Undgår "alt er gult"-fælden og giver præcis kildekritisk finjustering.
+        Ingen kasser, ingen grupperinger. Hvert eneste heltal fra 0 til 100 har sit eget unikke resultat, sin egen farvenuance og sin egen præcise værdi.
     </p>
 
     <div class="browser-window">
-        <!-- Address Bar -->
         <div class="address-bar-container">
             <div class="nav-buttons">◄ ► ↻</div>
             <div class="url-bar">
@@ -269,26 +260,22 @@
                 <input type="text" id="urlInput" value="https://dr.dk/nyheder/klima-analyse-2026" readonly>
             </div>
             
-            <!-- Continuous Veritas Indicator -->
             <div class="veritas-indicator" id="veritasBadge" onclick="toggleHUD()">
                 <div class="status-dot" id="statusDot"></div>
-                <span class="status-label" id="statusLabel">Veritas 88%</span>
+                <span class="status-label" id="statusLabel">Veritas 88/100</span>
             </div>
         </div>
 
-        <!-- Veritas Overlay Panel -->
         <div class="veritas-hud-panel" id="veritasPanel">
             <div class="hud-header">
                 <div class="hud-title">🛡️ Veritas Audit Score</div>
-                <div class="hud-score-number" id="hudScore">88%</div>
+                <div class="hud-score-number" id="hudScore">Niveau 88 / 100</div>
             </div>
 
-            <!-- 100-Level Spectrum Bar -->
             <div class="spectrum-bar-container">
                 <div class="spectrum-fill" id="spectrumFill"></div>
             </div>
 
-            <!-- EUDI Wallet Status -->
             <div class="section-box">
                 <div class="section-title">Kryptografisk Tillid (EUDI Wallet)</div>
                 <div class="badge-verified" id="hudEudi">
@@ -296,29 +283,11 @@
                 </div>
             </div>
 
-            <!-- Lag 1 Audit Details -->
             <div class="section-box">
-                <div class="section-title">Lag 1 Risikoprofil (Finmasket Audit)</div>
-                <div class="checklist-item" style="color: #22c55e;">
-                    <span>✓ Kildeforankring: Navngivet</span>
-                    <span>100%</span>
-                </div>
-                <div class="checklist-item" style="color: #22c55e;">
-                    <span>✓ Sproglig tone: Neutral</span>
-                    <span>95%</span>
-                </div>
-                <div class="checklist-item" style="color: #eab308;" id="hudWarning">
-                    <span>⚠️ Partshøring: Afventer svar</span>
-                    <span>65%</span>
-                </div>
-            </div>
-
-            <!-- Temporal Graph -->
-            <div class="section-box">
-                <div class="section-title">EiraOS Temporal Graph</div>
-                <div style="color: var(--muted-color); margin-bottom: 4px;">Narrativ: "Klimaplan 2030"</div>
-                <div style="font-size: 11px; color: var(--accent-blue); cursor: pointer;">
-                    🔗 Se historisk forløb i EiraOS Graf
+                <div class="section-title">100-Level Audit Måling</div>
+                <div class="checklist-item">
+                    <span>Eksakt Sandheds/Risiko Værdi:</span>
+                    <strong id="exactLevelLabel">Niveau 88 af 100</strong>
                 </div>
             </div>
 
@@ -327,22 +296,19 @@
             </button>
         </div>
 
-        <!-- Article Mock -->
         <div class="page-content" id="pageArticle">
             <h1 class="page-title" id="articleTitle">Nye tal viser fremskridt i den danske klimaplan for 2030</h1>
             <p style="color: var(--muted-color);">Udgivet af DR Nyheder | Signeret med eIDAS 2.0 Certifikat</p>
             <p>
                 En ny rapport fra Energistyrelsen bekræfter i dag, at omstillingen til vedvarende energi i Danmark skrider frem.
-                Eksperter og forskere peger på, at kildegrundlaget er solidt.
             </p>
         </div>
     </div>
 
-    <!-- Live 100-Level Slider Test Control -->
     <div class="slider-control-box">
         <div class="slider-label">
-            <span>Test 100-Level Graduering (Træk i slideren):</span>
-            <span id="sliderValLabel" style="color: var(--accent-blue);">88%</span>
+            <span>Test alle 100 individuelle niveauer (0, 1, 2, 3 ... 100):</span>
+            <span id="sliderValLabel" style="color: var(--accent-blue);">Niveau 88 / 100</span>
         </div>
         <input type="range" min="0" max="100" value="88" class="slider-input" id="scoreSlider" oninput="updateScore(this.value)">
     </div>
@@ -353,48 +319,45 @@
             panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
         }
 
-        function getHSLColor(score) {
-            // score 0 = 0deg (Red), score 100 = 120deg (Green)
-            const hue = (score / 100) * 120; 
+        // Compute exact unique HSL color for every integer from 0 to 100
+        function getExactLevelHSL(level) {
+            // level is 0..100
+            // Hue goes linearly from 0 (Red at level 0) to 120 (Green at level 100)
+            const hue = (level / 100) * 120;
             return {
-                bg: `hsla(${hue}, 85%, 50%, 0.15)`,
-                border: `hsl(${hue}, 85%, 45%)`,
-                text: `hsl(${hue}, 90%, 50%)`,
-                solid: `hsl(${hue}, 85%, 48%)`,
-                glow: `0 0 10px hsla(${hue}, 85%, 50%, 0.4)`
+                bg: `hsla(${hue.toFixed(1)}, 85%, 50%, 0.15)`,
+                border: `hsl(${hue.toFixed(1)}, 85%, 45%)`,
+                text: `hsl(${hue.toFixed(1)}, 90%, 50%)`,
+                solid: `hsl(${hue.toFixed(1)}, 85%, 48%)`,
+                glow: `0 0 10px hsla(${hue.toFixed(1)}, 85%, 50%, 0.4)`
             };
         }
 
-        function updateScore(scoreVal) {
-            const score = parseInt(scoreVal);
-            const colors = getHSLColor(score);
+        function updateScore(levelVal) {
+            const level = parseInt(levelVal); // Exact 0..100 integer
+            const colors = getExactLevelHSL(level);
 
-            const badge = document.getElementById('veritasBadge');
-            const dot = document.getElementById('statusDot');
-            const label = document.getElementById('statusLabel');
-            const scoreNum = document.getElementById('hudScore');
-            const fill = document.getElementById('spectrumFill');
-            const sliderLabel = document.getElementById('sliderValLabel');
-
-            badge.style.backgroundColor = colors.bg;
-            badge.style.borderColor = colors.border;
+            document.getElementById('veritasBadge').style.backgroundColor = colors.bg;
+            document.getElementById('veritasBadge').style.borderColor = colors.border;
             
-            dot.style.backgroundColor = colors.solid;
-            dot.style.boxShadow = colors.glow;
+            document.getElementById('statusDot').style.backgroundColor = colors.solid;
+            document.getElementById('statusDot').style.boxShadow = colors.glow;
 
-            label.style.color = colors.text;
-            label.innerText = `Veritas ${score}%`;
+            document.getElementById('statusLabel').style.color = colors.text;
+            document.getElementById('statusLabel').innerText = `Veritas ${level}/100`;
 
-            scoreNum.innerText = `${score}%`;
-            scoreNum.style.color = colors.text;
+            document.getElementById('hudScore').innerText = `${level} / 100`;
+            document.getElementById('hudScore').style.color = colors.text;
 
-            fill.style.width = `${score}%`;
-            fill.style.backgroundColor = colors.solid;
+            document.getElementById('spectrumFill').style.width = `${level}%`;
+            document.getElementById('spectrumFill').style.backgroundColor = colors.solid;
 
-            sliderLabel.innerText = `${score}%`;
+            document.getElementById('exactLevelLabel').innerText = `Niveau ${level} af 100`;
+            document.getElementById('exactLevelLabel').style.color = colors.text;
+
+            document.getElementById('sliderValLabel').innerText = `Niveau ${level} / 100`;
         }
 
-        // Initialize at 88%
         updateScore(88);
     </script>
 </body>
