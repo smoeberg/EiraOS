@@ -227,3 +227,4 @@ def get_connection():
         conn.commit()
     finally:
         conn.close()
+
