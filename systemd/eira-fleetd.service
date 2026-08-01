@@ -11,6 +11,9 @@ Group=eira
 WorkingDirectory=/opt/eira
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/opt/eira
+Environment=EIRA_FLEET_WS_ENABLED=1
+Environment=EIRA_FLEET_WS_HOST=127.0.0.1
+Environment=EIRA_FLEET_WS_PORT=8765
 ExecStart=/usr/bin/python3 -m app.daemons.runner --daemon fleetd --socket-dir /run/eira
 Restart=always
 RestartSec=2s
@@ -33,7 +36,7 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 LockPersonality=true
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictSUIDSGID=true
 ReadWritePaths=/opt/eira/data
 
