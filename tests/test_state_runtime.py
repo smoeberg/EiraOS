@@ -1,10 +1,8 @@
-from uuid import uuid4
 from app.core.state import State, ProposalState
 from app.core.constraint import Constraint
 from app.core.store import StateStore
 from app.core.event import EventBus
 from app.core.knowledge import KnowledgeRepository, KnowledgeEntry
-from app.core.timed import TimedScheduler, TimedTrigger
 from app.core.transformation import IntegratedEngine
 
 
@@ -12,7 +10,6 @@ def test_full_state_runtime_flow():
     store = StateStore(":memory:")
     bus = EventBus()
     knowledge_repo = KnowledgeRepository()
-    scheduler = TimedScheduler(bus)
     engine = IntegratedEngine(store, bus)
 
     events = []
@@ -62,4 +59,3 @@ def test_full_state_runtime_flow():
     proofs = knowledge_repo.get_proofs_for_state(state2.id)
     assert len(proofs) == 1
     assert proofs[0].transformation_name == "approve_document"
-
