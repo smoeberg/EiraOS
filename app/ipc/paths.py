@@ -4,12 +4,31 @@ import os
 import sys
 from pathlib import Path
 
-DAEMON_SOCKETS = {
-    "intent": "intent.sock",
-    "identity": "identity.sock",
-    "graph": "graph.sock",
-    "fleet": "fleet.sock",
+DAEMON_ALIASES = {
+    "state": "stated",
+    "stated": "stated",
+    "identity": "identityd",
+    "identityd": "identityd",
+    "fleet": "fleetd",
+    "fleetd": "fleetd",
+    "veritas": "veritasd",
+    "veritasd": "veritasd",
+    "intent": "intentd",
+    "intentd": "intentd",
+    "graph": "graphd",
+    "graphd": "graphd",
 }
+
+DAEMON_SOCKETS = {
+    daemon: f"{daemon}.sock" for daemon in sorted(set(DAEMON_ALIASES.values()))
+}
+
+
+def canonical_daemon(daemon: str) -> str:
+    try:
+        return DAEMON_ALIASES[daemon]
+    except KeyError as exc:
+        raise KeyError(f"Unknown daemon: {daemon}") from exc
 
 
 def run_dir() -> Path:
@@ -26,9 +45,8 @@ def run_dir() -> Path:
 
 
 def socket_path(daemon: str) -> Path:
-    if daemon not in DAEMON_SOCKETS:
-        raise KeyError(f"Unknown daemon: {daemon}")
-    return run_dir() / DAEMON_SOCKETS[daemon]
+    canonical = canonical_daemon(daemon)
+    return run_dir() / DAEMON_SOCKETS[canonical]
 
 
 def ensure_run_dir() -> Path:

@@ -1,0 +1,10 @@
+[Unit]
+Description=EiraOS core IPC daemon target
+Documentation=https://github.com/smoeberg/EiraOS
+Wants=eira-stated.service eira-identityd.service eira-fleetd.service
+Wants=eira-veritasd.service eira-intentd.service eira-graphd.service
+After=eira-stated.service eira-identityd.service eira-fleetd.service
+After=eira-veritasd.service eira-intentd.service eira-graphd.service
+
+[Install]
+WantedBy=multi-user.target
