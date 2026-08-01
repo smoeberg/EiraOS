@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "eira.db"
+DB_PATH = Path(
+    os.environ.get(
+        "EIRA_APP_DB",
+        Path(__file__).resolve().parent.parent / "data" / "eira.db",
+    )
+)
 
 
 def utc_now_iso() -> str:
@@ -220,10 +226,29 @@ def _migrate_v03(conn: sqlite3.Connection) -> None:
 
 @contextmanager
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     try:
         yield conn
         conn.commit()
+    finally:
+        conn.close()
+
+
+@contextmanager
+def get_read_connection():
+    """Open the legacy metadata database without acquiring write capability."""
+
+    conn = sqlite3.connect(f"{DB_PATH.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA query_only = ON")
+    try:
+        yield conn
     finally:
         conn.close()

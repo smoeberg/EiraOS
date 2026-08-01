@@ -185,3 +185,4 @@ class AuditEvent(BaseModel):
     event_type: str
     payload: dict
     created_at: str
+

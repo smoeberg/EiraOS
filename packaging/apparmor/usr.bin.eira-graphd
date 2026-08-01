@@ -1,0 +1,26 @@
+#include <tunables/global>
+
+/usr/bin/eira-graphd flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/python>
+
+  /usr/bin/eira-graphd rix,
+  /bin/dash ix,
+  /usr/bin/dash ix,
+  /usr/bin/python3{,.[0-9]*} mrix,
+  /usr/lib/eira-os/ r,
+  /usr/lib/eira-os/** r,
+  /etc/eira/eira.conf r,
+
+  /run/eira/ rw,
+  /run/eira/*.sock rwk,
+  /var/log/eira/ rw,
+  /var/log/eira/** rw,
+  /data/eira-app.db r,
+  /data/eira-app.db-{shm,wal} r,
+
+  network unix stream,
+  deny network inet,
+  deny network inet6,
+  deny @{HOME}/** rwklx,
+}

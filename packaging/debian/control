@@ -1,0 +1,38 @@
+Source: eira-os-core
+Section: utils
+Priority: optional
+Maintainer: EiraOS Maintainers <maintainers@eira-os.invalid>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+ python3-all (>= 3.12),
+ python3-pytest,
+ nodejs,
+ npm,
+ cargo (>= 1.85),
+ rustc (>= 1.85),
+ libwebkit2gtk-4.1-dev,
+ libayatana-appindicator3-dev,
+ librsvg2-dev
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/smoeberg/EiraOS
+
+Package: eira-os-core
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ ${python3:Depends},
+ adduser,
+ apparmor,
+ ca-certificates,
+ python3-cryptography (>= 41),
+ python3-httpx,
+ python3-pydantic (>= 2.10),
+ python3-websockets (>= 13)
+Recommends: gdm3 | lightdm
+Description: EiraOS local-first desktop core and Calm Command session
+ EiraOS is a local-first Ubuntu desktop overlay. This package installs the
+ Unix-socket daemons, AppArmor confinement, hardened systemd units and the
+ Tauri-based Calm Command desktop session.

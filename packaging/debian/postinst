@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+
+case "${1:-configure}" in
+    configure)
+        if ! getent group eira >/dev/null; then
+            addgroup --system eira
+        fi
+        if ! getent passwd eira >/dev/null; then
+            adduser --system --ingroup eira --home /var/lib/eira \
+                --no-create-home --disabled-login --disabled-password eira
+        fi
+
+        install -d -o root -g eira -m 0750 /etc/eira
+        install -d -o root -g root -m 0755 /etc/eira/trust
+        install -d -o eira -g eira -m 0770 \
+            /data /data/eira-fleet /var/lib/eira /var/log/eira
+        if [ ! -e /etc/eira/eira.conf ]; then
+            umask 0027
+            token=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+            printf 'EIRA_IPC_TOKEN=%s\n' "$token" > /etc/eira/eira.conf
+            chown root:eira /etc/eira/eira.conf
+            chmod 0640 /etc/eira/eira.conf
+        fi
+
+        if command -v apparmor_parser >/dev/null 2>&1; then
+            for profile in /etc/apparmor.d/usr.bin.eira-*; do
+                [ -f "$profile" ] || continue
+                apparmor_parser -r "$profile"
+            done
+        fi
+
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+            systemctl enable eira.target >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

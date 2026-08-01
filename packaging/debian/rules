@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CARGO_CRATE=eira-spatial-desktop
+
+%:
+	dh $@ --with python3
+
+override_dh_auto_build:
+	npm ci --prefix ui --ignore-scripts
+	npm run build --prefix ui
+	cd ui && npm run tauri -- build --no-bundle
+
+override_dh_auto_test:
+	PYTHONPATH=. python3 -m pytest -q tests
+	npm test --prefix ui
+
+override_dh_auto_install:
+	install -d debian/eira-os-core/usr/lib/eira-os
+	cp -a app debian/eira-os-core/usr/lib/eira-os/
+	install -m 0644 requirements.txt debian/eira-os-core/usr/lib/eira-os/
+	install -d debian/eira-os-core/usr/bin
+	for daemon in stated identityd fleetd veritasd intentd graphd; do \
+		install -m 0755 packaging/bin/eira-daemon \
+			debian/eira-os-core/usr/bin/eira-$$daemon; \
+	done
+	install -m 0755 ui/src-tauri/target/release/eira-spatial-desktop \
+		debian/eira-os-core/usr/bin/eira-spatial-desktop
+	install -m 0755 packaging/session/eira-session \
+		debian/eira-os-core/usr/bin/eira-session
+	install -d debian/eira-os-core/usr/share/xsessions
+	install -m 0644 packaging/session/eira-session.desktop \
+		debian/eira-os-core/usr/share/xsessions/eira-session.desktop
+	install -d debian/eira-os-core/usr/lib/systemd/system
+	install -m 0644 systemd/eira-*.service systemd/eira.target \
+		debian/eira-os-core/usr/lib/systemd/system/
+	install -d debian/eira-os-core/etc/apparmor.d
+	install -m 0644 packaging/apparmor/usr.bin.eira-* \
+		debian/eira-os-core/etc/apparmor.d/
+
+override_dh_installsystemd:
+	dh_installsystemd --no-start

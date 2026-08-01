@@ -4,7 +4,9 @@ from typing import Any
 
 
 class JsonRpcError(Exception):
-    def __init__(self, code: int, message: str, data: dict[str, Any] | None = None):
+    def __init__(
+        self, code: int, message: str, data: dict[str, Any] | None = None
+    ) -> None:
         self.code = code
         self.message = message
         self.data = data or {}
@@ -31,3 +33,5 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 ASSURANCE_REQUIRED = -32001
+CONSTRAINT_VIOLATION = -32001
+PEER_AUTH_FAILED = -32011

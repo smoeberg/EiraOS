@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=EiraOS Calm Command
+Comment=EiraOS spatial workspace and situation interface
+Exec=/usr/bin/eira-session
+TryExec=/usr/bin/eira-session
+Type=Application
+DesktopNames=EiraOS;GNOME;
+X-GDM-SessionRegisters=true
