@@ -132,3 +132,4 @@ def infer_resource(action: str, raw_input: str) -> str:
     if action in ("status", "read", "search"):
         return "document"
     return "document"
+
