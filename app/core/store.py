@@ -32,6 +32,7 @@ class StateStore:
             """)
 
     def append(self, state: State) -> None:
+        self._init_db()
         with self._get_conn() as conn:
             conn.execute(
                 """
@@ -50,6 +51,7 @@ class StateStore:
             )
 
     def get_by_id(self, state_id: UUID) -> Optional[State]:
+        self._init_db()
         with self._get_conn() as conn:
             row = conn.execute("SELECT * FROM states WHERE id = ?", (str(state_id),)).fetchone()
             if not row:
