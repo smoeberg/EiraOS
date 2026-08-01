@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from typing import List, Optional
 from uuid import UUID
 
@@ -11,9 +12,10 @@ from app.core.state import State
 class StateStore:
     def __init__(self, db_path: str = ":memory:"):
         self.db_path = db_path
+        self._lock = threading.RLock()
         self._shared_conn: Optional[sqlite3.Connection] = None
         if db_path == ":memory:":
-            self._shared_conn = sqlite3.connect(":memory:")
+            self._shared_conn = sqlite3.connect(":memory:", check_same_thread=False)
             self._shared_conn.row_factory = sqlite3.Row
         self._init_db()
 
@@ -44,36 +46,30 @@ class StateStore:
             conn.close()
 
     def append(self, state: State) -> None:
-        conn = self._get_conn()
-        conn.execute(
-            """
-            INSERT INTO states
-            (id, version, timestamp_ns, type, payload, previous_state_id, hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(state.id),
-                state.version,
-                state.timestamp_ns,
-                state.type,
-                json.dumps(state.payload),
-                str(state.previous_state_id) if state.previous_state_id else None,
-                state.hash,
-            ),
-        )
-        conn.commit()
-        if not self._shared_conn:
-            conn.close()
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute(
+                """
+                INSERT INTO states
+                (id, version, timestamp_ns, type, payload, previous_state_id, hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(state.id),
+                    state.version,
+                    state.timestamp_ns,
+                    state.type,
+                    json.dumps(state.payload),
+                    str(state.previous_state_id) if state.previous_state_id else None,
+                    state.hash,
+                ),
+            )
+            conn.commit()
+            if not self._shared_conn:
+                conn.close()
 
-    def get_by_id(self, state_id: UUID) -> Optional[State]:
-        conn = self._get_conn()
-        row = conn.execute(
-            "SELECT * FROM states WHERE id = ?", (str(state_id),)
-        ).fetchone()
-        if not self._shared_conn:
-            conn.close()
-        if not row:
-            return None
+    @staticmethod
+    def _row_to_state(row: sqlite3.Row) -> State:
         return State(
             id=UUID(row["id"]),
             version=row["version"],
@@ -85,6 +81,37 @@ class StateStore:
             ),
             hash=row["hash"],
         )
+
+    def get_by_id(self, state_id: UUID) -> Optional[State]:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM states WHERE id = ?", (str(state_id),)
+        ).fetchone()
+        if not self._shared_conn:
+            conn.close()
+        if not row:
+            return None
+        return self._row_to_state(row)
+
+    def get_by_hash(self, state_hash: str) -> Optional[State]:
+        with self._lock:
+            conn = self._get_conn()
+            row = conn.execute(
+                "SELECT * FROM states WHERE hash = ?", (state_hash,)
+            ).fetchone()
+            if not self._shared_conn:
+                conn.close()
+        return self._row_to_state(row) if row else None
+
+    def list_states(self) -> List[State]:
+        with self._lock:
+            conn = self._get_conn()
+            rows = conn.execute(
+                "SELECT * FROM states ORDER BY timestamp_ns, id"
+            ).fetchall()
+            if not self._shared_conn:
+                conn.close()
+        return [self._row_to_state(row) for row in rows]
 
     def get_history(self, latest_state_id: UUID) -> List[State]:
         history = []
