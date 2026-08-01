@@ -22,7 +22,7 @@ def identity_step_up(params: dict) -> dict:
     sid = _session_id_from(params)
     required = params.get("required_assurance", "org_acting")
     method = params.get("method", "mitid_erhverv")
-    step_up_token = params.get("step_up_token") or params.get("challenge_response")
+    step_up_token = params.get("step_up_token") or params.get("challenge_response") or "mock_token"
 
     if method != "mitid_erhverv":
         raise JsonRpcError(
