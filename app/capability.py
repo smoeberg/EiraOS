@@ -6,7 +6,6 @@ from pathlib import Path
 from app.database import get_connection, utc_now_iso
 from app.models import (
     AgencyContext,
-    CapabilityEntry,
     CapabilityManifest,
     CapabilityMatch,
 )
@@ -132,4 +131,3 @@ def infer_resource(action: str, raw_input: str) -> str:
     if action in ("status", "read", "search"):
         return "document"
     return "document"
-
