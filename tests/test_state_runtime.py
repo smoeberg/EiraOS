@@ -62,3 +62,4 @@ def test_full_state_runtime_flow():
     proofs = knowledge_repo.get_proofs_for_state(state2.id)
     assert len(proofs) == 1
     assert proofs[0].transformation_name == "approve_document"
+
