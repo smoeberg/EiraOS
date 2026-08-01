@@ -1,23 +1,23 @@
 [package]
-name = "eira-cognitive"
-version = "0.2.0"
-description = "EIRA Cognitive Interface"
-edition = "2021"
+name = "eira-spatial-desktop"
+version = "0.3.0"
+description = "EiraOS Spatial Canvas desktop shell"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
 
 [lib]
-name = "eira_cognitive_lib"
+name = "eira_spatial_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-[target.'cfg(windows)'.dependencies]
-uds_windows = "1.1"
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["io-util", "net", "time"] }
 
 [profile.release]
 panic = "abort"
@@ -25,3 +25,5 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+[workspace]

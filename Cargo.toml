@@ -1,3 +1,4 @@
 [workspace]
-members = ["crates/eira-core"]
+members = ["crates/eira-core", "crates/eira-ipc", "crates/eira-stated"]
+exclude = ["ui/src-tauri"]
 resolver = "3"

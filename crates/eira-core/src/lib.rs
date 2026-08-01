@@ -15,7 +15,7 @@ const STATE_FIELDS: [&str; 6] = [
     "previous_state_id",
 ];
 
-fn canonical_json(value: &Value) -> String {
+pub fn canonical_json(value: &Value) -> String {
     match value {
         Value::Null => "null".to_owned(),
         Value::Bool(value) => value.to_string(),

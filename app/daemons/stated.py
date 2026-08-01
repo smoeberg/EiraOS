@@ -9,7 +9,23 @@ from app.core.state import State
 from app.core.store import StateStore
 from app.ipc.jsonrpc import JsonRpcError
 
-_store = StateStore(os.environ.get("EIRA_STATE_DB", "eira_state.db"))
+def _create_store() -> Any:
+    db_path = os.environ.get("EIRA_STATE_DB", "eira_state.db")
+    backend = os.environ.get("EIRA_STATE_BACKEND", "auto").strip().casefold()
+    if backend not in {"auto", "python", "rust"}:
+        raise RuntimeError("EIRA_STATE_BACKEND must be auto, python, or rust")
+    if backend != "python":
+        try:
+            from app.core_rust import RustStateStore
+
+            return RustStateStore(db_path)
+        except Exception:
+            if backend == "rust":
+                raise
+    return StateStore(db_path)
+
+
+_store = _create_store()
 
 
 def state_append(params: dict[str, Any]) -> dict[str, Any]:
@@ -55,6 +71,16 @@ def state_get_history(params: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def state_list(params: dict[str, Any]) -> dict[str, Any]:
+    limit = max(1, min(int(params.get("limit", 500)), 10_000))
+    states = _store.list_states()
+    selected = states[-limit:]
+    return {
+        "states": [state.model_dump(mode="json") for state in selected],
+        "count": _store.count(),
+    }
+
+
 def state_sync_push(params: dict[str, Any]) -> dict[str, Any]:
     accepted = 0
     skipped = 0
@@ -97,6 +123,7 @@ def register_state_handlers(server: Any) -> None:
     server.register("state.append", state_append)
     server.register("state.get", state_get)
     server.register("state.get_history", state_get_history)
+    server.register("state.list", state_list)
     server.register("state.sync_push", state_sync_push)
     server.register("state.sync_pull", state_sync_pull)
     server.register("health", lambda _: {"daemon": "eira-stated", "ok": True})

@@ -1,3 +1,3 @@
 fn main() {
-    eira_cognitive_lib::run()
+    eira_spatial_desktop_lib::run()
 }

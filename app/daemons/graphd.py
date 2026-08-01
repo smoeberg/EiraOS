@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 
-from app.graph_context import graph_context as build_graph_context
 from app.ipc.jsonrpc import JsonRpcError
-from app.temporal import relations_between
 
 
 def graph_temporal_query(params: dict) -> dict:
+    from app.temporal import relations_between
+
     from_name = params.get("from_name")
     to_name = params.get("to_name")
     as_of = params.get("as_of")
@@ -22,6 +22,8 @@ def graph_temporal_query(params: dict) -> dict:
 
 
 def graph_context_query(params: dict) -> dict:
+    from app.graph_context import graph_context as build_graph_context
+
     object_id = params.get("object_id")
     return build_graph_context(
         object_id,
@@ -116,8 +118,70 @@ def graph_provenance_trace(params: dict) -> dict:
     }
 
 
+def graph_spatial_snapshot(params: dict) -> dict:
+    """Project stated's immutable chain into stable canvas coordinates."""
+    from app.ipc.client import IpcClient
+
+    limit = max(1, min(int(params.get("limit", 500)), 10_000))
+    result = IpcClient("stated").call("state.list", {"limit": limit})
+    states = list(result.get("states", []))
+    by_id = {str(state["id"]): state for state in states}
+    depth_cache: dict[str, int] = {}
+
+    def depth(state_id: str, visiting: set[str] | None = None) -> int:
+        if state_id in depth_cache:
+            return depth_cache[state_id]
+        chain = set(visiting or ())
+        if state_id in chain:
+            return 0
+        chain.add(state_id)
+        state = by_id[state_id]
+        previous = state.get("previous_state_id")
+        value = 0 if not previous or str(previous) not in by_id else depth(str(previous), chain) + 1
+        depth_cache[state_id] = value
+        return value
+
+    rows: dict[int, int] = {}
+    nodes = []
+    edges = []
+    for state in states:
+        state_id = str(state["id"])
+        column = depth(state_id)
+        row = rows.get(column, 0)
+        rows[column] = row + 1
+        payload = state.get("payload") or {}
+        label = payload.get("title") or payload.get("name") or state.get("type")
+        node = {
+            "id": state_id,
+            "label": str(label),
+            "type": str(state.get("type", "State")),
+            "x": 100 + column * 300,
+            "y": 90 + row * 170,
+            "state": state,
+        }
+        trust_score = payload.get("trust_score")
+        if isinstance(trust_score, (int, float)):
+            node["trust_score"] = max(0, min(100, float(trust_score)))
+        nodes.append(node)
+
+        previous = state.get("previous_state_id")
+        if previous and str(previous) in by_id:
+            edges.append(
+                {
+                    "id": f"{previous}:{state_id}",
+                    "source": str(previous),
+                    "target": state_id,
+                    "relation": "proposes"
+                    if state.get("type") == "ProposalState"
+                    else "previous",
+                }
+            )
+    return {"nodes": nodes, "edges": edges, "count": len(nodes)}
+
+
 def register_graph_handlers(server) -> None:
     server.register("graph.temporal_query", graph_temporal_query)
     server.register("graph.context", graph_context_query)
     server.register("graph.provenance.trace", graph_provenance_trace)
+    server.register("graph.spatial_snapshot", graph_spatial_snapshot)
     server.register("health", lambda _: {"daemon": "eira-object-graphd", "ok": True})

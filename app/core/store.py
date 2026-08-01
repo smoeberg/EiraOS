@@ -15,19 +15,28 @@ class StateStore:
         self._lock = threading.RLock()
         self._shared_conn: Optional[sqlite3.Connection] = None
         if db_path == ":memory:":
-            self._shared_conn = sqlite3.connect(":memory:", check_same_thread=False)
-            self._shared_conn.row_factory = sqlite3.Row
+            self._shared_conn = self._configure_conn(
+                sqlite3.connect(":memory:", check_same_thread=False)
+            )
         self._init_db()
+
+    def _configure_conn(self, conn: sqlite3.Connection) -> sqlite3.Connection:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA foreign_keys = ON")
+        if self.db_path != ":memory:":
+            conn.execute("PRAGMA synchronous = NORMAL")
+        return conn
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._shared_conn:
             return self._shared_conn
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._configure_conn(sqlite3.connect(self.db_path, timeout=5.0))
 
     def _init_db(self) -> None:
         conn = self._get_conn()
+        if not self._shared_conn:
+            conn.execute("PRAGMA journal_mode = WAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS states (
@@ -46,6 +55,8 @@ class StateStore:
             conn.close()
 
     def append(self, state: State) -> None:
+        if not state.is_hash_valid():
+            raise ValueError("State hash does not match canonical state content")
         with self._lock:
             conn = self._get_conn()
             conn.execute(
@@ -59,7 +70,13 @@ class StateStore:
                     state.version,
                     state.timestamp_ns,
                     state.type,
-                    json.dumps(state.payload),
+                    json.dumps(
+                        state.payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    ),
                     str(state.previous_state_id) if state.previous_state_id else None,
                     state.hash,
                 ),
