@@ -14,6 +14,7 @@ from typing import Any
 from websockets.asyncio.server import Server, ServerConnection, serve
 
 from app.core.store import StateStore
+from app.core.remote_store import RpcStateStore
 from app.database import get_connection, utc_now_iso
 from app.fleet.device_registry import DeviceAuthorizationError, DeviceRegistry
 from app.fleet.e2ee import PayloadIntegrityError, StatePayloadEncryptor
@@ -375,7 +376,7 @@ def default_sync_service() -> FleetSyncService:
                     "EIRA_DEVICE_REGISTRY_DB", str(_secret_path("devices.db"))
                 )
             ),
-            store=StateStore(os.environ.get("EIRA_STATE_DB", "eira_state.db")),
+            store=RpcStateStore(),  # type: ignore[arg-type]
             encryptor=StatePayloadEncryptor(
                 master_key, fleet_salt=fleet_salt
             ),
@@ -499,7 +500,7 @@ def register_fleet_handlers(server: Any) -> None:
         runtime = FleetWebSocketRuntime(
             FleetWebSocketServer(
                 service,
-                host=os.environ.get("EIRA_FLEET_WS_HOST", "0.0.0.0"),
+                host=os.environ.get("EIRA_FLEET_WS_HOST", "127.0.0.1"),
                 port=int(os.environ.get("EIRA_FLEET_WS_PORT", "8765")),
             )
         )

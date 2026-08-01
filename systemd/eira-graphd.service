@@ -3,15 +3,20 @@ Description=EiraOS Graph IPC daemon
 Documentation=https://github.com/smoeberg/EiraOS
 PartOf=eira.target
 Before=eira.target
+Requires=eira-stated.service
+After=eira-stated.service
 
 [Service]
 Type=simple
 User=eira
 Group=eira
-WorkingDirectory=/opt/eira
+WorkingDirectory=/usr/lib/eira-os
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/opt/eira
-ExecStart=/usr/bin/python3 -m app.daemons.runner --daemon graphd --socket-dir /run/eira
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+Environment=EIRA_APP_DB=/data/eira-app.db
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-graphd
 Restart=always
 RestartSec=2s
 RuntimeDirectory=eira
@@ -35,7 +40,9 @@ ProtectControlGroups=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=true
-ReadWritePaths=/opt/eira/data
+ReadOnlyPaths=-/data/eira-app.db -/data/eira-app.db-shm -/data/eira-app.db-wal
+ReadWritePaths=/run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-graphd
 
 [Install]
 WantedBy=eira.target

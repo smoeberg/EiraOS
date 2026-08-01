@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+daemon=${0##*/}
+daemon=${daemon#eira-}
+
+case "$daemon" in
+    stated|identityd|fleetd|veritasd|intentd|graphd) ;;
+    *)
+        echo "Unsupported EiraOS daemon name: $daemon" >&2
+        exit 64
+        ;;
+esac
+
+export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -m app.daemons.runner \
+    --daemon "$daemon" --socket-dir "${EIRA_RUN_DIR:-/run/eira}"

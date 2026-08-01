@@ -37,14 +37,14 @@ def graph_context_query(params: dict) -> dict:
 
 def graph_provenance_trace(params: dict) -> dict:
     """Trace a claim through generic temporal graph objects and relations."""
-    from app.database import get_connection
+    from app.database import get_read_connection
 
     claim_id = params.get("id") or params.get("claim_id")
     claim_text = params.get("text")
     if not claim_id and not claim_text:
         return {"origin": None, "relations": [], "source_reliability": None}
 
-    with get_connection() as connection:
+    with get_read_connection() as connection:
         if claim_id:
             claim = connection.execute(
                 "SELECT id, name, metadata FROM objects WHERE id = ? AND type = 'claim'",

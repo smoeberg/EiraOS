@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+if [ -r /etc/eira/eira.conf ]; then
+    set -a
+    . /etc/eira/eira.conf
+    set +a
+fi
+
+export EIRA_RUN_DIR=${EIRA_RUN_DIR:-/run/eira}
+exec /usr/bin/eira-spatial-desktop

@@ -20,6 +20,7 @@ from app.ipc.socket_security import PeerCredentialError, validate_peer_credentia
 from app.ipc.transport import bind_server
 
 Handler = Callable[[dict[str, Any]], Any]
+MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 
 class JsonRpcServer:
@@ -44,17 +45,28 @@ class JsonRpcServer:
         self._stop_callbacks.append(callback)
 
     def handle_line(self, line: str) -> str:
+        if len(line.encode("utf-8")) > MAX_REQUEST_BYTES:
+            return json.dumps(error_response(None, INVALID_PARAMS, "Request too large"))
         try:
             request = json.loads(line)
         except json.JSONDecodeError:
             return json.dumps(error_response(None, INVALID_PARAMS, "Invalid JSON"))
 
+        if not isinstance(request, dict):
+            return json.dumps(
+                error_response(None, INVALID_PARAMS, "Request must be a JSON object")
+            )
+
         req_id = request.get("id")
         method = request.get("method")
         params = request.get("params") or {}
-        if not method or method not in self._handlers:
+        if not isinstance(method, str) or method not in self._handlers:
             return json.dumps(
                 error_response(req_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
+            )
+        if not isinstance(params, dict):
+            return json.dumps(
+                error_response(req_id, INVALID_PARAMS, "params must be an object")
             )
 
         try:
@@ -65,8 +77,10 @@ class JsonRpcServer:
             return json.dumps(
                 error_response(req_id, exc.code, exc.message, exc.data)
             )
-        except Exception as exc:  # noqa: BLE001 - JSON-RPC boundary
-            return json.dumps(error_response(req_id, INTERNAL_ERROR, str(exc)))
+        except Exception:  # noqa: BLE001 - JSON-RPC boundary
+            return json.dumps(
+                error_response(req_id, INTERNAL_ERROR, "Internal daemon error")
+            )
 
     def _serve_client(self, conn: socket.socket) -> None:
         try:
@@ -81,6 +95,18 @@ class JsonRpcServer:
                     if not chunk:
                         break
                     buffer += chunk
+                    if len(buffer) > MAX_REQUEST_BYTES and b"\n" not in buffer:
+                        conn.sendall(
+                            (
+                                json.dumps(
+                                    error_response(
+                                        None, INVALID_PARAMS, "Request too large"
+                                    )
+                                )
+                                + "\n"
+                            ).encode("utf-8")
+                        )
+                        return
                     while b"\n" in buffer:
                         line, buffer = buffer.split(b"\n", 1)
                         if not line.strip():

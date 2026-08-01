@@ -8,10 +8,12 @@ Before=eira.target
 Type=simple
 User=eira
 Group=eira
-WorkingDirectory=/opt/eira
+WorkingDirectory=/usr/lib/eira-os
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/opt/eira
-ExecStart=/usr/bin/python3 -m app.daemons.runner --daemon veritasd --socket-dir /run/eira
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-veritasd
 Restart=always
 RestartSec=2s
 RuntimeDirectory=eira
@@ -35,7 +37,8 @@ ProtectControlGroups=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=true
-ReadWritePaths=/opt/eira/data
+ReadWritePaths=/run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-veritasd
 
 [Install]
 WantedBy=eira.target

@@ -1,0 +1,27 @@
+#include <tunables/global>
+
+/usr/bin/eira-veritasd flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/openssl>
+  #include <abstractions/python>
+
+  /usr/bin/eira-veritasd rix,
+  /bin/dash ix,
+  /usr/bin/dash ix,
+  /usr/bin/python3{,.[0-9]*} mrix,
+  /usr/lib/eira-os/ r,
+  /usr/lib/eira-os/** r,
+  /etc/eira/eira.conf r,
+  /etc/eira/trust/ r,
+  /etc/eira/trust/** r,
+
+  /run/eira/ rw,
+  /run/eira/*.sock rwk,
+  /var/log/eira/ rw,
+  /var/log/eira/** rw,
+
+  network unix stream,
+  deny network inet,
+  deny network inet6,
+  deny @{HOME}/** rwklx,
+}

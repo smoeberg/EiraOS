@@ -50,6 +50,21 @@ class StateStore:
             )
             """
         )
+        conn.executescript(
+            """
+            CREATE TRIGGER IF NOT EXISTS states_append_only_update
+            BEFORE UPDATE ON states
+            BEGIN
+                SELECT RAISE(ABORT, 'states are append-only');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS states_append_only_delete
+            BEFORE DELETE ON states
+            BEGIN
+                SELECT RAISE(ABORT, 'states are append-only');
+            END;
+            """
+        )
         if not self._shared_conn:
             conn.commit()
             conn.close()

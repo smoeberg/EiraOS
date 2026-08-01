@@ -1,0 +1,5 @@
+eira-os-core (1.0~rc1-1) noble; urgency=medium
+
+  * Initial Ubuntu 24.04 LTS pilot package.
+
+ -- EiraOS Maintainers <maintainers@eira-os.invalid>  Sat, 01 Aug 2026 12:00:00 +0200
