@@ -35,9 +35,13 @@ class JsonRpcServer:
         self._startup_error: BaseException | None = None
         self._connections: set[socket.socket] = set()
         self._connections_lock = threading.Lock()
+        self._stop_callbacks: list[Callable[[], None]] = []
 
     def register(self, method: str, handler: Handler) -> None:
         self._handlers[method] = handler
+
+    def add_cleanup(self, callback: Callable[[], None]) -> None:
+        self._stop_callbacks.append(callback)
 
     def handle_line(self, line: str) -> str:
         try:
@@ -162,6 +166,9 @@ class JsonRpcServer:
         if self._cleanup:
             self._cleanup()
             self._cleanup = None
+        while self._stop_callbacks:
+            callback = self._stop_callbacks.pop()
+            callback()
 
 
 UnixJsonRpcServer = JsonRpcServer
