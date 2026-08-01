@@ -33,3 +33,4 @@ class TimedScheduler:
                 payload={"trigger_id": str(t.id), "transformation": t.target_transformation, "payload": t.payload}
             ))
             self.triggers.remove(t)
+
