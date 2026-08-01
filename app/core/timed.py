@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from uuid import UUID, uuid4
-from typing import Callable, List
-from datetime import datetime, timezone
+from typing import List
 from pydantic import BaseModel, Field
 from app.core.event import Event, EventBus
 
@@ -33,4 +32,3 @@ class TimedScheduler:
                 payload={"trigger_id": str(t.id), "transformation": t.target_transformation, "payload": t.payload}
             ))
             self.triggers.remove(t)
-
