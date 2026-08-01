@@ -27,7 +27,7 @@ def state_append(params: dict[str, Any]) -> dict[str, Any]:
             ),
             hash=params.get("hash", ""),
         )
-        if state.hash != state.compute_hash():
+        if not state.is_hash_valid():
             raise ValueError("State hash does not match canonical state content")
         _store.append(state)
         return {"status": "ok", "state_id": str(state.id), "hash": state.hash}
@@ -73,7 +73,7 @@ def state_sync_push(params: dict[str, Any]) -> dict[str, Any]:
                 ),
                 hash=item.get("hash", ""),
             )
-            if state.hash != state.compute_hash():
+            if not state.is_hash_valid():
                 raise ValueError("State hash does not match canonical state content")
             if _store.get_by_id(state.id):
                 skipped += 1
