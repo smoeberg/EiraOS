@@ -46,16 +46,13 @@ def _register_fleetd(server: JsonRpcServer) -> None:
 
 
 def _register_veritasd(server: JsonRpcServer) -> None:
-    from app.daemons.veritasd import VeritasDaemon
+    from app.daemons.veritasd import register_veritas_handlers
 
-    daemon = VeritasDaemon()
-    server.register("veritas.evaluate", daemon.process_evidence)
-    server.register("veritas.process_evidence", daemon.process_evidence)
-    server.register("health", lambda _: {"daemon": "eira-veritasd", "ok": True})
+    register_veritas_handlers(server)
 
 
 def _register_intentd(server: JsonRpcServer) -> None:
-    from app.daemons.intent_engine import register_intent_handlers
+    from app.daemons.intentd import register_intent_handlers
 
     register_intent_handlers(server)
 
