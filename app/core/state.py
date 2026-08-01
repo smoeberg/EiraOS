@@ -5,10 +5,12 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class State(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     id: UUID = Field(default_factory=uuid4)
     version: int = Field(default=1)
     timestamp_ns: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1e9))
@@ -16,9 +18,6 @@ class State(BaseModel):
     payload: Dict[str, Any]
     previous_state_id: Optional[UUID] = None
     hash: str = Field(default="")
-
-    class Config:
-        frozen = True
 
     def model_post_init(self, __context: Any) -> None:
         if not self.hash:
