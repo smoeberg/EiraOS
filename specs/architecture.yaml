@@ -1,22 +1,126 @@
-# EiraOS 2.0 Machine-Verifiable Architecture Specification
+# EiraOS 2.0 Machine-Verifiable Architecture Specification (Single Source of Truth)
 version: "1.0"
 project: "EiraOS"
 
+layers:
+  - name: "ui"
+    order: 1
+    allowed_downward_layers: ["capabilities", "intent", "contracts", "ipc", "daemons", "storage"]
+  - name: "capabilities"
+    order: 2
+    allowed_downward_layers: ["intent", "contracts", "ipc", "daemons", "storage"]
+  - name: "intent"
+    order: 3
+    allowed_downward_layers: ["contracts", "ipc", "daemons", "storage"]
+  - name: "contracts"
+    order: 4
+    allowed_downward_layers: ["ipc", "daemons", "storage"]
+  - name: "ipc"
+    order: 5
+    allowed_downward_layers: ["daemons", "storage"]
+  - name: "daemons"
+    order: 6
+    allowed_downward_layers: ["storage"]
+  - name: "storage"
+    order: 7
+    allowed_downward_layers: []
+
 daemons:
   capabilityd:
-    allowed_imports: ["app.core.capability", "app.ipc.*"]
-    forbidden_imports: ["app.daemons.*", "app.routers.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.core.capability"
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+      - "app.routers.*"
+    owns:
+      - "capabilities"
+      - "providers"
+    must_not_own:
+      - "graph_index"
+      - "claims"
+
   identityd:
-    allowed_imports: ["app.auth.*", "app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.auth.*"
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+    owns:
+      - "identities"
+      - "credentials"
+    must_not_own:
+      - "financial_wallets"
+      - "graph_index"
+
   walletd:
-    allowed_imports: ["app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+    owns:
+      - "accounts"
+      - "transactions"
+    must_not_own:
+      - "identities"
+      - "graph_index"
+
   veritasd:
-    allowed_imports: ["app.veritas.*", "app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.veritas.*"
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+    owns:
+      - "evidence"
+      - "claims"
+      - "certificates"
+    must_not_own:
+      - "graph_index"
+
   graphd:
-    allowed_imports: ["app.temporal.*", "app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.temporal.*"
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+      - "app.routers.*"
+    owns:
+      - "graph_index"
+      - "temporal_edges"
+    must_not_own:
+      - "claims"
+      - "evidence"
+      - "sessions"
+
   presenced:
-    allowed_imports: ["app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+
   contextd:
-    allowed_imports: ["app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+
   intentd:
-    allowed_imports: ["app.core.*", "app.ipc.*"]
+    layer: "daemons"
+    allowed_imports:
+      - "app.core.*"
+      - "app.ipc.*"
+    forbidden_imports:
+      - "app.daemons.*"
+
+capability_isolation:
+  forbidden_modified_cores:
+    - "intentd"
+    - "graphd"
