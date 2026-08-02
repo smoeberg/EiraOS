@@ -1,0 +1,22 @@
+# EiraOS 2.0 Machine-Verifiable Architecture Specification
+version: "1.0"
+project: "EiraOS"
+
+daemons:
+  capabilityd:
+    allowed_imports: ["app.core.capability", "app.ipc.*"]
+    forbidden_imports: ["app.daemons.*", "app.routers.*"]
+  identityd:
+    allowed_imports: ["app.auth.*", "app.ipc.*"]
+  walletd:
+    allowed_imports: ["app.ipc.*"]
+  veritasd:
+    allowed_imports: ["app.veritas.*", "app.ipc.*"]
+  graphd:
+    allowed_imports: ["app.temporal.*", "app.ipc.*"]
+  presenced:
+    allowed_imports: ["app.ipc.*"]
+  contextd:
+    allowed_imports: ["app.ipc.*"]
+  intentd:
+    allowed_imports: ["app.core.*", "app.ipc.*"]
