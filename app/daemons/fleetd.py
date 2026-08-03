@@ -506,3 +506,10 @@ def register_fleet_handlers(server: Any) -> None:
         )
         runtime.start()
         server.add_cleanup(runtime.stop)
+
+
+def generate_device_keypair(device_id: str, name: str) -> Any:
+    from app.fleet.device_registry import Device
+    import base64, os
+    pub = base64.b64encode(os.urandom(32)).decode()
+    return Device(device_id=device_id, name=name, public_key=pub, os_type="Ubuntu")
