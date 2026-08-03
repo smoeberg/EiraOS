@@ -7,6 +7,7 @@ import grp
 import os
 import socket
 import stat
+from typing import Iterable
 
 
 class PeerCredentialError(PermissionError):
@@ -26,6 +27,21 @@ def resolve_group_gid(group_name: str) -> int:
         return grp.getgrnam(group_name).gr_gid
     except KeyError:
         return os.getgid()
+
+
+def socket_access_allowed(
+    creds: PeerCredentials,
+    allowed_uids: Iterable[int] | None = None,
+    allowed_gids: Iterable[int] | None = None,
+) -> bool:
+    current_uid = os.getuid()
+    if creds.uid == current_uid or creds.uid == 0:
+        return True
+    if allowed_uids and creds.uid in allowed_uids:
+        return True
+    if allowed_gids and creds.gid in allowed_gids:
+        return True
+    return False
 
 
 def secure_socket_path(socket_path: str):
