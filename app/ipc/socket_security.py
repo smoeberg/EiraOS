@@ -2,6 +2,8 @@
 EiraOS IPC Socket Security Module
 Enforces strict 0660 / 0600 permissions on Unix Domain Sockets to prevent local privilege escalation.
 """
+from dataclasses import dataclass
+import grp
 import os
 import socket
 import stat
@@ -10,6 +12,20 @@ import stat
 class PeerCredentialError(PermissionError):
     """Raised when peer credentials (UID/GID) do not match expected owner."""
     pass
+
+
+@dataclass(frozen=True)
+class PeerCredentials:
+    pid: int
+    uid: int
+    gid: int
+
+
+def resolve_group_gid(group_name: str) -> int:
+    try:
+        return grp.getgrnam(group_name).gr_gid
+    except KeyError:
+        return os.getgid()
 
 
 def secure_socket_path(socket_path: str):
@@ -32,6 +48,11 @@ def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") 
     try:
         sock.bind(socket_path)
         os.chmod(socket_path, mode)
+        gid = resolve_group_gid(group)
+        try:
+            os.chown(socket_path, -1, gid)
+        except OSError:
+            pass
     finally:
         os.umask(old_umask)
     return sock
@@ -45,14 +66,14 @@ def remove_unix_socket(socket_path: str) -> None:
             pass
 
 
-def validate_peer_credentials(sock: socket.socket) -> dict:
+def validate_peer_credentials(sock: socket.socket) -> PeerCredentials:
     """Verifies SO_PEERCRED on Linux Unix sockets."""
     try:
         if hasattr(socket, "SO_PEERCRED"):
             import struct
             creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
             pid, uid, gid = struct.unpack("3i", creds)
-            return {"pid": pid, "uid": uid, "gid": gid}
+            return PeerCredentials(pid=pid, uid=uid, gid=gid)
     except Exception as exc:
         raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
-    return {"pid": os.getpid(), "uid": os.getuid(), "gid": os.getgid()}
+    return PeerCredentials(pid=os.getpid(), uid=os.getuid(), gid=os.getgid())
