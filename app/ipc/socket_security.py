@@ -30,6 +30,10 @@ def resolve_group_gid(group_name: str) -> int:
         return os.getgid()
 
 
+def _supplementary_gids(pid: int) -> set[int]:
+    return set()
+
+
 def socket_access_allowed(
     target: Any,
     allowed_uids: Iterable[int] | None = None,
@@ -37,23 +41,22 @@ def socket_access_allowed(
     uid: int | None = None,
     gids: Iterable[int] | None = None,
 ) -> bool:
-    if isinstance(target, PeerCredentials):
+    if uid is not None:
+        creds_uid = uid
+        creds_gid = next(iter(gids)) if gids else os.getgid()
+    elif isinstance(target, PeerCredentials):
         creds_uid = target.uid
         creds_gid = target.gid
     elif isinstance(target, (str, Path)):
-        if uid is not None:
-            creds_uid = uid
-            creds_gid = next(iter(gids)) if gids else os.getgid()
-        else:
-            try:
-                st = os.stat(target)
-                creds_uid = st.st_uid
-                creds_gid = st.st_gid
-            except OSError:
-                return False
+        try:
+            st = os.stat(target)
+            creds_uid = st.st_uid
+            creds_gid = st.st_gid
+        except OSError:
+            return False
     else:
-        creds_uid = uid or os.getuid()
-        creds_gid = next(iter(gids)) if gids else os.getgid()
+        creds_uid = os.getuid()
+        creds_gid = os.getgid()
 
     current_uid = os.getuid()
     if creds_uid == current_uid or creds_uid == 0:
