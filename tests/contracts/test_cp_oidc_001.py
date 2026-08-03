@@ -1,9 +1,10 @@
 import uuid
-from app.session_store import ensure_session, get_session
+from app.session_store import init_db, ensure_session, get_session
 from app.daemons import identityd
 from app.auth.oidc import mock_login
 
 def test_cp_oidc_session_isolation_after_sso():
+    init_db()
     login_a = mock_login({"email": "a@kommune.dk", "name": "A"})
     sid_b = ensure_session(str(uuid.uuid4()), "b@kommune.dk")
 
