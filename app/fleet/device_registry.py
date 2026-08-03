@@ -275,3 +275,5 @@ class DeviceRegistry:
             if self._shared is None:
                 connection.close()
         return [PairedDevice(**dict(row)) for row in rows]
+
+Device = PairedDevice
