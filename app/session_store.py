@@ -24,6 +24,17 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
         close = True
     try:
         conn.execute("""
+        
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id TEXT PRIMARY KEY,
+            event_type TEXT,
+            payload TEXT,
+            details TEXT,
+            actor_id TEXT,
+            created_at TEXT,
+            timestamp TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
             actor_id TEXT,
