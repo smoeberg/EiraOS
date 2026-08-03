@@ -23,8 +23,7 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
         conn = sqlite3.connect(get_db_path())
         close = True
     try:
-        conn.execute("""
-        
+        conn.executescript("""
         CREATE TABLE IF NOT EXISTS audit_events (
             id TEXT PRIMARY KEY,
             event_type TEXT,
