@@ -41,6 +41,7 @@ def socket_access_allowed(
     uid: int | None = None,
     gids: Iterable[int] | None = None,
 ) -> bool:
+    current_uid = os.getuid()
     if uid is not None:
         creds_uid = uid
         creds_gid = next(iter(gids)) if gids else os.getgid()
@@ -55,19 +56,17 @@ def socket_access_allowed(
         except OSError:
             return False
     else:
-        creds_uid = os.getuid()
+        creds_uid = current_uid
         creds_gid = os.getgid()
 
-    current_uid = os.getuid()
-    if creds_uid == current_uid or creds_uid == 0:
-        return True
     if allowed_uids and creds_uid in allowed_uids:
         return True
     if allowed_gids and creds_gid in allowed_gids:
         return True
-    if gids and creds_gid in gids:
+    if gids and creds_gid in gids and creds_uid == current_uid:
         return True
-    return False
+
+    return creds_uid == current_uid or creds_uid == 0 if uid is None else False
 
 
 def secure_socket_path(socket_path: str):
@@ -108,17 +107,28 @@ def remove_unix_socket(socket_path: str) -> None:
             pass
 
 
-def validate_peer_credentials(sock: socket.socket) -> PeerCredentials:
+def validate_peer_credentials(
+    sock: Any,
+    allowed_uids: Iterable[int] | None = None,
+    allowed_gids: Iterable[int] | None = None,
+) -> PeerCredentials:
     """Verifies SO_PEERCRED on Linux Unix sockets."""
-    try:
-        if hasattr(socket, "SO_PEERCRED"):
+    if hasattr(sock, "getsockopt") and hasattr(socket, "SO_PEERCRED"):
+        try:
             import struct
             creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
             pid, uid, gid = struct.unpack("3i", creds)
-            return PeerCredentials(pid=pid, uid=uid, gid=gid)
-    except Exception as exc:
-        raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
-    return PeerCredentials(pid=os.getpid(), uid=os.getuid(), gid=os.getgid())
+            peer = PeerCredentials(pid=pid, uid=uid, gid=gid)
+        except Exception as exc:
+            raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
+    else:
+        peer = PeerCredentials(pid=os.getpid(), uid=os.getuid(), gid=os.getgid())
+
+    if allowed_uids is not None or allowed_gids is not None:
+        if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
+            raise PeerCredentialError(f"Peer UID {peer.uid} or GID {peer.gid} is not authorized")
+
+    return peer
 
 
 get_peer_credentials = validate_peer_credentials
