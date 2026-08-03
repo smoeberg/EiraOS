@@ -7,7 +7,8 @@ import grp
 import os
 import socket
 import stat
-from typing import Iterable
+from pathlib import Path
+from typing import Iterable, Any
 
 
 class PeerCredentialError(PermissionError):
@@ -30,16 +31,38 @@ def resolve_group_gid(group_name: str) -> int:
 
 
 def socket_access_allowed(
-    creds: PeerCredentials,
+    target: Any,
     allowed_uids: Iterable[int] | None = None,
     allowed_gids: Iterable[int] | None = None,
+    uid: int | None = None,
+    gids: Iterable[int] | None = None,
 ) -> bool:
+    if isinstance(target, PeerCredentials):
+        creds_uid = target.uid
+        creds_gid = target.gid
+    elif isinstance(target, (str, Path)):
+        if uid is not None:
+            creds_uid = uid
+            creds_gid = next(iter(gids)) if gids else os.getgid()
+        else:
+            try:
+                st = os.stat(target)
+                creds_uid = st.st_uid
+                creds_gid = st.st_gid
+            except OSError:
+                return False
+    else:
+        creds_uid = uid or os.getuid()
+        creds_gid = next(iter(gids)) if gids else os.getgid()
+
     current_uid = os.getuid()
-    if creds.uid == current_uid or creds.uid == 0:
+    if creds_uid == current_uid or creds_uid == 0:
         return True
-    if allowed_uids and creds.uid in allowed_uids:
+    if allowed_uids and creds_uid in allowed_uids:
         return True
-    if allowed_gids and creds.gid in allowed_gids:
+    if allowed_gids and creds_gid in allowed_gids:
+        return True
+    if gids and creds_gid in gids:
         return True
     return False
 
@@ -93,3 +116,6 @@ def validate_peer_credentials(sock: socket.socket) -> PeerCredentials:
     except Exception as exc:
         raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
     return PeerCredentials(pid=os.getpid(), uid=os.getuid(), gid=os.getgid())
+
+
+get_peer_credentials = validate_peer_credentials
