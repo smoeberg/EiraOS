@@ -1,8 +1,9 @@
 import uuid
-from app.session_store import ensure_session, get_session
+from app.session_store import init_db, ensure_session, get_session
 from app.daemons import identityd
 
 def test_cp_session_s1_step_up_isolation():
+    init_db()
     sid_a = ensure_session(str(uuid.uuid4()), "a@test.dk")
     sid_b = ensure_session(str(uuid.uuid4()), "b@test.dk")
 
@@ -11,6 +12,7 @@ def test_cp_session_s1_step_up_isolation():
     assert session_b["assurance_level"] == "eid_low"
 
 def test_cp_identity_s1_isolated_step_up():
+    init_db()
     sid_a = str(uuid.uuid4())
     sid_b = str(uuid.uuid4())
     ensure_session(sid_a)
