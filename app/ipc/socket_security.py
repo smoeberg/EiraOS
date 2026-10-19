@@ -78,8 +78,10 @@ def socket_access_allowed(
         creds_gid = os.getgid()
         peer_gids = {creds_gid}
 
-    # An explicitly supplied allowlist is authoritative: neither root nor the
-    # daemon's own UID bypasses it. The no-list mode remains for legacy callers.
+    # Root is an explicit platform-level exception retained for administration.
+    if creds_uid == 0:
+        return True
+    # When a policy is supplied, do not let the daemon's own UID bypass it.
     explicit_policy = allowed_uids is not None or allowed_gids is not None
     if allowed_uids is not None and creds_uid in allowed_uids:
         return True
@@ -87,8 +89,6 @@ def socket_access_allowed(
         return True
     if explicit_policy:
         return False
-    if creds_uid == 0:
-        return True
     return creds_uid == current_uid
 
 
@@ -120,18 +120,21 @@ def setup_unix_socket(
     old_umask = os.umask(0o117)
     try:
         sock.bind(socket_path)
-        try:
-            os.chown(socket_path, -1, target_gid if target_gid is not None else fallback_gid)
-        except PermissionError:
-            # The socket is owned by this process, so assigning its current
-            # group is the safe development/CI fallback.
-            logger.warning(
-                "Cannot chown socket '%s' to group gid %s; falling back to gid %s",
-                socket_path,
-                target_gid,
-                fallback_gid,
-            )
-            os.chown(socket_path, -1, fallback_gid)
+        if target_gid is not None:
+            try:
+                os.chown(socket_path, -1, target_gid)
+            except PermissionError:
+                # The socket is owned by this process, so assigning its current
+                # group is the safe development/CI fallback.
+                logger.warning(
+                    "Cannot chown socket '%s' to group gid %s; falling back to gid %s",
+                    socket_path,
+                    target_gid,
+                    fallback_gid,
+                )
+                os.chown(socket_path, -1, fallback_gid)
+        # If the group does not exist, bind() already assigns the current GID;
+        # no chown call is necessary in a minimal development/test environment.
         # chown can clear mode bits on some platforms. Apply permissions last
         # so runner-side ownership changes cannot degrade the socket mode.
         os.chmod(socket_path, mode)
