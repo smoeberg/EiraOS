@@ -6,7 +6,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from app.core.cel_evaluator import CELEvaluator
+from app.core.cel_evaluator import CELEvaluator, CELSyntaxError
 from app.core.event import EventBus
 from app.core.knowledge import KnowledgeRepository
 from app.core.policy_store import PolicyStore
@@ -202,11 +202,8 @@ def test_cel_rejects_python_introspection_and_import_chains() -> None:
 def test_cel_node_budget_rejects_ten_thousand_node_expression() -> None:
     expression = " + ".join(["1"] * 5_000)
     evaluator = CELEvaluator(max_expression_length=50_000, max_nodes=128)
-    with pytest.raises(Exception) as error:
+    with pytest.raises(CELSyntaxError) as error:
         evaluator.compile(expression)
-    from app.core.cel_evaluator import CELSyntaxError
-
-    assert isinstance(error.value, CELSyntaxError)
     assert str(error.value) == "expression_too_complex"
 
 
