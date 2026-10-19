@@ -62,7 +62,11 @@ class DeviceRegistry:
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        # SQLite's strftime() cannot parse ISO 8601 with "T" and a UTC
+        # offset suffix; it returns NULL and expiry comparisons silently
+        # never match (fail-open). Store timestamps in SQLite's native
+        # format instead: "YYYY-MM-DD HH:MM:SS" (UTC).
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     def _connect(self) -> sqlite3.Connection:
         if self._shared is not None:
