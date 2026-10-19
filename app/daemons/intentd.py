@@ -105,16 +105,28 @@ class IntentDaemonService:
 
         if failed_constraints:
             constraint = failed_constraints[0]
+            data: dict[str, Any] = {
+                "rule_id": constraint.id,
+                "rule": constraint.expression,
+                "transformation": proposal.suggested_transformation,
+                "user_message": constraint.error_message,
+                "rationale": "Afvist af en obligatorisk CEL-politikregel.",
+            }
+            required_assurance = constraint.metadata.get("required_assurance")
+            if required_assurance:
+                data.update(
+                    {
+                        "step_up_required": True,
+                        "required_assurance": required_assurance,
+                        "step_up_method": constraint.metadata.get(
+                            "step_up_method", "mitid_erhverv"
+                        ),
+                    }
+                )
             raise JsonRpcError(
                 CONSTRAINT_VIOLATION,
                 "CONSTRAINT_VIOLATION",
-                {
-                    "rule_id": constraint.id,
-                    "rule": constraint.expression,
-                    "transformation": proposal.suggested_transformation,
-                    "user_message": constraint.error_message,
-                    "rationale": "Afvist af en obligatorisk CEL-politikregel.",
-                },
+                data,
             )
 
         try:
