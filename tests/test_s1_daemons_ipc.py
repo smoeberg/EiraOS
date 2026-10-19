@@ -93,3 +93,20 @@ def test_peer_allowlist_does_not_fall_back_to_current_uid_or_root() -> None:
     assert not socket_access_allowed(
         object(), allowed_uids={1001}, allowed_gids={2001}, uid=0, gids={3001}
     )
+
+
+
+def test_all_nine_daemons_answer_health_over_ipc(tmp_path, monkeypatch) -> None:
+    from app.daemons.runner import start_daemons, stop_daemons
+    from app.ipc.client import IpcClient
+
+    stop_daemons()
+    monkeypatch.setenv("EIRA_RUN_DIR", str(tmp_path))
+    try:
+        started = start_daemons("all", socket_dir=tmp_path)
+        assert set(started) == set(DAEMON_NAMES)
+        for daemon in DAEMON_NAMES:
+            health = IpcClient(daemon).call("health")
+            assert health["ok"] is True
+    finally:
+        stop_daemons()
