@@ -13,8 +13,8 @@ from typing import Any
 
 from websockets.asyncio.server import Server, ServerConnection, serve
 
-from app.core.store import StateStore
 from app.core.remote_store import RpcStateStore
+from app.core.store import StateStore
 from app.database import get_connection, utc_now_iso
 from app.fleet.device_registry import DeviceAuthorizationError, DeviceRegistry
 from app.fleet.e2ee import PayloadIntegrityError, StatePayloadEncryptor
@@ -509,7 +509,9 @@ def register_fleet_handlers(server: Any) -> None:
 
 
 def generate_device_keypair(device_id: str, name: str) -> Any:
+    import base64
+    import os
+
     from app.fleet.device_registry import Device
-    import base64, os
     pub = base64.b64encode(os.urandom(32)).decode()
     return Device(device_id=device_id, name=name, public_key=pub, os_type="Ubuntu")

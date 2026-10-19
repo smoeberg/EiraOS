@@ -1,8 +1,11 @@
 """
 Text & Document Evidence Provider for EiraOS
 """
-import os, json
+import json
+import os
+
 from evidence_engine.base_provider import BaseEvidenceProvider
+
 
 class TextEvidenceProvider(BaseEvidenceProvider):
     def __init__(self, parameters_path: str = None):

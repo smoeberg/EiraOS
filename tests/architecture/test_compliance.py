@@ -1,6 +1,8 @@
 import ast
 import os
+
 import yaml
+
 
 def load_architecture_spec():
     spec_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../docs/architecture_spec.yaml"))

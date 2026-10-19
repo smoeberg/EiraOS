@@ -7,9 +7,10 @@ session security/revocation, audit event chain integrity, and Veritas evidence p
 import tempfile
 
 import pytest
+
+from app.auth.oidc import mock_login
 from app.daemons.runner import start_daemons, stop_daemons
 from app.ipc.client import IpcClient
-from app.auth.oidc import mock_login
 
 
 @pytest.fixture(scope="module")
@@ -88,8 +89,8 @@ def test_session_security_and_revocation(runtime):
     """5. Test Session Security: Session creation via mock_login and identity verification."""
     login_info = mock_login({"email": "auditor@eiraos.local", "name": "Test Auditor"})
     assert "session_id" in login_info
-    session_id = login_info["session_id"]
 
+    session_id = login_info["session_id"]
     identity_client = IpcClient("identityd")
     
     res = identity_client.call("health")

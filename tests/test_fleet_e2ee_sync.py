@@ -1,11 +1,12 @@
 import asyncio
 import json
 import socket
+
 from websockets.asyncio.client import connect
+
+from app.daemons.fleetd import FleetWebSocketServer, generate_device_keypair
 from app.fleet.device_registry import DeviceRegistry
-from app.fleet.e2ee import StatePayloadEncryptor
-from app.fleet.merkle_sync import MerkleSyncEngine
-from app.daemons.fleetd import FleetSyncService, FleetWebSocketServer, generate_device_keypair
+
 
 def _services():
     device_a = generate_device_keypair("device-a", "Laptop")

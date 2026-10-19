@@ -1,5 +1,6 @@
 import os
 from urllib.parse import urlencode
+
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import RedirectResponse
 

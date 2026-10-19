@@ -2,13 +2,13 @@
 EiraOS IPC Socket Security Module
 Enforces strict 0660 / 0600 permissions on Unix Domain Sockets to prevent local privilege escalation.
 """
-from dataclasses import dataclass
 import grp
 import os
 import socket
 import stat
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Any, Iterable
 
 
 class PeerCredentialError(PermissionError):

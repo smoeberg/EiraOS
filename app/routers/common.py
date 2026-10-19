@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
+
 from app.ipc.client import IpcClient
 from app.ipc.jsonrpc import JsonRpcError
 

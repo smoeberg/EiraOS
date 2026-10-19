@@ -1,8 +1,8 @@
-from app.core.state import State, ProposalState
 from app.core.constraint import Constraint
-from app.core.store import StateStore
 from app.core.event import EventBus
-from app.core.knowledge import KnowledgeRepository, KnowledgeEntry
+from app.core.knowledge import KnowledgeEntry, KnowledgeRepository
+from app.core.state import ProposalState, State
+from app.core.store import StateStore
 from app.core.transformation import IntegratedEngine
 from app.daemons import graphd, stated
 from app.ipc.client import IpcClient
