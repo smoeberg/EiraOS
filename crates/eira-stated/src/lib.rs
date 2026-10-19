@@ -71,7 +71,10 @@ pub struct StateStore {
     pool: SqlitePool,
 }
 
-fn configure_connection(connection: &mut Connection, in_memory: bool) -> Result<(), r2d2_sqlite::rusqlite::Error> {
+fn configure_connection(
+    connection: &mut Connection,
+    in_memory: bool,
+) -> Result<(), r2d2_sqlite::rusqlite::Error> {
     connection.busy_timeout(Duration::from_secs(5))?;
     connection.set_prepared_statement_cache_capacity(32);
     if in_memory {
@@ -157,19 +160,21 @@ impl StateStore {
             }
         }
         let payload = serde_json::to_string(&state.payload)?;
-        connection.prepare_cached(
-            "INSERT INTO states
+        connection
+            .prepare_cached(
+                "INSERT INTO states
              (id, version, timestamp_ns, type, payload, previous_state_id, hash)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        )?.execute(params![
-            state.id,
-            state.version,
-            state.timestamp_ns,
-            state.state_type,
-            payload,
-            state.previous_state_id,
-            state.hash,
-        ])?;
+            )?
+            .execute(params![
+                state.id,
+                state.version,
+                state.timestamp_ns,
+                state.state_type,
+                payload,
+                state.previous_state_id,
+                state.hash,
+            ])?;
         Ok(AppendReceipt {
             state_id: state.id.clone(),
             hash: state.hash.clone(),
@@ -177,7 +182,9 @@ impl StateStore {
         })
     }
 
-    fn row_to_state(row: &r2d2_sqlite::rusqlite::Row<'_>) -> r2d2_sqlite::rusqlite::Result<StateRecord> {
+    fn row_to_state(
+        row: &r2d2_sqlite::rusqlite::Row<'_>,
+    ) -> r2d2_sqlite::rusqlite::Result<StateRecord> {
         let payload: String = row.get("payload")?;
         let payload = serde_json::from_str(&payload).map_err(|error| {
             r2d2_sqlite::rusqlite::Error::FromSqlConversionFailure(
@@ -200,22 +207,29 @@ impl StateStore {
     pub fn get_by_id(&self, state_id: &str) -> Result<Option<StateRecord>, StateEngineError> {
         let connection = self.connection()?;
         Ok(connection
-            .query_row("SELECT * FROM states WHERE id = ?1", [state_id], Self::row_to_state)
+            .query_row(
+                "SELECT * FROM states WHERE id = ?1",
+                [state_id],
+                Self::row_to_state,
+            )
             .optional()?)
     }
 
     pub fn get_by_hash(&self, state_hash: &str) -> Result<Option<StateRecord>, StateEngineError> {
         let connection = self.connection()?;
         Ok(connection
-            .query_row("SELECT * FROM states WHERE hash = ?1", [state_hash], Self::row_to_state)
+            .query_row(
+                "SELECT * FROM states WHERE hash = ?1",
+                [state_hash],
+                Self::row_to_state,
+            )
             .optional()?)
     }
 
     pub fn list_states(&self) -> Result<Vec<StateRecord>, StateEngineError> {
         let connection = self.connection()?;
-        let mut statement = connection.prepare_cached(
-            "SELECT * FROM states ORDER BY timestamp_ns ASC, id ASC",
-        )?;
+        let mut statement =
+            connection.prepare_cached("SELECT * FROM states ORDER BY timestamp_ns ASC, id ASC")?;
         let states = statement
             .query_map([], Self::row_to_state)?
             .collect::<Result<Vec<_>, _>>()?;
@@ -223,9 +237,9 @@ impl StateStore {
     }
 
     pub fn count(&self) -> Result<u64, StateEngineError> {
-        let value: i64 = self
-            .connection()?
-            .query_row("SELECT COUNT(*) FROM states", [], |row| row.get(0))?;
+        let value: i64 =
+            self.connection()?
+                .query_row("SELECT COUNT(*) FROM states", [], |row| row.get(0))?;
         u64::try_from(value).map_err(|_| StateEngineError::Hash("negative state count".to_owned()))
     }
 }
@@ -254,11 +268,7 @@ mod tests {
     fn appends_and_reads_canonical_chain() {
         let store = StateStore::open(":memory:").unwrap();
         let first = state("00000000-0000-0000-0000-000000000001", None, 1);
-        let second = state(
-            "00000000-0000-0000-0000-000000000002",
-            Some(&first.id),
-            2,
-        );
+        let second = state("00000000-0000-0000-0000-000000000002", Some(&first.id), 2);
         store.append(&first).unwrap();
         store.append(&second).unwrap();
         assert_eq!(store.list_states().unwrap(), vec![first, second]);
@@ -269,7 +279,10 @@ mod tests {
         let store = StateStore::open(":memory:").unwrap();
         let mut invalid = state("00000000-0000-0000-0000-000000000001", None, 1);
         invalid.payload = json!({"tampered": true});
-        assert!(matches!(store.append(&invalid), Err(StateEngineError::HashMismatch)));
+        assert!(matches!(
+            store.append(&invalid),
+            Err(StateEngineError::HashMismatch)
+        ));
         assert_eq!(store.count().unwrap(), 0);
     }
 }

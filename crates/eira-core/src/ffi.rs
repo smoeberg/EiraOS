@@ -20,9 +20,7 @@ unsafe fn read_input(input: *const c_char) -> Result<String, String> {
 /// # Safety
 /// `json_payload` must point to a valid NUL-terminated string for this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn eira_state_compute_hash(
-    json_payload: *const c_char,
-) -> *mut c_char {
+pub unsafe extern "C" fn eira_state_compute_hash(json_payload: *const c_char) -> *mut c_char {
     let result = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: this function's caller upholds the pointer contract.
         let input = unsafe { read_input(json_payload) }?;
