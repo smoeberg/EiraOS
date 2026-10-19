@@ -159,6 +159,19 @@ class MerkleSyncEngine:
         if not headers:
             return MerkleSnapshot(_EMPTY_ROOT, (), ())
         by_id = {header.id: header for header in headers}
+        # Validate every component, including disconnected cycles with no DAG heads.
+        completed: set[str] = set()
+        for start_id in by_id:
+            path: set[str] = set()
+            current_id: str | None = start_id
+            while current_id is not None and current_id in by_id:
+                if current_id in completed:
+                    break
+                if current_id in path:
+                    raise ValueError("state_dag_cycle_detected")
+                path.add(current_id)
+                current_id = by_id[current_id].previous_state_id
+            completed.update(path)
         referenced = {
             header.previous_state_id
             for header in headers
