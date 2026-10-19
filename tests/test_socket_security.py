@@ -1,6 +1,5 @@
 import grp
 import os
-import socket
 import stat
 import struct
 
