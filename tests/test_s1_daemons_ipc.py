@@ -6,8 +6,8 @@ import pytest
 
 from app.daemons.base import JsonRpcServer
 from app.daemons.runner import DAEMON_NAMES, REGISTRARS
-from app.ipc.paths import canonical_daemon, socket_path
 from app.ipc.jsonrpc import JsonRpcError
+from app.ipc.paths import canonical_daemon, socket_path
 from app.ipc.socket_security import socket_access_allowed
 
 
