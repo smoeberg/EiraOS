@@ -1,8 +1,9 @@
 """
 EiraOS Text & Article Sandheds- og Troværdighedsvalidering Service (Lag 1 Rule Engine)
 """
-import os
 import json
+import os
+
 
 class TextValidationService:
     def __init__(self):

@@ -1,9 +1,11 @@
 """
 FastAPI Router for walletd (Payment Optimization & EUDI Credentials)
 """
+from typing import List
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import List
+
 from app.daemons.walletd import WalletDaemon
 
 router = APIRouter(prefix="/v1/wallet", tags=["Eira Wallet & Payments"])

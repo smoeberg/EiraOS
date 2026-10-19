@@ -190,7 +190,9 @@ pub unsafe extern "C" fn eira_stated_list_json(handle: *mut StateStore) -> *mut 
 pub unsafe extern "C" fn eira_stated_count(handle: *mut StateStore) -> i64 {
     match catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: this function's caller upholds the pointer contract.
-        unsafe { store_from_handle(handle) }?.count().map_err(|error| error.to_string())
+        unsafe { store_from_handle(handle) }?
+            .count()
+            .map_err(|error| error.to_string())
     })) {
         Ok(Ok(value)) => i64::try_from(value).unwrap_or(i64::MAX),
         Ok(Err(error)) => {

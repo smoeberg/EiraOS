@@ -8,8 +8,9 @@ import sys
 # Add veritas-shield to Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "veritas-shield"))
 
-from lag1_article_analysis.rule_engine import VeritasRuleEngine
 from adapters.c2pa_image_validator.validator import C2PAValidator
+from lag1_article_analysis.rule_engine import VeritasRuleEngine
+
 
 class EiraOSVeritasService:
     def __init__(self):

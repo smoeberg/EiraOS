@@ -5,9 +5,11 @@ Endpoints:
   - POST /v1/veritas/validate-text
   - POST /v1/veritas/validate-image
 """
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+
 from app.daemons.veritasd import VeritasDaemon
 
 router = APIRouter(prefix="/v1/veritas", tags=["Veritas Shield & Trust Engine"])

@@ -2,8 +2,10 @@
 EiraOS Capability Engine — Policy-First & Provider-Agnostic Routing Core
 """
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List
+
 from pydantic import BaseModel
+
 
 class SecurityClassification(str, Enum):
     PUBLIC = "public"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 from app.models import AuditEvent
 from app.repositories.audit_repository import AuditRepository
 

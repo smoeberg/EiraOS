@@ -10,7 +10,7 @@ from app.core.audit import StateAuditTrail
 from app.core.state import State
 from app.core.store import StateStore
 from app.daemons import stated
-from app.daemons.base import JsonRpcServer, MAX_REQUEST_BYTES
+from app.daemons.base import MAX_REQUEST_BYTES, JsonRpcServer
 from app.ipc import auth
 from app.ipc.jsonrpc import JsonRpcError
 from app.ipc.socket_security import (
