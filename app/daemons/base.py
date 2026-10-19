@@ -10,6 +10,7 @@ from app.ipc.auth import strip_and_validate_ipc_auth
 from app.ipc.jsonrpc import (
     INTERNAL_ERROR,
     INVALID_PARAMS,
+    INVALID_REQUEST,
     METHOD_NOT_FOUND,
     JsonRpcError,
     error_response,
@@ -44,29 +45,50 @@ class JsonRpcServer:
     def add_cleanup(self, callback: Callable[[], None]) -> None:
         self._stop_callbacks.append(callback)
 
+    @staticmethod
+    def _valid_request_id(value: Any) -> bool:
+        return isinstance(value, (str, int, float)) and not isinstance(value, bool)
+
     def handle_line(self, line: str) -> str:
         if len(line.encode("utf-8")) > MAX_REQUEST_BYTES:
             return json.dumps(error_response(None, INVALID_PARAMS, "Request too large"))
         try:
             request = json.loads(line)
-        except json.JSONDecodeError:
-            return json.dumps(error_response(None, INVALID_PARAMS, "Invalid JSON"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return json.dumps(error_response(None, INVALID_REQUEST, "Invalid JSON"))
 
         if not isinstance(request, dict):
             return json.dumps(
-                error_response(None, INVALID_PARAMS, "Request must be a JSON object")
+                error_response(None, INVALID_REQUEST, "Request must be a JSON object")
             )
 
         req_id = request.get("id")
-        method = request.get("method")
-        params = request.get("params") or {}
-        if not isinstance(method, str) or method not in self._handlers:
+        if request.get("jsonrpc") != "2.0":
             return json.dumps(
-                error_response(req_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
+                error_response(
+                    req_id if self._valid_request_id(req_id) else None,
+                    INVALID_REQUEST,
+                    'jsonrpc must be "2.0"',
+                )
             )
+        if "id" not in request or not self._valid_request_id(req_id):
+            return json.dumps(
+                error_response(None, INVALID_REQUEST, "Request id must be a string or number")
+            )
+
+        method = request.get("method")
+        if not isinstance(method, str) or not method:
+            return json.dumps(
+                error_response(req_id, INVALID_REQUEST, "method must be a non-empty string")
+            )
+        params = request.get("params", {})
         if not isinstance(params, dict):
             return json.dumps(
                 error_response(req_id, INVALID_PARAMS, "params must be an object")
+            )
+        if method not in self._handlers:
+            return json.dumps(
+                error_response(req_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
             )
 
         try:
@@ -74,9 +96,7 @@ class JsonRpcServer:
             result = self._handlers[method](params)
             return json.dumps(success_response(req_id, result), default=str)
         except JsonRpcError as exc:
-            return json.dumps(
-                error_response(req_id, exc.code, exc.message, exc.data)
-            )
+            return json.dumps(error_response(req_id, exc.code, exc.message, exc.data))
         except Exception:  # noqa: BLE001 - JSON-RPC boundary
             return json.dumps(
                 error_response(req_id, INTERNAL_ERROR, "Internal daemon error")
