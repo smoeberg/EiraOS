@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<labwc_config>
+  <core>
+    <decoration>no</decoration>
+    <shell>layer-shell</shell>
+  </core>
+  <keyboard>
+    <!-- Builder Mode-toggle (P4): Super+B. Indtil P4: ingen genveje -->
+    <keybind key="W-b">
+      <action name="NextWindow"/>
+    </keybind>
+  </keyboard>
+</labwc_config>

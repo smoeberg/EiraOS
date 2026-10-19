@@ -22,6 +22,17 @@ cp -r app veritas-shield contracts /opt/eiraos/
 cp packaging/systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
 
+# Sprint 1: Wayland-session (labwc + greetd autologin)
+apt-get install -y --no-install-recommends labwc greetd || true
+install -d -m 0755 /etc/greetd /etc/labwc
+install -m 0644 packaging/session/config/greetd/config.toml /etc/greetd/config.toml
+install -m 0644 packaging/session/config/labwc/rc.xml /etc/labwc/rc.xml
+install -m 0755 packaging/session/config/labwc/autostart /etc/labwc/autostart
+if id ubuntu >/dev/null 2>&1; then
+    adduser ubuntu eira || true
+fi
+systemctl enable eira-session.service || true
+
 # Enable and start all 7 EiraOS Core Daemons
 for daemon in identityd walletd veritasd graphd presenced contextd intentd; do
     echo "Aktiverer eira-${daemon}.service..."
