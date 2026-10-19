@@ -119,6 +119,15 @@ def test_snapshot_rejects_duplicate_id_and_malformed_hash():
         engine.snapshot([StateHeader("bad", 1, "not-a-sha3-hash", None)])
 
 
+def test_snapshot_rejects_cycle_even_when_dag_has_no_head():
+    engine = MerkleSyncEngine()
+    first = StateHeader("first", 1, _hash("first"), "second", 1)
+    second = StateHeader("second", 1, _hash("second"), "first", 2)
+
+    with pytest.raises(ValueError, match="state_dag_cycle_detected"):
+        engine.snapshot([first, second])
+
+
 def test_deep_dag_recursion_failure_is_converted_to_safe_value_error():
     engine = MerkleSyncEngine()
     headers = []
