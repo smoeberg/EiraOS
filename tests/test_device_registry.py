@@ -47,7 +47,9 @@ def test_expired_pairing_code_is_rejected():
     code = registry.create_pairing_token(ttl_seconds=30)["code"]
     with registry._lock:
         conn = registry._connect()
-        conn.execute("UPDATE pairing_codes SET expires_at = ?", (int(time.time()) - 1,))
+        conn.execute(
+            "UPDATE pairing_codes SET expires_at = ?", (int(time.time()) - 1,)
+        )
         conn.commit()
     with pytest.raises(DeviceAuthorizationError):
         registry.enroll(
@@ -72,7 +74,10 @@ def test_revoke_removes_device_from_active_queries():
 def test_heartbeat_expiry_is_fail_closed():
     registry = DeviceRegistry(heartbeat_ttl_seconds=1)
     code = registry.create_pairing_token()["code"]
-    registry.enroll(pairing_code=code, device_id="d1", name="One", os_type="ubuntu", public_key=public_key())
+    registry.enroll(
+        pairing_code=code, device_id="d1", name="One", os_type="ubuntu",
+        public_key=public_key()
+    )
     registry.heartbeat("d1")
     time.sleep(1.1)
     assert registry.list_active() == []
