@@ -174,12 +174,12 @@ def test_trust_aggregation_asymmetrical_uses_all_four_weights() -> None:
     ))
 
 
-def test_layer_exception_fails_closed_and_keeps_evaluation_available() -> None:
+def test_layer_exception_fails_closed_and_keeps_evaluation_available(monkeypatch: pytest.MonkeyPatch) -> None:
     server = JsonRpcServer(name="test-veritas-fail-closed", daemon="veritasd")
     daemon = VeritasDaemon(layer1=BrokenLayer())
     register_veritas_handlers(server, daemon)
     with tempfile.TemporaryDirectory(prefix="evf-") as socket_dir:
-        os.environ["EIRA_RUN_DIR"] = socket_dir
+        monkeypatch.setenv("EIRA_RUN_DIR", socket_dir)
         try:
             server.start()
             failed_layer = IpcClient("veritasd", timeout=3).call(
