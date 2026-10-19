@@ -4,6 +4,7 @@ import {
   type CanvasNode,
   type ProposalRecord,
 } from "./components/SpatialCanvas";
+import { IntentBar } from "./components/IntentBar";
 import { SituationUI } from "./components/SituationUI";
 import { VeritasHUD, type VeritasResult } from "./components/VeritasHUD";
 import { ipcErrorMessage, sendIpcRequest } from "./lib/ipc";
@@ -14,6 +15,7 @@ export default function App() {
   const [veritas, setVeritas] = useState<VeritasResult | null>(null);
   const [veritasLoading, setVeritasLoading] = useState(false);
   const [veritasError, setVeritasError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const handleSelect = useCallback(async (node: CanvasNode | null) => {
     setSelected(node);
@@ -55,6 +57,10 @@ export default function App() {
     });
   }, [handleSelect]);
 
+  const refreshAfterIntent = useCallback(() => {
+    setReloadKey((key) => key + 1);
+  }, []);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -68,8 +74,9 @@ export default function App() {
           Lokal Unix IPC
         </div>
       </header>
+      <IntentBar onExecuted={refreshAfterIntent} />
       <main className="workspace-grid">
-        <SpatialCanvas onSelect={handleSelect} onProposals={setProposals} />
+        <SpatialCanvas key={reloadKey} onSelect={handleSelect} onProposals={setProposals} />
         <VeritasHUD
           result={veritas}
           subject={selected?.label}
