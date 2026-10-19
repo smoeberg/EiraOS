@@ -5,7 +5,6 @@ from uuid import UUID, uuid5
 
 from app.core.state import State
 from app.fleet.merkle_sync import MerkleSyncEngine, StateHeader
-
 import pytest
 
 
