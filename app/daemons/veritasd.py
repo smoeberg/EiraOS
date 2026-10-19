@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,7 +61,45 @@ class VeritasDaemon:
         self.layer3 = layer3 or Layer3GraphEngine()
         self.c2pa = c2pa or C2PAEngine()
 
+    @staticmethod
+    def _evaluate_layer(label: str, callback, *args, **kwargs) -> dict[str, Any]:
+        """Fail closed for one layer without taking down the daemon."""
+        try:
+            return callback(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - layer boundary must fail closed
+            print(
+                f"[eira-veritasd] layer {label} failed: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+            return {
+                "score": 0.0,
+                "flags": (f"layer_error:{label}",),
+                "details": {"error": type(exc).__name__},
+            }
+
     def evaluate(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
+        """Evaluate evidence; fail-closed: layer errors score 0/flag, daemon survives."""
+        try:
+            return self._evaluate(input_data)
+        except Exception as exc:  # noqa: BLE001 - final fail-closed boundary
+            print(
+                f"[eira-veritasd] evaluation failed: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+            return {
+                "media_type": "unknown",
+                "trust_score": 0.0,
+                "confidence": 0.0,
+                "layers": {},
+                "rationale": ["intern fejl"],
+                "hud_certificate": {
+                    "certificate_type": "EIRA_VERITAS_HUD_V1",
+                    "trust_score": 0.0,
+                    "error": type(exc).__name__,
+                },
+            }
+
+    def _evaluate(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
         payload = dict(input_data)
         media_type = str(
             payload.get("type") or payload.get("media_type") or "text"
@@ -69,12 +108,12 @@ class VeritasDaemon:
         layer1_input = payload.get("document")
         if not isinstance(layer1_input, Mapping):
             layer1_input = payload
-        layer1 = self.layer1.evaluate(layer1_input)
+        layer1 = self._evaluate_layer("layer1", self.layer1.evaluate, layer1_input)
 
         credential = payload.get("credential") or payload.get("qeaa")
         issuer_certificate = payload.get("issuer_certificate")
-        layer2 = self.layer2.verify(
-            credential,
+        layer2 = self._evaluate_layer(
+            "layer2", self.layer2.verify, credential,
             issuer_certificate=issuer_certificate,
         )
 
@@ -85,12 +124,14 @@ class VeritasDaemon:
                 "source": payload.get("url") or payload.get("source_domain"),
                 "observed_at": payload.get("observed_at"),
             }
-        layer3 = self.layer3.evaluate(claim)
+        layer3 = self._evaluate_layer("layer3", self.layer3.evaluate, claim)
 
         media = payload.get("media")
         if media is None and media_type in {"image", "photo", "audio", "video", "c2pa"}:
             media = payload
-        c2pa = self.c2pa.evaluate(media, mime_type=payload.get("mime_type"))
+        c2pa = self._evaluate_layer(
+            "c2pa", self.c2pa.evaluate, media, mime_type=payload.get("mime_type")
+        )
 
         layer_scores = {
             "layer1": float(layer1["score"]),
