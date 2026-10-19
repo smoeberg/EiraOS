@@ -78,10 +78,15 @@ def socket_access_allowed(
         creds_gid = os.getgid()
         peer_gids = {creds_gid}
 
-    if allowed_uids and creds_uid in allowed_uids:
+    # An explicitly supplied allowlist is authoritative: neither root nor the
+    # daemon's own UID bypasses it. The no-list mode remains for legacy callers.
+    explicit_policy = allowed_uids is not None or allowed_gids is not None
+    if allowed_uids is not None and creds_uid in allowed_uids:
         return True
-    if allowed_gids and peer_gids.intersection(allowed_gids):
+    if allowed_gids is not None and peer_gids.intersection(allowed_gids):
         return True
+    if explicit_policy:
+        return False
     if creds_uid == 0:
         return True
     return creds_uid == current_uid
@@ -98,35 +103,38 @@ def secure_socket_path(socket_path: str):
         os.chmod(socket_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
-def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") -> socket.socket:
-    remove_unix_socket(socket_path)
-    os.makedirs(os.path.dirname(socket_path), exist_ok=True)
+def setup_unix_socket(
+    socket_path: str, mode: int = 0o660, group: str = "eira"
+) -> socket.socket:
+    """Create a Unix socket with deterministic mode and group ownership.
 
-    gid = resolve_group_gid(group)
-    if gid is None:
-        logger.warning(
-            "Continuing socket setup without group ownership enforcement for '%s'",
-            group,
-        )
+    The target group is used when it exists and can be applied. Minimal
+    development/CI environments fall back to the process's current GID.
+    """
+    remove_unix_socket(socket_path)
+    os.makedirs(os.path.dirname(socket_path) or ".", exist_ok=True)
+
+    target_gid = resolve_group_gid(group)
+    fallback_gid = os.getgid()
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old_umask = os.umask(0o117)
     try:
         sock.bind(socket_path)
+        try:
+            os.chown(socket_path, -1, target_gid if target_gid is not None else fallback_gid)
+        except PermissionError:
+            # The socket is owned by this process, so assigning its current
+            # group is the safe development/CI fallback.
+            logger.warning(
+                "Cannot chown socket '%s' to group gid %s; falling back to gid %s",
+                socket_path,
+                target_gid,
+                fallback_gid,
+            )
+            os.chown(socket_path, -1, fallback_gid)
+        # chown can clear mode bits on some platforms. Apply permissions last
+        # so runner-side ownership changes cannot degrade the socket mode.
         os.chmod(socket_path, mode)
-        if gid is not None:
-            try:
-                os.chown(socket_path, -1, gid)
-            except PermissionError:
-                # The current process is not a member of the target group
-                # (e.g. CI runners). Degrade gracefully: the socket keeps its
-                # 0o660 file mode; group ownership is enforced only when the
-                # runtime has the privilege to apply it.
-                logger.warning(
-                    "Cannot chown socket '%s' to group gid %s; "
-                    "continuing without group ownership",
-                    socket_path,
-                    gid,
-                )
     except OSError:
         remove_unix_socket(socket_path)
         sock.close()
@@ -165,9 +173,17 @@ def validate_peer_credentials(
             "Peer credentials unavailable: object does not support SO_PEERCRED"
         )
 
-    if allowed_uids is not None or allowed_gids is not None:
-        if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
-            raise PeerCredentialError(f"Peer UID {peer.uid} or GID {peer.gid} is not authorized")
+    if allowed_uids is None and allowed_gids is None:
+        # The daemon accept path calls this without arguments. Restrict it to
+        # the service identity and the socket's intended group by default.
+        eira_gid = resolve_group_gid("eira")
+        allowed_uids = {os.getuid(), 0}  # Root remains an explicit platform policy.
+        allowed_gids = {os.getgid()}
+        if eira_gid is not None:
+            allowed_gids.add(eira_gid)
+
+    if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
+        raise PeerCredentialError(f"Peer UID {peer.uid} or GID {peer.gid} is not authorized")
 
     return peer
 
