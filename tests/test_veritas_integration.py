@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import signal
-import socket
 import stat
 import subprocess
 import sys
