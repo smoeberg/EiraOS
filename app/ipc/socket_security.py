@@ -82,11 +82,16 @@ def socket_access_allowed(
         creds_uid = os.getuid()
         peer_gids = {os.getgid()}
 
+    # Root remains an explicitly privileged local peer, matching the platform's
+    # established socket-security policy. All non-root peers must match the allowlist.
+    if creds_uid == 0:
+        return True
+
     if allowed_uids is None and allowed_gids is None:
         # Preserve the helper's historical convenience behavior for callers that
         # explicitly omit an allowlist. The server accept path always supplies
         # concrete defaults, so it never relies on this fallback.
-        return creds_uid == os.getuid() or creds_uid == 0
+        return creds_uid == os.getuid()
 
     uid_allowlist = set(allowed_uids or ())
     gid_allowlist = set(allowed_gids or ())
