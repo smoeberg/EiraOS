@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.routers.common import fleet_ipc, graph_ipc, identity_ipc, intent_ipc, ipc_http
 
 router = APIRouter(tags=["Health"])

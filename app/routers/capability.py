@@ -3,6 +3,7 @@ FastAPI Router for capabilityd (Capability & Policy Routing)
 """
 from fastapi import APIRouter
 from pydantic import BaseModel
+
 from app.daemons.capabilityd import CapabilityDaemon
 
 router = APIRouter(prefix="/v1/capability", tags=["EiraOS Capability Engine (capabilityd)"])

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException
+
 from app.capability import get_manifest
 from app.ipc.jsonrpc import JsonRpcError
 from app.models import DashboardResponse

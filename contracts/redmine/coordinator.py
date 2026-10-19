@@ -33,8 +33,6 @@ from redmine_api import (
     _custom_field_ids,
     _statuses,
     _users,
-    _versions,
-    api_post,
     api_put,
     assignee_login,
     cf_value,
@@ -72,7 +70,7 @@ def set_frontmatter_status(path: Path, status: str) -> bool:
     text = path.read_text(encoding="utf-8")
     if not re.search(r"^status:\s*", text, re.MULTILINE):
         return False
-    new_text = re.sub(r"^status:\s*\S+\s*$", f"status: {status}", text, count=1, re.MULTILINE)
+    new_text = re.sub(r"^status:\s*\S+\s*$", f"status: {status}", text, flags=re.MULTILINE, count=1)
     if new_text != text:
         path.write_text(new_text, encoding="utf-8")
         return True

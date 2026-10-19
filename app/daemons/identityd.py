@@ -17,7 +17,7 @@ from app.auth.production_cert_verifier import (
     ProductionCertificateVerifier,
 )
 from app.ipc.client import IpcClient
-from app.ipc.jsonrpc import JsonRpcError, ASSURANCE_REQUIRED
+from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
 from app.session_store import ensure_session, get_session, update_assurance
 
 IDENTITY_VALIDATION_FAILED = -32020

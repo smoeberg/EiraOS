@@ -126,10 +126,7 @@ pub trait RpcHandler: Send + Sync + 'static {
 
 impl<F> RpcHandler for F
 where
-    F: Fn(&str, Option<&RawValue>) -> Result<Box<RawValue>, RpcErrorObject>
-        + Send
-        + Sync
-        + 'static,
+    F: Fn(&str, Option<&RawValue>) -> Result<Box<RawValue>, RpcErrorObject> + Send + Sync + 'static,
 {
     fn handle(
         &self,
@@ -339,7 +336,9 @@ impl UnixRpcClient {
             }
             let response: ClientResponse<T> = serde_json::from_slice(&frame)?;
             if response.jsonrpc != JSON_RPC_VERSION || response.id != request_id {
-                return Err(IpcError::Protocol("response id/version mismatch".to_owned()));
+                return Err(IpcError::Protocol(
+                    "response id/version mismatch".to_owned(),
+                ));
             }
             if let Some(error) = response.error {
                 return Err(IpcError::Remote(error));
@@ -367,9 +366,7 @@ mod tests {
         let directory = tempdir().unwrap();
         let path = directory.path().join("rpc.sock");
         let handler = Arc::new(
-            |method: &str,
-             params: Option<&RawValue>|
-             -> Result<Box<RawValue>, RpcErrorObject> {
+            |method: &str, params: Option<&RawValue>| -> Result<Box<RawValue>, RpcErrorObject> {
                 if method != "echo" {
                     return Err(RpcErrorObject::new(-32601, "unknown method"));
                 }

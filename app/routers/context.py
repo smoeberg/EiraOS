@@ -3,6 +3,7 @@ FastAPI Router for contextd (Life Context Management)
 """
 from fastapi import APIRouter
 from pydantic import BaseModel
+
 from app.daemons.contextd import ContextDaemon
 
 router = APIRouter(prefix="/v1/context", tags=["EiraOS Life Context (contextd)"])

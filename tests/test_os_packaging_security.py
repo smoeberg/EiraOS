@@ -53,9 +53,11 @@ def test_all_daemons_have_least_privilege_apparmor_profiles() -> None:
     shutil.which("apparmor_parser") is None,
     reason="AppArmor userspace parser is not installed in this validation runtime",
 )
-def test_apparmor_profiles_parse_on_ubuntu() -> None:
+def test_apparmor_profiles_parse_on_ubuntu(tmp_path) -> None:
     result = subprocess.run(
-        ["apparmor_parser", "-Q", "-q", *map(str, sorted(APPARMOR_DIR.glob("usr.bin.eira-*")))],
+        ["apparmor_parser", "-Q", "-q",
+         "--cache-loc", str(tmp_path / "apparmor-cache"),
+         *map(str, sorted(APPARMOR_DIR.glob("usr.bin.eira-*")))],
         capture_output=True,
         text=True,
         check=False,

@@ -111,7 +111,7 @@ def _verify_jwt_signature(token: str, jwk: dict[str, Any]) -> bool:
     n, e = _rsa_public_key_from_jwk(jwk)
 
     # RSA PKCS#1 v1.5 verification
-    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
     try:

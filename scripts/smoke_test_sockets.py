@@ -4,11 +4,11 @@
 Verifies connectivity and health status of EiraOS daemons over Unix Domain Sockets.
 """
 
-import sys
+import argparse
+import json
 import os
 import socket
-import json
-import argparse
+import sys
 from typing import List, Tuple
 
 GREEN = "\033[92m"

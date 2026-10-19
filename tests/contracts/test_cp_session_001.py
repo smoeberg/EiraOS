@@ -1,6 +1,8 @@
 import uuid
-from app.session_store import init_db, ensure_session, get_session
+
 from app.daemons import identityd
+from app.session_store import ensure_session, get_session, init_db
+
 
 def test_cp_session_s1_step_up_isolation():
     init_db()
