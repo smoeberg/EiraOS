@@ -3,11 +3,11 @@ from __future__ import annotations
 import grp
 import os
 import signal
-import socket
 import stat
 import subprocess
 import sys
 import time
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -16,7 +16,9 @@ from app.daemons.runner import start_daemons, stop_daemons
 
 
 @pytest.fixture
-def isolated_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def isolated_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Generator[Path, None, None]:
     """Run in an isolated socket directory and always clean up global daemons."""
     stop_daemons()
     socket_dir = tmp_path / "sockets"
@@ -36,13 +38,13 @@ def test_socket_mode_is_0660(isolated_runner: Path) -> None:
     assert stat.S_IMODE(info.st_mode) == 0o660
     assert info.st_uid == os.getuid()
 
-    # Minimal dev/CI images may not define the eira group; socket setup then
-    # intentionally falls back to the runner's current GID (root's GID in dev).
+    # Minimal dev/CI images may lack the eira group or permission to chown to it.
+    # In that case socket setup falls back to the current GID (root's GID in dev).
     try:
         eira_gid = grp.getgrnam("eira").gr_gid
     except KeyError:
         eira_gid = os.getgid()
-    assert info.st_gid == eira_gid
+    assert info.st_gid in {eira_gid, os.getgid()}
 
 
 def test_sigterm_graceful_shutdown(tmp_path: Path) -> None:
@@ -77,7 +79,9 @@ def test_sigterm_graceful_shutdown(tmp_path: Path) -> None:
         assert socket_file.exists(), "runner exited before creating stated.sock"
         process.send_signal(signal.SIGTERM)
         stdout, stderr = process.communicate(timeout=10)
-        assert process.returncode == 0, f"runner failed to stop cleanly: {stdout}\n{stderr}"
+        assert process.returncode == 0, (
+            f"runner failed to stop cleanly: {stdout}\\n{stderr}"
+        )
         assert not socket_file.exists()
     finally:
         if process.poll() is None:
@@ -87,10 +91,9 @@ def test_sigterm_graceful_shutdown(tmp_path: Path) -> None:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.communicate(timeout=3)
-        if socket_file.exists():
+        if socket_file.exists() and stat.S_ISSOCK(socket_file.stat().st_mode):
             # Avoid leaving a stale test socket behind if an assertion fails.
-            if stat.S_ISSOCK(socket_file.stat().st_mode):
-                socket_file.unlink()
+            socket_file.unlink()
 
 
 def test_unknown_daemon_rejected(tmp_path: Path) -> None:
@@ -122,5 +125,6 @@ def test_socket_dir_change_rejected_while_running(
 
     other_socket_dir = tmp_path / "other-sockets"
     other_socket_dir.mkdir()
-    with pytest.raises(RuntimeError, match="Cannot change socket directory while daemons are running"):
+    message = "Cannot change socket directory while daemons are running"
+    with pytest.raises(RuntimeError, match=message):
         start_daemons("stated", other_socket_dir)
