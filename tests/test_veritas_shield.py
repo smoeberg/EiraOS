@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -204,7 +206,12 @@ def test_c2pa_reads_valid_hardware_manifest_mock() -> None:
 
 
 def test_veritas_evaluate_over_ipc(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("EIRA_RUN_DIR", str(tmp_path))
+    """End-to-end veritas.evaluate over a real AF_UNIX socket (short path)."""
+    import tempfile
+
+    # AF_UNIX sockaddr path is limited (~108 bytes). Prefer a short /tmp dir.
+    socket_root = Path(tempfile.mkdtemp(prefix="eirav-", dir="/tmp"))
+    monkeypatch.setenv("EIRA_RUN_DIR", str(socket_root))
     server = JsonRpcServer(name="test-veritasd", daemon="veritasd")
     register_veritas_handlers(server, VeritasDaemon())
     params = {
@@ -216,35 +223,90 @@ def test_veritas_evaluate_over_ipc(tmp_path: Path, monkeypatch) -> None:
         "publisher": "DR",
         "publisher_verified": True,
     }
-    used_socket = False
+    socket_file = socket_root / "veritasd.sock"
+    server.start()
     try:
-        server.start()
-    except RuntimeError as exc:
-        # The Codex validation sandbox blocks AF_UNIX creation.  Exercise the
-        # identical newline JSON-RPC boundary directly there; Ubuntu runs the
-        # real socket path above.
-        if not isinstance(exc.__cause__, PermissionError):
-            raise
-        request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "veritas.evaluate",
-            "params": params,
-        }
-        result = json.loads(server.handle_line(json.dumps(request)))["result"]
-    else:
-        used_socket = True
-        try:
-            result = IpcClient("veritasd").call("veritas.evaluate", params)
-        finally:
-            server.stop()
+        assert socket_file.exists(), f"expected live socket at {socket_file}"
+        result = IpcClient("veritasd").call("veritas.evaluate", params)
+    finally:
+        server.stop()
 
+    assert 0.0 <= result["trust_score"] <= 100.0
     expected = sum(
         VERITAS_WEIGHTS[name] * result["layers"][name]["score"]
         for name in VERITAS_WEIGHTS
     )
-    assert result["trust_score"] == round(expected * 100, 2)
+    assert result["trust_score"] == round(max(0.0, min(1.0, expected)) * 100, 2)
     assert result["hud_certificate"]["certificate_type"] == "EIRA_VERITAS_HUD_V1"
     assert result["hud_certificate"]["certificate_id"].startswith("veritas:")
-    if used_socket:
-        assert not (tmp_path / "veritasd.sock").exists()
+    assert not socket_file.exists(), "socket must be cleaned up after stop"
+
+
+def test_veritas_evaluate_rejects_invalid_params() -> None:
+    from app.ipc.jsonrpc import JsonRpcError
+
+    daemon = VeritasDaemon()
+    with pytest.raises(JsonRpcError) as missing:
+        daemon.evaluate({})
+    assert missing.value.code == -32602
+
+    with pytest.raises(JsonRpcError) as bad_document:
+        daemon.evaluate({"document": "not-an-object"})
+    assert bad_document.value.code == -32602
+
+    with pytest.raises(JsonRpcError) as bad_claim:
+        daemon.evaluate({"claim": 42})
+    assert bad_claim.value.code == -32602
+
+    huge = "x" * (1 * 1024 * 1024 + 1)
+    with pytest.raises(JsonRpcError) as oversized:
+        daemon.evaluate({"text": huge})
+    assert oversized.value.code == -32602
+    assert "exceeds" in oversized.value.message
+
+
+def test_veritas_evaluate_invalid_params_over_jsonrpc() -> None:
+    server = JsonRpcServer(name="test-veritasd-params", daemon="veritasd")
+    register_veritas_handlers(server, VeritasDaemon())
+    request = {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "veritas.evaluate",
+        "params": {"document": ["wrong"]},
+    }
+    response = json.loads(server.handle_line(json.dumps(request)))
+    assert response["id"] == 7
+    assert response["error"]["code"] == -32602
+
+
+def test_veritas_evaluate_fail_closed_on_layer_crash() -> None:
+    class BoomLayer1(Layer1RulesEngine):
+        def evaluate(self, document):  # type: ignore[override]
+            raise RuntimeError("secret stack detail should not leak")
+
+    daemon = VeritasDaemon(layer1=BoomLayer1())
+    result = daemon.evaluate(
+        {
+            "type": "text",
+            "text": "Indhold der udløser lag-fejl.",
+            "url": "https://example.org/item",
+        }
+    )
+    assert result["trust_score"] == 0.0
+    assert result["rationale"] == ["intern fejl"]
+    joined = " ".join(result["rationale"])
+    assert "secret stack" not in joined
+    assert "RuntimeError" not in joined
+    assert 0.0 <= result["trust_score"] <= 100.0
+
+
+def test_process_evidence_matches_evaluate() -> None:
+    daemon = VeritasDaemon()
+    params = {
+        "type": "text",
+        "url": "https://example.org/news",
+        "text": "Samme pipeline for process_evidence og evaluate.",
+    }
+    assert daemon.process_evidence(params)["trust_score"] == daemon.evaluate(params)[
+        "trust_score"
+    ]
