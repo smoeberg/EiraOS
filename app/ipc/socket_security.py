@@ -4,11 +4,15 @@ Enforces strict 0660 / 0600 permissions on Unix Domain Sockets to prevent local 
 """
 from dataclasses import dataclass
 import grp
+import logging
 import os
 import socket
 import stat
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Any, Iterable
+
+
+logger = logging.getLogger(__name__)
 
 
 class PeerCredentialError(PermissionError):
@@ -23,11 +27,15 @@ class PeerCredentials:
     gid: int
 
 
-def resolve_group_gid(group_name: str) -> int:
+def resolve_group_gid(group_name: str) -> int | None:
     try:
         return grp.getgrnam(group_name).gr_gid
-    except KeyError as exc:
-        raise RuntimeError(f"Required Unix group '{group_name}' does not exist") from exc
+    except KeyError:
+        logger.warning(
+            "Unix group '%s' is unavailable; group-based socket permissions are disabled",
+            group_name,
+        )
+        return None
 
 
 def _supplementary_gids(pid: int) -> set[int]:
@@ -96,12 +104,18 @@ def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") 
     os.makedirs(os.path.dirname(socket_path), exist_ok=True)
 
     gid = resolve_group_gid(group)
+    if gid is None:
+        logger.warning(
+            "Continuing socket setup without group ownership enforcement for '%s'",
+            group,
+        )
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old_umask = os.umask(0o117)
     try:
         sock.bind(socket_path)
         os.chmod(socket_path, mode)
-        os.chown(socket_path, -1, gid)
+        if gid is not None:
+            os.chown(socket_path, -1, gid)
     except OSError:
         remove_unix_socket(socket_path)
         sock.close()
