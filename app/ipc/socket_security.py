@@ -114,7 +114,19 @@ def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") 
         sock.bind(socket_path)
         os.chmod(socket_path, mode)
         if gid is not None:
-            os.chown(socket_path, -1, gid)
+            try:
+                os.chown(socket_path, -1, gid)
+            except PermissionError:
+                # The current process is not a member of the target group
+                # (e.g. CI runners). Degrade gracefully: the socket keeps its
+                # 0o660 file mode; group ownership is enforced only when the
+                # runtime has the privilege to apply it.
+                logger.warning(
+                    "Cannot chown socket '%s' to group gid %s; "
+                    "continuing without group ownership",
+                    socket_path,
+                    gid,
+                )
     except OSError:
         remove_unix_socket(socket_path)
         sock.close()
