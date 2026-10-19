@@ -122,7 +122,11 @@ def validate_peer_credentials(
         except Exception as exc:
             raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
     else:
-        peer = PeerCredentials(pid=os.getpid(), uid=os.getuid(), gid=os.getgid())
+        # Fail closed: an object that cannot prove its identity is never
+        # silently treated as the current process.
+        raise PeerCredentialError(
+            "Peer credentials unavailable: object does not support SO_PEERCRED"
+        )
 
     if allowed_uids is not None or allowed_gids is not None:
         if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
