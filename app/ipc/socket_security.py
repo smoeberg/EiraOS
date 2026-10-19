@@ -109,30 +109,42 @@ def secure_socket_path(socket_path: str) -> None:
         os.chmod(socket_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
-def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") -> socket.socket:
-    remove_unix_socket(socket_path)
-    os.makedirs(os.path.dirname(socket_path), exist_ok=True)
+def setup_unix_socket(
+    socket_path: str, mode: int = 0o660, group: str = "eira"
+) -> socket.socket:
+    """Create a Unix socket with deterministic mode and group ownership.
 
-    gid = resolve_group_gid(group)
-    if gid is None:
-        logger.warning(
-            "Continuing socket setup without group ownership enforcement for '%s'",
-            group,
-        )
+    The target group is used when it exists and can be applied. Minimal
+    development/CI environments fall back to the process's current GID.
+    """
+    remove_unix_socket(socket_path)
+    os.makedirs(os.path.dirname(socket_path) or ".", exist_ok=True)
+
+    target_gid = resolve_group_gid(group)
+    fallback_gid = os.getgid()
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old_umask = os.umask(0o117)
     try:
         sock.bind(socket_path)
-        os.chmod(socket_path, mode)
-        if gid is not None:
+        if target_gid is not None:
             try:
-                os.chown(socket_path, -1, gid)
+                os.chown(socket_path, -1, target_gid)
             except PermissionError:
+                # The socket is owned by this process, so assigning its current
+                # group is the safe development/CI fallback.
                 logger.warning(
-                    "Cannot chown socket '%s' to group gid %s; continuing without group ownership",
+                    "Cannot chown socket '%s' to group gid %s; falling back to gid %s",
+
                     socket_path,
-                    gid,
+                    target_gid,
+                    fallback_gid,
                 )
+                os.chown(socket_path, -1, fallback_gid)
+        # If the group does not exist, bind() already assigns the current GID;
+        # no chown call is necessary in a minimal development/test environment.
+        # chown can clear mode bits on some platforms. Apply permissions last
+        # so runner-side ownership changes cannot degrade the socket mode.
+        os.chmod(socket_path, mode)
     except OSError:
         remove_unix_socket(socket_path)
         sock.close()
