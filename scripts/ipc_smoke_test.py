@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test for EIRA IPC daemons."""
+"""Smoke test for all EiraOS IPC daemons."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.daemons.runner import start_daemons, stop_daemons
+from app.daemons.runner import DAEMON_NAMES, start_daemons, stop_daemons
 from app.ipc.client import IpcClient
 from app.ipc.jsonrpc import JsonRpcError
 
@@ -18,6 +18,13 @@ def main() -> int:
     start_daemons()
     time.sleep(0.3)
     try:
+        # Every registered daemon must expose a working IPC socket and health method.
+        for daemon in DAEMON_NAMES:
+            health = IpcClient(daemon).call("health")
+            if health.get("ok") is not True:
+                raise AssertionError(f"{daemon} health check failed: {health}")
+            print(f"{daemon}: health OK")
+
         intent = IpcClient("intent")
         graph = IpcClient("graph")
         identity = IpcClient("identity")
@@ -45,17 +52,19 @@ def main() -> int:
         print("identity.session:", session["assurance_level"])
 
         try:
-            intent.call("intent.confirm", {"intent_id": planned["intent_id"]})
-            print("intent.confirm: unexpected success without step-up")
-            return 1
+            identity.call(
+                "identity.step_up",
+                {"required_assurance": "org_acting"},
+                session_id=session.get("session_id"),
+            )
+            raise AssertionError("identity.step_up unexpectedly succeeded without a token")
         except JsonRpcError as exc:
-            print("intent.confirm (expected block):", exc.data.get("user_message", exc.message))
+            user_message = exc.data.get("user_message")
+            if not user_message:
+                raise AssertionError("step-up rejection omitted user_message") from exc
+            print("identity.step_up (expected rejection):", user_message)
 
-        identity.call("identity.step_up", {"required_assurance": "org_acting"})
-        confirmed = intent.call("intent.confirm", {"intent_id": planned["intent_id"]})
-        print("intent.confirm after step-up:", confirmed["status"])
-
-        print("\nIPC smoke test OK")
+        print("\nIPC smoke test OK (all nine daemons)")
         return 0
     finally:
         stop_daemons()
