@@ -39,7 +39,7 @@ jobs:
 
     - name: Run integration tests (Pytest)
       run: |
-        pytest tests/
+        python -m pytest tests/
 
   rust-ci:
     runs-on: ubuntu-latest

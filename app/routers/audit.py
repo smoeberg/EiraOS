@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException
+
 from app.models import AuditEvent
 from app.services.audit_service import AuditService
 from app.session_store import get_session

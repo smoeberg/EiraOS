@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
-import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from app.auth.oidc import (
     JWKS,
     OidcConfig,
-    _base64url_decode,
-    _decode_jwt_payload_unverified,
     _verify_jwt_signature,
     _verify_token_claims,
     claims_from_id_token,
@@ -48,8 +45,8 @@ def _make_jwt(
 
 def _make_rsa_key_pair() -> tuple[str, str, str, str]:
     """Generate RSA key pair and return PEM strings for private and public keys."""
-    from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = private_key.private_bytes(
@@ -162,7 +159,7 @@ class TestJWTVerification:
         private_pem, _, _, _ = rsa_keys
         header = {"alg": "RS256", "typ": "JWT", "kid": "test-kid-1"}
         payload = {"sub": "test-user"}
-        token = _make_jwt(header, payload, private_pem)
+        token = _make_jwt(header, payload, private_pem)  # noqa: F841
 
         # Create a different key
         other_private_pem, _, _, _ = _make_rsa_key_pair()
