@@ -5,7 +5,6 @@ from uuid import UUID, uuid5
 
 import pytest
 
-from app.core.state import State
 from app.fleet.merkle_sync import MerkleSyncEngine, StateHeader
 
 
@@ -13,6 +12,8 @@ _NAMESPACE = UUID("4f8b8a9d-cb4f-4ad4-bd37-4b15a77d96f0")
 
 
 def _state(label: str, previous: State | None = None) -> State:
+    from app.core.state import State
+
     return State(
         id=uuid5(_NAMESPACE, label),
         timestamp_ns=len(label) + (previous.timestamp_ns + 1 if previous else 1),
