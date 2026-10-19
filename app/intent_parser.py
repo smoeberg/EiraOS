@@ -416,6 +416,12 @@ class IntentParser:
             type=structured["state_type"],
             payload=payload,
             timestamp_ns=int(self.clock().timestamp() * 1e9),
+            # Derive the id from the frozen content so identical input, clock and
+            # context always yield an identical, deterministic proposal.
+            id=uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"{structured['state_type']}|{normalized_input}|{int(self.clock().timestamp() * 1e9)}",
+            ),
         )
         # Snapshot the mutable payload so caller-owned nested values cannot mutate the proposal.
         frozen_payload = _freeze_json_value(copy.deepcopy(state.payload))
