@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+from app.core.cel_evaluator import CELEvaluator
 from app.core.event import EventBus
 from app.core.knowledge import KnowledgeEntry, KnowledgeRepository
 from app.core.policy_store import PolicyStore
@@ -79,10 +80,58 @@ class IntentDaemonService:
                 },
             )
 
-        constraints = self.policy_store.get_constraints(
-            proposal.suggested_transformation
-        )
+        # Policy lookup and CEL evaluation are a mandatory pre-append gate.
+        # Never allow a store/evaluator failure to reach the state appender.
         try:
+            constraints = self.policy_store.get_constraints(
+                proposal.suggested_transformation
+            )
+            evaluator = CELEvaluator()
+            failed_constraints = []
+            for constraint in constraints:
+                if not constraint.evaluate(
+                    proposal.candidate_state, world, evaluator=evaluator
+                ):
+                    failed_constraints.append(constraint)
+        except Exception:  # noqa: BLE001 - security boundary must fail closed
+            raise JsonRpcError(
+                -32603,
+                "INTENT_EXECUTION_FAILED",
+                {
+                    "user_message": "Intentionen kunne ikke gennemføres, fordi politikkerne ikke kunne kontrolleres.",
+                    "rationale": "Policy/CEL evaluation failed closed.",
+                },
+            ) from None
+
+        if failed_constraints:
+            constraint = failed_constraints[0]
+            data: dict[str, Any] = {
+                "rule_id": constraint.id,
+                "rule": constraint.expression,
+                "transformation": proposal.suggested_transformation,
+                "user_message": constraint.error_message,
+                "rationale": "Afvist af en obligatorisk CEL-politikregel.",
+            }
+            required_assurance = constraint.metadata.get("required_assurance")
+            if required_assurance:
+                data.update(
+                    {
+                        "step_up_required": True,
+                        "required_assurance": required_assurance,
+                        "step_up_method": constraint.metadata.get(
+                            "step_up_method", "mitid_erhverv"
+                        ),
+                    }
+                )
+            raise JsonRpcError(
+                CONSTRAINT_VIOLATION,
+                "CONSTRAINT_VIOLATION",
+                data,
+            )
+
+        try:
+            # IntegratedEngine rechecks constraints immediately before append;
+            # the explicit gate above ensures every rule was evaluated first.
             state = self.engine.apply_proposal(proposal, constraints, world)
         except ConstraintViolation as exc:
             constraint = exc.constraint
@@ -103,11 +152,21 @@ class IntentDaemonService:
                         ),
                     }
                 )
+            data["rationale"] = "Afvist af en obligatorisk CEL-politikregel."
             raise JsonRpcError(
                 CONSTRAINT_VIOLATION,
                 "CONSTRAINT_VIOLATION",
                 data,
-            ) from exc
+            ) from None
+        except Exception:  # noqa: BLE001 - never leak internals over IPC
+            raise JsonRpcError(
+                -32603,
+                "INTENT_EXECUTION_FAILED",
+                {
+                    "user_message": "Intentionen kunne ikke gennemføres på grund af en intern kontrolfejl.",
+                    "rationale": "Execution failed closed.",
+                },
+            ) from None
 
         knowledge = KnowledgeEntry(
             state_id=state.id,
@@ -125,7 +184,11 @@ class IntentDaemonService:
             "confidence_score": proposal.confidence_score,
             "rationale": proposal.rationale,
             "applied_constraints": [
-                {"id": item.id, "version": item.version, "expression": item.expression}
+                {
+                    "id": item.id,
+                    "version": item.version,
+                    "expression": item.expression,
+                }
                 for item in constraints
             ],
             "knowledge_entry": knowledge.model_dump(mode="json"),
