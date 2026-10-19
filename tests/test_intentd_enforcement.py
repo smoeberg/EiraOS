@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from app.core.cel_evaluator import CELEvaluator
 from app.core.event import EventBus
 from app.core.knowledge import KnowledgeRepository
 from app.core.policy_store import PolicyDefinition, PolicyStore
@@ -99,6 +100,28 @@ def test_intent_execute_policy_store_crash_fails_closed_without_ipc_traceback():
     assert "secret database details" not in repr(raised.value.data)
     assert "RuntimeError" not in repr(raised.value.data)
     assert raised.value.data["user_message"]
+    assert appender.states == []
+
+
+def test_intent_execute_cel_crash_fails_closed_without_appending(monkeypatch):
+    policies = PolicyStore(seed_defaults=False)
+    policies.add_rule(
+        "approve_payment", "amount_limit", "candidate.payload.amount <= 100000",
+        "Beløbet er for højt.",
+    )
+    appender = RecordingAppender()
+
+    def crash(*args, **kwargs):
+        raise RuntimeError("CEL intern stacktrace secret")
+
+    monkeypatch.setattr(CELEvaluator, "evaluate", crash)
+    with pytest.raises(JsonRpcError) as raised:
+        _service(policies, appender).execute(_params())
+
+    assert raised.value.code == -32603
+    assert raised.value.message == "INTENT_EXECUTION_FAILED"
+    assert "stacktrace" not in repr(raised.value.data)
+    assert "RuntimeError" not in repr(raised.value.data)
     assert appender.states == []
 
 
