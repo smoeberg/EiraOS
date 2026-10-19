@@ -293,7 +293,11 @@ class CELEvaluator:
             raise CELSyntaxError("expression_too_long")
         try:
             parsed = ast.parse(_translate_cel(expression), mode="eval")
-        except (SyntaxError, ValueError, RecursionError, MemoryError) as exc:
+        except RecursionError as exc:
+            # Deeply nested expressions exhaust the parser's recursion before a
+            # node count can be taken; treat them as over-budget, not invalid.
+            raise CELSyntaxError("expression_too_complex") from exc
+        except (SyntaxError, ValueError, MemoryError) as exc:
             raise CELSyntaxError("invalid_expression") from exc
         if sum(1 for _ in ast.walk(parsed)) > self.max_nodes:
             raise CELSyntaxError("expression_too_complex")
