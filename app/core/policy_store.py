@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
@@ -96,9 +97,74 @@ class PolicyStore:
             )
             """
         )
+        columns = {
+            row["name"]
+            for row in self._connection.execute("PRAGMA table_info(policy_rules)")
+        }
+        if "content_hash" not in columns:
+            self._connection.execute(
+                "ALTER TABLE policy_rules ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''"
+            )
+            rows = self._connection.execute("SELECT * FROM policy_rules").fetchall()
+            for row in rows:
+                digest = self._rule_digest(
+                    row["transformation_type"], row["rule_id"], row["version"],
+                    row["expression"], row["error_message"], row["metadata_json"],
+                    bool(row["enabled"]),
+                )
+                self._connection.execute(
+                    "UPDATE policy_rules SET content_hash = ? WHERE transformation_type = ? AND rule_id = ? AND version = ?",
+                    (digest, row["transformation_type"], row["rule_id"], row["version"]),
+                )
+        self._connection.execute(
+            "CREATE TRIGGER IF NOT EXISTS policy_rules_immutable_update "
+            "BEFORE UPDATE ON policy_rules BEGIN "
+            "SELECT RAISE(ABORT, 'policy rules are immutable'); END"
+        )
+        self._connection.execute(
+            "CREATE TRIGGER IF NOT EXISTS policy_rules_immutable_delete "
+            "BEFORE DELETE ON policy_rules BEGIN "
+            "SELECT RAISE(ABORT, 'policy rules are immutable'); END"
+        )
         self._connection.commit()
         if seed_defaults:
             self.seed(DEFAULT_POLICIES)
+
+    @staticmethod
+    def _rule_digest(
+        transformation_type: str,
+        rule_id: str,
+        version: int,
+        expression: str,
+        error_message: str,
+        metadata_json: str,
+        enabled: bool,
+    ) -> str:
+        canonical = json.dumps(
+            {
+                "transformation_type": transformation_type,
+                "rule_id": rule_id,
+                "version": version,
+                "expression": expression,
+                "error_message": error_message,
+                "metadata": json.loads(metadata_json),
+                "enabled": enabled,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        return hashlib.sha3_256(canonical.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _verify_row(cls, row: sqlite3.Row) -> None:
+        expected = cls._rule_digest(
+            row["transformation_type"], row["rule_id"], row["version"],
+            row["expression"], row["error_message"], row["metadata_json"],
+            bool(row["enabled"]),
+        )
+        if not row["content_hash"] or row["content_hash"] != expected:
+            raise ValueError("policy_rule_integrity_check_failed")
 
     def close(self) -> None:
         self._connection.close()
@@ -147,17 +213,24 @@ class PolicyStore:
             version = int(row["version"]) + 1
             self._connection.execute(
                 """
-                UPDATE policy_rules SET enabled = 0
-                WHERE transformation_type = ? AND rule_id = ? AND enabled = 1
+                SELECT 1
+                FROM policy_rules
+                WHERE transformation_type = ? AND rule_id = ?
+                LIMIT 1
                 """,
                 (transformation_type, rule_id),
+            )
+            metadata_json = json.dumps(metadata or {}, sort_keys=True)
+            digest = self._rule_digest(
+                transformation_type, rule_id, version, expression,
+                error_message, metadata_json, enabled,
             )
             self._connection.execute(
                 """
                 INSERT INTO policy_rules
                 (transformation_type, rule_id, version, expression,
-                 error_message, metadata_json, enabled)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                 error_message, metadata_json, enabled, content_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     transformation_type,
@@ -165,8 +238,9 @@ class PolicyStore:
                     version,
                     expression,
                     error_message,
-                    json.dumps(metadata or {}, sort_keys=True),
+                    metadata_json,
                     int(enabled),
+                    digest,
                 ),
             )
             self._connection.commit()
@@ -185,8 +259,7 @@ class PolicyStore:
     def get_constraints(
         self, transformation_type: str, *, include_disabled: bool = False
     ) -> list[Constraint]:
-        enabled_clause = "" if include_disabled else "AND current.enabled = 1"
-        query = f"""
+        query = """
             SELECT current.*
             FROM policy_rules AS current
             JOIN (
@@ -198,23 +271,27 @@ class PolicyStore:
               ON latest.transformation_type = current.transformation_type
              AND latest.rule_id = current.rule_id
              AND latest.max_version = current.version
-            WHERE 1 = 1 {enabled_clause}
             ORDER BY current.transformation_type, current.rule_id
         """
         with self._lock:
             rows = self._connection.execute(query, (transformation_type,)).fetchall()
-        return [
-            Constraint(
-                id=row["rule_id"],
-                transformation_type=row["transformation_type"],
-                version=row["version"],
-                expression=row["expression"],
-                error_message=row["error_message"],
-                metadata=json.loads(row["metadata_json"]),
-                enabled=bool(row["enabled"]),
+        constraints = []
+        for row in rows:
+            self._verify_row(row)
+            if not include_disabled and not row["enabled"]:
+                continue
+            constraints.append(
+                Constraint(
+                    id=row["rule_id"],
+                    transformation_type=row["transformation_type"],
+                    version=row["version"],
+                    expression=row["expression"],
+                    error_message=row["error_message"],
+                    metadata=json.loads(row["metadata_json"]),
+                    enabled=bool(row["enabled"]),
+                )
             )
-            for row in rows
-        ]
+        return constraints
 
     def get_rule_history(
         self, transformation_type: str, rule_id: str
@@ -228,6 +305,8 @@ class PolicyStore:
                 """,
                 (transformation_type, rule_id),
             ).fetchall()
+        for row in rows:
+            self._verify_row(row)
         return [
             Constraint(
                 id=row["rule_id"],
