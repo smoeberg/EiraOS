@@ -22,7 +22,7 @@ def _response(server: JsonRpcServer, payload: str) -> dict:
 
 
 @pytest.mark.parametrize(
-    "request",
+    "request_payload",
     [
         '{"id":1,"method":"test.echo","params":{}}',
         '{"jsonrpc":"1.0","id":1,"method":"test.echo","params":{}}',
@@ -34,9 +34,9 @@ def _response(server: JsonRpcServer, payload: str) -> dict:
     ],
 )
 def test_invalid_jsonrpc_requests_are_rejected_with_user_message(
-    server: JsonRpcServer, request: str
+    server: JsonRpcServer, request_payload: str
 ) -> None:
-    response = _response(server, request)
+    response = _response(server, request_payload)
     assert "error" in response
     assert response["error"]["data"]["user_message"]
 
