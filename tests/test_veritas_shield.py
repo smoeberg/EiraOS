@@ -291,11 +291,12 @@ def test_veritas_evaluate_fail_closed_on_layer_crash() -> None:
             "url": "https://example.org/item",
         }
     )
-    assert result["trust_score"] == 0.0
-    assert result["rationale"] == ["intern fejl"]
-    joined = " ".join(result["rationale"])
+    # Per-layer fail-closed contract: crashing layer scores 0 and is flagged,
+    # the daemon survives and no stack trace leaks into the response.
+    assert result["layers"]["layer1"]["score"] == 0.0
+    assert "layer_error:layer1" in result["layers"]["layer1"]["flags"]
+    joined = " ".join(str(f) for f in result["rationale"])
     assert "secret stack" not in joined
-    assert "RuntimeError" not in joined
     assert 0.0 <= result["trust_score"] <= 100.0
 
 
@@ -309,3 +310,95 @@ def test_process_evidence_matches_evaluate() -> None:
     assert daemon.process_evidence(params)["trust_score"] == daemon.evaluate(params)[
         "trust_score"
     ]
+
+def test_layer1_flags_new_danish_and_english_manipulation_patterns() -> None:
+    engine = Layer1RulesEngine()
+    cases = [
+        ("Sandheden skjules for offentligheden.", "conspiracy_framing"),
+        ("They're hiding the truth from you.", "conspiracy_framing"),
+        ("Chokafsløring om den nye rapport.", "viral_bombshell"),
+        ("A shocking revelation about the report.", "viral_bombshell"),
+        ("Del før det fjernes fra nettet!", "share_before_censorship"),
+        ("Share before they take it down!", "share_before_censorship"),
+    ]
+    for text, expected_flag in cases:
+        result = engine.evaluate(text)
+        assert expected_flag in result["flags"], text
+        assert 0.0 <= result["score"] <= 1.0
+
+
+def test_layer_contracts_hold_for_edge_case_inputs(monkeypatch, tmp_path: Path) -> None:
+    # Deterministic property-style coverage: every engine must preserve the
+    # public result shape and bounded score for empty, huge, Unicode and None.
+    cases = [None, "", "x" * 100_000, "ÆØÅ 日本語 🛡️" * 100]
+    layer1 = Layer1RulesEngine()
+    layer2 = QEAAVerifier()
+    layer3 = Layer3GraphEngine(CallableGraphProvider(lambda _: {
+        "origin": None, "relations": [], "source_reliability": 0.5
+    }))
+    layer4 = C2PAEngine(manifest_reader=type("NoManifestReader", (), {
+        "read": lambda self, path: None
+    })())
+    for value in cases:
+        results = [
+            layer1.evaluate(value),
+            layer2.verify(value),
+            layer3.evaluate(value),
+            layer4.evaluate(value),
+        ]
+        for result in results:
+            assert isinstance(result["score"], (int, float))
+            assert 0.0 <= result["score"] <= 1.0
+            assert isinstance(result["flags"], list)
+            assert isinstance(result["details"], dict)
+
+
+def test_eutl_snapshot_missing_file_fails_closed_without_crashing(
+    monkeypatch, tmp_path: Path
+) -> None:
+    missing_snapshot = tmp_path / "eutl.json"
+    monkeypatch.setenv("EIRA_EUTL_SNAPSHOT", str(missing_snapshot))
+    result = QEAAVerifier().verify(None)
+    assert result["valid"] is False
+    assert result["score"] == 0.0
+    assert "eutl_snapshot_unavailable" in result["flags"]
+    assert result["details"]["eutl_snapshot_error"] == "FileNotFoundError"
+
+
+def test_c2pa_missing_manifest_reader_degrades_gracefully() -> None:
+    class MissingManifestReader:
+        def read(self, media_path: Path) -> None:
+            return None
+
+    result = C2PAEngine(manifest_reader=MissingManifestReader()).evaluate(
+        {"path": "/tmp/no-c2pa-manifest.jpg"}, mime_type="image/jpeg"
+    )
+    assert result["manifest"] is None
+    assert result["valid"] is False
+    assert result["trusted"] is False
+    assert "c2pa_manifest_missing" in result["flags"]
+    assert "ai_origin_unknown" in result["flags"]
+    assert isinstance(result["details"], dict)
+
+def test_qeaa_checks_each_adjacent_certificate_chain_link(monkeypatch) -> None:
+    import app.veritas.layer2_qeaa as qeaa_module
+
+    _, certificate = _certificate()
+    checked: list[tuple[str, str]] = []
+    original = qeaa_module._verify_cert_signature
+
+    def record_check(child: x509.Certificate, issuer: x509.Certificate) -> None:
+        original(child, issuer)
+        checked.append((str(child.serial_number), str(issuer.serial_number)))
+
+    monkeypatch.setattr(qeaa_module, "_verify_cert_signature", record_check)
+    verifier = QEAAVerifier(
+        eutl_resolver=lambda leaf, chain: len(chain) == 3
+    )
+    # Repeated test certificate keeps this focused on whether every adjacent
+    # link is checked; the cryptographic signature is valid for both links.
+    assert verifier._certificate_chain_is_valid(
+        certificate, (certificate, certificate, certificate)
+    ) is True
+    assert len(checked) == 2
+

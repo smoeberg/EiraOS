@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -172,31 +173,49 @@ class VeritasDaemon:
         self.layer3 = layer3 or Layer3GraphEngine()
         self.c2pa = c2pa or C2PAEngine()
 
-    def evaluate(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
-        """Run Veritas Shield layers and return a bounded trust score.
-
-        Invalid parameters raise JsonRpcError(-32602). Unexpected exceptions
-        fail closed with trust_score 0 and a generic rationale (no stack traces).
-        """
-        payload = validate_evaluate_params(input_data)
+    @staticmethod
+    def _evaluate_layer(label: str, callback, *args, **kwargs) -> dict[str, Any]:
+        """Fail closed for one layer without taking down the daemon."""
         try:
-            return self._evaluate_layers(payload)
+            return callback(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 - layer boundary must fail closed
+            print(
+                f"[eira-veritasd] layer {label} failed: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+            return {
+                "score": 0.0,
+                "flags": (f"layer_error:{label}",),
+                "details": {"error": type(exc).__name__},
+            }
+
+    def evaluate(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
+        """Run Veritas Shield layers with validation and fail-closed semantics.
+
+        Invalid parameters raise JsonRpcError(-32602). Layer errors are caught
+        per layer (score 0/flag) and unexpected exceptions fail closed with
+        trust_score 0 and a generic rationale (no stack traces leak).
+        """
+        try:
+            payload = validate_evaluate_params(input_data)
+            return self._evaluate(payload)
         except JsonRpcError:
             raise
-        except Exception:  # noqa: BLE001 - IPC boundary: never leak internals
-            return _fail_closed_result("intern fejl")
+        except Exception as exc:  # noqa: BLE001 - IPC boundary: never leak internals
+            print(
+                f"[eira-veritasd] evaluation failed: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+            result = _fail_closed_result("intern fejl")
+            # Surface only the exception type name (never the message/trace).
+            result["hud_certificate"]["error"] = type(exc).__name__
+            return result
 
     def process_evidence(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
-        """Process evidence through the same pipeline as ``evaluate``.
-
-        Semantics are intentionally identical to ``evaluate``: both methods run
-        the full Veritas Shield stack (Lag 1–3 + C2PA) and return the same
-        trust score / HUD certificate shape. ``process_evidence`` exists as the
-        evidence-pipeline alias used by runtime/HTTP adapters.
-        """
+        """Process evidence through the same pipeline as ``evaluate``."""
         return self.evaluate(input_data)
 
-    def _evaluate_layers(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
         media_type = str(
             payload.get("type") or payload.get("media_type") or "text"
         ).casefold()
@@ -204,12 +223,12 @@ class VeritasDaemon:
         layer1_input = payload.get("document")
         if not isinstance(layer1_input, Mapping):
             layer1_input = payload
-        layer1 = self.layer1.evaluate(layer1_input)
+        layer1 = self._evaluate_layer("layer1", self.layer1.evaluate, layer1_input)
 
         credential = payload.get("credential") or payload.get("qeaa")
         issuer_certificate = payload.get("issuer_certificate")
-        layer2 = self.layer2.verify(
-            credential,
+        layer2 = self._evaluate_layer(
+            "layer2", self.layer2.verify, credential,
             issuer_certificate=issuer_certificate,
         )
 
@@ -220,12 +239,14 @@ class VeritasDaemon:
                 "source": payload.get("url") or payload.get("source_domain"),
                 "observed_at": payload.get("observed_at"),
             }
-        layer3 = self.layer3.evaluate(claim)
+        layer3 = self._evaluate_layer("layer3", self.layer3.evaluate, claim)
 
         media = payload.get("media")
         if media is None and media_type in {"image", "photo", "audio", "video", "c2pa"}:
             media = payload
-        c2pa = self.c2pa.evaluate(media, mime_type=payload.get("mime_type"))
+        c2pa = self._evaluate_layer(
+            "c2pa", self.c2pa.evaluate, media, mime_type=payload.get("mime_type")
+        )
 
         layer_scores = {
             "layer1": float(layer1["score"]),

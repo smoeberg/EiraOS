@@ -11,11 +11,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from itertools import pairwise
+from pathlib import Path
 from typing import Any
 
 from cryptography import x509
@@ -86,10 +88,12 @@ class QEAAResult:
     format: str | None
     claims: Mapping[str, Any] | None
     certificate: Mapping[str, Any] | None
+    details: Mapping[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
         result["flags"] = list(self.flags)
+        result["details"] = dict(self.details)
         return result
 
 
@@ -213,6 +217,17 @@ class QEAAVerifier:
         self.trusted_certificates = tuple(
             _load_certificate(item) for item in trusted_certificates
         )
+        self.eutl_snapshot_error: str | None = None
+        if eutl_resolver is None:
+            snapshot_path = os.environ.get("EIRA_EUTL_SNAPSHOT")
+            if snapshot_path:
+                try:
+                    snapshot = Path(snapshot_path).read_text(encoding="utf-8")
+                    eutl_resolver = EUTrustedList.from_json(snapshot)
+                except (OSError, UnicodeError, ValueError, TypeError) as exc:
+                    # A missing or malformed configured snapshot is not trusted.
+                    self.eutl_snapshot_error = type(exc).__name__
+                    eutl_resolver = EUTrustedList(())
         self.eutl_resolver = eutl_resolver
         self.clock = clock
         self.leeway_seconds = leeway_seconds
@@ -343,6 +358,8 @@ class QEAAVerifier:
         issuer_certificate: x509.Certificate | bytes | str | None = None,
     ) -> dict[str, Any]:
         flags: list[str] = []
+        if self.eutl_snapshot_error is not None:
+            flags.append("eutl_snapshot_unavailable")
         credential_format: str | None = None
         claims: dict[str, Any] | None = None
         cert_details: dict[str, Any] | None = None
@@ -423,12 +440,20 @@ class QEAAVerifier:
                 format=credential_format,
                 claims=claims,
                 certificate=cert_details,
+                details={
+                    "chain_signature_checks_completed": True,
+                    "chain_length": len(chain),
+                    "eutl_snapshot_error": self.eutl_snapshot_error,
+                },
             ).to_dict()
         except (
             CredentialValidationError,
             InvalidSignature,
             ValueError,
             TypeError,
+            AttributeError,
+            OverflowError,
+            UnicodeError,
         ) as exc:
             flag = str(exc) if str(exc) else "signature_invalid"
             if isinstance(exc, InvalidSignature):
@@ -441,6 +466,10 @@ class QEAAVerifier:
                 format=credential_format,
                 claims=None,
                 certificate=cert_details,
+                details={
+                    "chain_signature_checks_completed": False,
+                    "eutl_snapshot_error": self.eutl_snapshot_error,
+                },
             ).to_dict()
 
     evaluate = verify
