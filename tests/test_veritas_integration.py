@@ -14,7 +14,11 @@ from typing import Any
 import pytest
 
 from app.daemons.base import JsonRpcServer
-from app.daemons.veritasd import (\n    VERITAS_WEIGHTS,\n    VeritasDaemon,\n    register_veritas_handlers,\n)
+from app.daemons.veritasd import (
+    VERITAS_WEIGHTS,
+    VeritasDaemon,
+    register_veritas_handlers,
+)
 from app.ipc.client import IpcClient
 from app.ipc.socket_security import PeerCredentials, socket_access_allowed
 
