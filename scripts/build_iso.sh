@@ -108,7 +108,8 @@ trap cleanup EXIT INT TERM
 
     cat > config/package-lists/eira-os.list.chroot <<'EOF'
 ubuntu-desktop-minimal
-gdm3
+labwc
+greetd
 apparmor
 apparmor-utils
 ca-certificates
@@ -120,6 +121,11 @@ EOF
 #!/bin/sh
 set -eu
 systemctl enable eira.target
+systemctl enable eira-session.service
+install -d -m 0755 /etc/greetd /etc/labwc
+install -m 0644 packaging/session/config/greetd/config.toml /etc/greetd/config.toml
+install -m 0644 packaging/session/config/labwc/rc.xml /etc/labwc/rc.xml
+install -m 0755 packaging/session/config/labwc/autostart /etc/labwc/autostart
 if id ubuntu >/dev/null 2>&1; then
     adduser ubuntu eira
 fi

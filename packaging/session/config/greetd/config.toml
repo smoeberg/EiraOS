@@ -1,0 +1,9 @@
+# EiraOS autologin: ingen login-skærm, sessionen er godkendt via eira-identityd
+# (Entra OIDC / passkey) inde i eira-shell - se EIRA_Desktop_Architecture_v1.0.md 9.2.
+[terminal]
+vt = 1
+
+[default_session]
+command = "/usr/bin/eira-session"
+user = "ubuntu"
+autologin = true

@@ -1,0 +1,2 @@
+# EiraOS: shell-only Wayland-session. Ingen skrivebord, ingen startmenu.
+/usr/bin/eira-spatial-desktop &
