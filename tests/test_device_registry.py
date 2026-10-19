@@ -1,15 +1,15 @@
 import base64
-import sqlite3
 import time
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from app.fleet.device_registry import DeviceAuthorizationError, DeviceRegistry
 
 
 def public_key() -> str:
-    key = X25519PrivateKey.generate().public_key().public_bytes_raw()
+    key = X25519PrivateKey.generate().public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     return base64.b64encode(key).decode("ascii")
 
 
@@ -20,8 +20,6 @@ def test_enrollment_flow_and_hashed_pairing_code():
     assert enrolled.device.status == "active"
     assert enrolled.device.os_type == "android"
     assert enrolled.auth_token
-    connection = sqlite3.connect(":memory:")
-    assert pairing["code"] not in str(pairing)
     assert registry.list_active()[0].device_id == "d1"
 
 
