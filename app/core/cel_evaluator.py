@@ -50,6 +50,18 @@ def _parse_temporal(value: str) -> datetime | date | None:
 
 
 def _normalise_pair(left: Any, right: Any) -> tuple[Any, Any]:
+    """Normalise temporal comparisons without implicit numeric coercion.
+
+    ISO date strings become dates and ISO timestamps become datetimes. A date
+    compared with a datetime is interpreted as midnight UTC; naive datetimes
+    are UTC. Numeric-looking strings remain strings, None remains None, and
+    booleans are kept distinct from integers by the comparison evaluator.
+    """
+    if isinstance(left, datetime) and isinstance(right, date) and not isinstance(right, datetime):
+        right = datetime.combine(right, datetime.min.time(), tzinfo=timezone.utc)
+    elif isinstance(right, datetime) and isinstance(left, date) and not isinstance(left, datetime):
+        left = datetime.combine(left, datetime.min.time(), tzinfo=timezone.utc)
+
     if isinstance(left, str) and isinstance(right, str):
         left_temporal = _parse_temporal(left)
         right_temporal = _parse_temporal(right)
@@ -166,9 +178,15 @@ class _Evaluator:
         operation = operators.get(type(node.op))
         if operation is None:
             raise CELEvaluationError("unsupported_binary_operator")
+        if isinstance(node.op, ast.Mult):
+            repeat_value = left if isinstance(right, int) else right
+            repeat_count = right if isinstance(right, int) else left
+            if isinstance(repeat_value, (str, list, tuple)) and isinstance(repeat_count, int):
+                if len(repeat_value) * max(repeat_count, 0) > 100_000:
+                    raise CELEvaluationError("result_too_large")
         try:
             return operation()
-        except (ArithmeticError, TypeError) as exc:
+        except (ArithmeticError, TypeError, ValueError, OverflowError) as exc:
             raise CELEvaluationError("invalid_binary_operation") from exc
 
     def eval_Compare(self, node: ast.Compare) -> bool:
@@ -177,7 +195,17 @@ class _Evaluator:
             right = self.evaluate(comparator)
             normal_left, normal_right = _normalise_pair(left, right)
             try:
-                if isinstance(operation, ast.Eq):
+                bool_int_pair = (
+                    isinstance(normal_left, bool) and isinstance(normal_right, int)
+                    and not isinstance(normal_right, bool)
+                ) or (
+                    isinstance(normal_right, bool) and isinstance(normal_left, int)
+                    and not isinstance(normal_left, bool)
+                )
+                if bool_int_pair and isinstance(operation, (ast.Eq, ast.NotEq, ast.Is, ast.IsNot)):
+                    same = type(normal_left) is type(normal_right) and normal_left == normal_right
+                    passed = same if isinstance(operation, (ast.Eq, ast.Is)) else not same
+                elif isinstance(operation, ast.Eq):
                     passed = normal_left == normal_right
                 elif isinstance(operation, ast.NotEq):
                     passed = normal_left != normal_right
@@ -244,6 +272,9 @@ class CELEvaluator:
     ) -> None:
         self.max_expression_length = max_expression_length
         self.max_nodes = max_nodes
+        # Stable diagnostic marker for logs/tests; never includes exception text
+        # or a traceback that could expose internal details to an RPC client.
+        self.last_error_flag: str | None = None
 
     def compile(self, expression: str) -> ast.Expression:
         if not isinstance(expression, str) or not expression.strip():
@@ -252,7 +283,7 @@ class CELEvaluator:
             raise CELSyntaxError("expression_too_long")
         try:
             parsed = ast.parse(_translate_cel(expression), mode="eval")
-        except (SyntaxError, ValueError) as exc:
+        except (SyntaxError, ValueError, RecursionError, MemoryError) as exc:
             raise CELSyntaxError("invalid_expression") from exc
         if sum(1 for _ in ast.walk(parsed)) > self.max_nodes:
             raise CELSyntaxError("expression_too_complex")
@@ -265,6 +296,7 @@ class CELEvaluator:
         candidate: Mapping[str, Any],
         world: Mapping[str, Any],
     ) -> bool:
+        self.last_error_flag = None
         try:
             parsed = self.compile(expression)
             return bool(
@@ -279,5 +311,11 @@ class CELEvaluator:
                     max_nodes=self.max_nodes,
                 ).evaluate(parsed)
             )
-        except (CELError, ArithmeticError, TypeError, ValueError):
+        except CELError:
+            self.last_error_flag = "cel_rejected"
+            return False
+        except Exception:
+            # Policy evaluation is a security boundary: malformed external
+            # values and unexpected implementation errors must deny by default.
+            self.last_error_flag = "cel_unexpected_error"
             return False
