@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from app.daemons.base import JsonRpcServer
 from app.daemons.veritasd import (
     VERITAS_WEIGHTS,
@@ -22,7 +24,6 @@ from app.ipc.socket_security import (
     PeerCredentials,
     socket_access_allowed,
 )
-import pytest
 
 
 PAYLOAD = {"type": "text", "text": "A sourced test claim", "url": "https://example.test"}
