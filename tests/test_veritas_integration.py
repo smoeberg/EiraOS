@@ -20,7 +20,10 @@ from app.daemons.veritasd import (
     register_veritas_handlers,
 )
 from app.ipc.client import IpcClient
-from app.ipc.socket_security import PeerCredentials, socket_access_allowed
+from app.ipc.socket_security import (
+    PeerCredentials,
+    socket_access_allowed,
+)
 
 
 PAYLOAD = {"type": "text", "text": "A sourced test claim", "url": "https://example.test"}
