@@ -350,7 +350,7 @@ class IntentParser:
             "state_type": "IntentClarificationState",
             "payload": {"raw_input": raw_input, "status": "CLARIFICATION_NEEDED"},
             "confidence_score": 0.35,
-            "rationale": "Intentionen kunne ikke knyttes entydigt til en transformation.",
+            "rationale": "Ingen transformation blev foreslået — intentionen kunne ikke knyttes entydigt til en transformation.",
         }
 
     @staticmethod
