@@ -9,22 +9,19 @@ No whitebox mocking of internal modules.
 
 from __future__ import annotations
 
-import json
 from uuid import UUID
 
 import pytest
 
 from app.core.cel_evaluator import CELEvaluator
-from app.core.constraint import Constraint
 from app.core.event import EventBus
 from app.core.knowledge import KnowledgeRepository
-from app.core.policy_store import DEFAULT_POLICIES, PolicyDefinition, PolicyStore
-from app.core.state import ProposalState, State
+from app.core.policy_store import DEFAULT_POLICIES, PolicyStore
+from app.core.state import State
 from app.core.store import StateStore
 from app.daemons.intentd import IntentDaemonService
 from app.intent_parser import IntentParser
 from app.ipc.jsonrpc import CONSTRAINT_VIOLATION, JsonRpcError
-
 
 # =============================================================================
 # Fixtures
