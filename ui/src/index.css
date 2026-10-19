@@ -504,3 +504,48 @@ button {
     transition-duration: 0.01ms !important;
   }
 }
+
+.intent-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--surface, rgba(15, 18, 26, 0.85));
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.intent-bar input {
+  flex: 1;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  font-size: 1rem;
+}
+
+.intent-bar button {
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.intent-bar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.intent-status {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.intent-ok {
+  color: #7ce38b;
+}
+
+.intent-error {
+  color: #ff9d9d;
+}
