@@ -90,15 +90,19 @@ pub struct SharedMemoryWriter {
 }
 
 impl SharedMemoryWriter {
-    pub fn create(name: impl Into<String>, payload_capacity: usize) -> Result<Self, SharedMemoryError> {
+    pub fn create(
+        name: impl Into<String>,
+        payload_capacity: usize,
+    ) -> Result<Self, SharedMemoryError> {
         let name = name.into();
         let c_name = validate_name(&name)?;
-        let total_len = HEADER_LEN
-            .checked_add(payload_capacity)
-            .ok_or(SharedMemoryError::Capacity {
-                actual: payload_capacity,
-                capacity: usize::MAX - HEADER_LEN,
-            })?;
+        let total_len =
+            HEADER_LEN
+                .checked_add(payload_capacity)
+                .ok_or(SharedMemoryError::Capacity {
+                    actual: payload_capacity,
+                    capacity: usize::MAX - HEADER_LEN,
+                })?;
         // SAFETY: c_name is NUL-terminated and mode/flags are valid for shm_open.
         let descriptor = unsafe {
             libc::shm_open(
@@ -135,10 +139,7 @@ impl SharedMemoryWriter {
         self.payload_capacity
     }
 
-    pub fn publish(
-        &mut self,
-        payload: &[u8],
-    ) -> Result<SharedMemoryDescriptor, SharedMemoryError> {
+    pub fn publish(&mut self, payload: &[u8]) -> Result<SharedMemoryDescriptor, SharedMemoryError> {
         if payload.len() > self.payload_capacity {
             return Err(SharedMemoryError::Capacity {
                 actual: payload.len(),
@@ -186,7 +187,8 @@ impl SharedMemoryReader {
     pub fn open(descriptor: &SharedMemoryDescriptor) -> Result<Self, SharedMemoryError> {
         let c_name = validate_name(&descriptor.name)?;
         // SAFETY: c_name is NUL-terminated and flags are valid for shm_open.
-        let raw_descriptor = unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC, 0) };
+        let raw_descriptor =
+            unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC, 0) };
         if raw_descriptor < 0 {
             return Err(io::Error::last_os_error().into());
         }
