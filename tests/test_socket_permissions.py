@@ -171,20 +171,31 @@ def test_socket_cleanup_on_shutdown(tmp_path: Path) -> None:
 
 
 def test_unauthorized_user_access_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
+    eira_gid = resolve_group_gid("eira")
+    if eira_gid is None:
+        pytest.skip("Socket authorization integration requires the configured 'eira' Unix group")
+
     monkeypatch.setattr(socket_security.os, "chown", lambda *_args: None)
     socket_dir = Path(tempfile.mkdtemp(prefix="eira-socket-test-", dir="/tmp"))
     socket_dir.chmod(0o755)
     socket_path = socket_dir / "stated.sock"
-    server = setup_unix_socket(str(socket_path), group="root")
+    server = setup_unix_socket(str(socket_path), group="eira")
     server.listen(1)
     try:
         metadata = socket_path.stat()
-        untrusted_uid = metadata.st_uid + 100_000
-        untrusted_gid = metadata.st_gid + 100_000
+        # Model a peer that is neither the socket owner nor a member of eira.
+        untrusted_uid = max(os.getuid(), metadata.st_uid) + 100_000
+        untrusted_gid = eira_gid + 100_000
         assert not socket_access_allowed(
-            str(socket_path), uid=untrusted_uid, gids={untrusted_gid}
+            str(socket_path),
+            allowed_uids={metadata.st_uid},
+            allowed_gids={eira_gid},
+            uid=untrusted_uid,
+            gids={untrusted_gid},
         )
 
+        # Where the test process has the privilege, also verify the kernel's
+        # filesystem permission layer rejects a real connection from nobody.
         if os.geteuid() == 0:
             import pwd
 
