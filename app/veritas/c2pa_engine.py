@@ -17,7 +17,12 @@ class ManifestReader(Protocol):
 
 
 class C2PAToolReader:
-    """Read and cryptographically validate manifests using official c2patool."""
+    """Read and cryptographically validate manifests using official c2patool.
+
+    If ``c2patool`` is not installed, ``read`` returns ``None`` rather than
+    raising. The engine then reports a missing manifest and an unknown origin;
+    it does not claim the media is authentic or AI-generated.
+    """
 
     def __init__(self, executable: str = "c2patool", timeout: float = 20.0) -> None:
         self.executable = executable
