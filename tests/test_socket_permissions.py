@@ -209,10 +209,10 @@ def test_unauthorized_user_access_blocked(monkeypatch: pytest.MonkeyPatch) -> No
             client_code = (
                 "import errno, socket, sys; "
                 "s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); "
-                "\\ntry: s.connect(sys.argv[1])"
-                "\\nexcept PermissionError as exc: raise SystemExit(0 if exc.errno == errno.EACCES else 2)"
-                "\\nexcept OSError as exc: raise SystemExit(0 if exc.errno == errno.EACCES else 3)"
-                "\\nraise SystemExit(1)"
+                "\ntry: s.connect(sys.argv[1])"
+                "\nexcept PermissionError as exc: raise SystemExit(0 if exc.errno == errno.EACCES else 2)"
+                "\nexcept OSError as exc: raise SystemExit(0 if exc.errno == errno.EACCES else 3)"
+                "\nraise SystemExit(1)"
             )
             result = subprocess.run(
                 [sys.executable, "-c", client_code, str(socket_path)],
