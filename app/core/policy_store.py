@@ -108,8 +108,12 @@ class PolicyStore:
             rows = self._connection.execute("SELECT * FROM policy_rules").fetchall()
             for row in rows:
                 digest = self._rule_digest(
-                    row["transformation_type"], row["rule_id"], row["version"],
-                    row["expression"], row["error_message"], row["metadata_json"],
+                    row["transformation_type"],
+                    row["rule_id"],
+                    row["version"],
+                    row["expression"],
+                    row["error_message"],
+                    row["metadata_json"],
                     bool(row["enabled"]),
                 )
                 self._connection.execute(
@@ -159,8 +163,12 @@ class PolicyStore:
     @classmethod
     def _verify_row(cls, row: sqlite3.Row) -> None:
         expected = cls._rule_digest(
-            row["transformation_type"], row["rule_id"], row["version"],
-            row["expression"], row["error_message"], row["metadata_json"],
+            row["transformation_type"],
+            row["rule_id"],
+            row["version"],
+            row["expression"],
+            row["error_message"],
+            row["metadata_json"],
             bool(row["enabled"]),
         )
         if not row["content_hash"] or row["content_hash"] != expected:
@@ -211,19 +219,15 @@ class PolicyStore:
                 (transformation_type, rule_id),
             ).fetchone()
             version = int(row["version"]) + 1
-            self._connection.execute(
-                """
-                SELECT 1
-                FROM policy_rules
-                WHERE transformation_type = ? AND rule_id = ?
-                LIMIT 1
-                """,
-                (transformation_type, rule_id),
-            )
             metadata_json = json.dumps(metadata or {}, sort_keys=True)
             digest = self._rule_digest(
-                transformation_type, rule_id, version, expression,
-                error_message, metadata_json, enabled,
+                transformation_type,
+                rule_id,
+                version,
+                expression,
+                error_message,
+                metadata_json,
+                enabled,
             )
             self._connection.execute(
                 """
