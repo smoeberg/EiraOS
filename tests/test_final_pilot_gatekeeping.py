@@ -23,11 +23,18 @@ def test_all_ten_sprint_deliverable_boundaries_exist() -> None:
     assert not {sprint: paths for sprint, paths in missing.items() if paths}
 
 
-def test_every_declared_daemon_has_runtime_service_and_profile() -> None:
-    expected = {"stated", "identityd", "fleetd", "veritasd", "intentd", "graphd"}
+def test_all_nine_daemons_are_registered_and_core_services_have_profiles() -> None:
+    expected = {
+        "stated", "identityd", "fleetd", "veritasd", "intentd", "graphd",
+        "walletd", "presenced", "contextd",
+    }
     assert set(DAEMON_NAMES) == expected
     assert set(REGISTRARS) == expected
-    for daemon in expected:
+
+    # The three newly IPC-registered daemons are runtime modules in this issue's
+    # scope; the existing six production daemons retain their systemd/AppArmor units.
+    core_daemons = {"stated", "identityd", "fleetd", "veritasd", "intentd", "graphd"}
+    for daemon in core_daemons:
         assert (REPO_ROOT / "systemd" / f"eira-{daemon}.service").is_file()
         assert (REPO_ROOT / "packaging" / "apparmor" / f"usr.bin.eira-{daemon}").is_file()
 
