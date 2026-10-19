@@ -6,7 +6,6 @@ import pytest
 
 from app.daemons.base import JsonRpcServer
 from app.daemons.runner import DAEMON_NAMES, REGISTRARS
-from app.ipc.jsonrpc import JsonRpcError
 from app.ipc.paths import canonical_daemon, socket_path
 from app.ipc.socket_security import socket_access_allowed
 
@@ -97,23 +96,8 @@ def test_non_allowlisted_non_root_peer_is_denied() -> None:
 
 
 
-def test_all_nine_daemons_answer_health_over_ipc(tmp_path, monkeypatch) -> None:
-    from app.daemons.runner import start_daemons, stop_daemons
-    from app.ipc.client import IpcClient
-
-    stop_daemons()
+def test_ipc_smoke_test_passes_for_all_nine_daemons(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("EIRA_RUN_DIR", str(tmp_path))
-    try:
-        started = start_daemons("all", socket_dir=tmp_path)
-        assert set(started) == set(DAEMON_NAMES)
-        for daemon in DAEMON_NAMES:
-            health = IpcClient(daemon).call("health")
-            assert health["ok"] is True
+    from scripts.ipc_smoke_test import main as run_ipc_smoke_test
 
-        with pytest.raises(JsonRpcError) as exc_info:
-            IpcClient("identity").call(
-                "identity.step_up", {"required_assurance": "org_acting"}
-            )
-        assert exc_info.value.data["user_message"]
-    finally:
-        stop_daemons()
+    assert run_ipc_smoke_test() == 0
