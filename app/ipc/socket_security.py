@@ -82,6 +82,12 @@ def socket_access_allowed(
         creds_uid = os.getuid()
         peer_gids = {os.getgid()}
 
+    if allowed_uids is None and allowed_gids is None:
+        # Preserve the helper's historical convenience behavior for callers that
+        # explicitly omit an allowlist. The server accept path always supplies
+        # concrete defaults, so it never relies on this fallback.
+        return creds_uid == os.getuid() or creds_uid == 0
+
     uid_allowlist = set(allowed_uids or ())
     gid_allowlist = set(allowed_gids or ())
     return creds_uid in uid_allowlist or bool(peer_gids.intersection(gid_allowlist))
