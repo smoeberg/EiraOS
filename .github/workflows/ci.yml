@@ -23,6 +23,12 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
 
+    - name: Create EiraOS IPC group
+      run: |
+        if ! getent group eira >/dev/null; then
+          sudo groupadd eira
+        fi
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
