@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from app.core.state import State
 
-EMPTY_ROOT = hashlib.sha3_256(b"eira-merkle-dag-v1\x00").hexdigest()
+_EMPTY_ROOT = hashlib.sha3_256(b"eira-merkle-dag-v1\x00").hexdigest()
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
 class StateHeader:
+    """Minimal immutable metadata needed to compare DAG ancestry."""
+
     id: str
     version: int
     hash: str
@@ -31,15 +35,16 @@ class StateHeader:
                 ),
                 timestamp_ns=value.timestamp_ns,
             )
+        state_id = value.get("id")
+        state_hash = value.get("hash")
+        previous = value.get("previous_state_id")
+        if state_id is None or state_hash is None:
+            raise ValueError("state_header_missing_id_or_hash")
         return cls(
-            id=str(value["id"]),
+            id=str(state_id),
             version=int(value.get("version", 1)),
-            hash=str(value["hash"]),
-            previous_state_id=(
-                str(value["previous_state_id"])
-                if value.get("previous_state_id")
-                else None
-            ),
+            hash=str(state_hash),
+            previous_state_id=str(previous) if previous is not None else None,
             timestamp_ns=int(value.get("timestamp_ns", 0)),
         )
 
@@ -81,26 +86,41 @@ class SyncDiff:
 
 @dataclass(frozen=True)
 class ForkResolution:
+    """A sync proposal; conflicts are surfaced, never silently canonicalized."""
+
     snapshot: MerkleSnapshot
     canonical_head: str | None
     conflicting_ids: tuple[str, ...]
 
+    @property
+    def has_conflict(self) -> bool:
+        return bool(self.conflicting_ids)
+
 
 class MerkleSyncEngine:
-    """Build and reconcile Merkle commitments over immutable State DAGs."""
+    """Build deterministic Merkle commitments and hash-only sync diffs for State DAGs."""
 
     @staticmethod
     def _headers(
         values: Iterable[State | Mapping[str, Any] | StateHeader],
     ) -> tuple[StateHeader, ...]:
         by_hash: dict[str, StateHeader] = {}
+        by_id: dict[str, StateHeader] = {}
         for value in values:
             header = value if isinstance(value, StateHeader) else StateHeader.from_value(value)
-            current = by_hash.get(header.hash)
-            if current is not None and current != header:
-                raise ValueError(f"Conflicting metadata for state hash {header.hash}")
+            if not header.id or not _HASH_RE.fullmatch(header.hash):
+                raise ValueError("invalid_state_header")
+            if header.version < 1 or header.timestamp_ns < 0:
+                raise ValueError("invalid_state_metadata")
+            same_hash = by_hash.get(header.hash)
+            if same_hash is not None and same_hash != header:
+                raise ValueError("conflicting_metadata_for_state_hash")
+            same_id = by_id.get(header.id)
+            if same_id is not None and same_id.hash != header.hash:
+                raise ValueError(f"conflicting_immutable_state_id:{header.id}")
             by_hash[header.hash] = header
-        return tuple(sorted(by_hash.values(), key=lambda item: (item.timestamp_ns, item.id)))
+            by_id[header.id] = header
+        return tuple(sorted(by_hash.values(), key=lambda item: (item.timestamp_ns, item.id, item.hash)))
 
     @staticmethod
     def _node_commitment(
@@ -112,7 +132,7 @@ class MerkleSyncEngine:
         if header.hash in cache:
             return cache[header.hash]
         if header.id in active:
-            raise ValueError(f"Cycle detected in State DAG at {header.id}")
+            raise ValueError("state_dag_cycle_detected")
         active.add(header.id)
         if header.previous_state_id is None:
             parent = "root"
@@ -137,27 +157,8 @@ class MerkleSyncEngine:
     ) -> MerkleSnapshot:
         headers = self._headers(values)
         if not headers:
-            return MerkleSnapshot(EMPTY_ROOT, (), ())
-
-        by_id: dict[str, StateHeader] = {}
-        conflicting_ids: set[str] = set()
-        for header in headers:
-            current = by_id.get(header.id)
-            if current and current.hash != header.hash:
-                conflicting_ids.add(header.id)
-                if (header.version, header.timestamp_ns, header.hash) <= (
-                    current.version,
-                    current.timestamp_ns,
-                    current.hash,
-                ):
-                    continue
-            by_id[header.id] = header
-        if conflicting_ids:
-            raise ValueError(
-                "Conflicting immutable states share IDs: "
-                + ", ".join(sorted(conflicting_ids))
-            )
-
+            return MerkleSnapshot(_EMPTY_ROOT, (), ())
+        by_id = {header.id: header for header in headers}
         referenced = {
             header.previous_state_id
             for header in headers
@@ -165,9 +166,12 @@ class MerkleSyncEngine:
         }
         heads = tuple(sorted(header.id for header in headers if header.id not in referenced))
         cache: dict[str, str] = {}
-        commitments = [
-            self._node_commitment(by_id[head], by_id, cache, set()) for head in heads
-        ]
+        try:
+            commitments = [
+                self._node_commitment(by_id[head], by_id, cache, set()) for head in heads
+            ]
+        except RecursionError as exc:
+            raise ValueError("state_dag_too_deep") from None
         material = "\n".join(sorted(commitments)).encode("ascii")
         root = hashlib.sha3_256(b"eira-merkle-dag-v1\x00" + material).hexdigest()
         return MerkleSnapshot(root=root, headers=headers, heads=heads)
@@ -181,16 +185,18 @@ class MerkleSyncEngine:
         remote_snapshot = self.snapshot(remote)
         local_hashes = {header.hash for header in local_snapshot.headers}
         remote_hashes = {header.hash for header in remote_snapshot.headers}
-        remote_order = [header.hash for header in remote_snapshot.headers]
-        local_order = [header.hash for header in local_snapshot.headers]
         return SyncDiff(
             local_root=local_snapshot.root,
             remote_root=remote_snapshot.root,
             missing_from_local=tuple(
-                state_hash for state_hash in remote_order if state_hash not in local_hashes
+                header.hash
+                for header in remote_snapshot.headers
+                if header.hash not in local_hashes
             ),
             missing_from_remote=tuple(
-                state_hash for state_hash in local_order if state_hash not in remote_hashes
+                header.hash
+                for header in local_snapshot.headers
+                if header.hash not in remote_hashes
             ),
         )
 
@@ -199,28 +205,44 @@ class MerkleSyncEngine:
         local: Iterable[State | Mapping[str, Any] | StateHeader],
         remote: Iterable[State | Mapping[str, Any] | StateHeader],
     ) -> ForkResolution:
-        combined = (*self._headers(local), *self._headers(remote))
+        local_headers = self._headers(local)
+        remote_headers = self._headers(remote)
+        combined_by_hash = {header.hash: header for header in (*local_headers, *remote_headers)}
+        combined = tuple(
+            sorted(
+                combined_by_hash.values(),
+                key=lambda item: (item.timestamp_ns, item.id, item.hash),
+            )
+        )
         by_id: dict[str, StateHeader] = {}
-        conflicts: set[str] = set()
+        conflicting_ids: set[str] = set()
         for header in combined:
             current = by_id.get(header.id)
-            if current and current.hash != header.hash:
-                conflicts.add(header.id)
-                winner = max(
-                    (current, header),
-                    key=lambda item: (item.version, item.timestamp_ns, item.hash),
-                )
-                by_id[header.id] = winner
+            if current is not None and current.hash != header.hash:
+                conflicting_ids.add(header.id)
             else:
                 by_id[header.id] = header
-        snapshot = self.snapshot(by_id.values())
-        candidates = [by_id[head] for head in snapshot.heads]
-        canonical = (
-            max(
-                candidates,
-                key=lambda item: (item.version, item.timestamp_ns, item.hash),
-            ).id
-            if candidates
-            else None
-        )
-        return ForkResolution(snapshot, canonical, tuple(sorted(conflicts)))
+
+        if conflicting_ids:
+            conflict_material = "\n".join(
+                f"{header.id}:{header.hash}:{header.previous_state_id or ''}"
+                for header in combined
+            ).encode("utf-8")
+            root = hashlib.sha3_256(
+                b"eira-merkle-conflict-v1\x00" + conflict_material
+            ).hexdigest()
+            referenced = {
+                header.previous_state_id
+                for header in combined
+                if header.previous_state_id is not None
+            }
+            heads = tuple(sorted({h.id for h in combined if h.id not in referenced}))
+            snapshot = MerkleSnapshot(root, combined, heads)
+            return ForkResolution(snapshot, None, tuple(sorted(conflicting_ids)))
+
+        snapshot = self.snapshot(combined)
+        if len(snapshot.heads) > 1:
+            # More than one tip is a fork/partition until an explicit policy resolves it.
+            return ForkResolution(snapshot, None, snapshot.heads)
+        canonical_head = snapshot.heads[0] if snapshot.heads else None
+        return ForkResolution(snapshot, canonical_head, ())
