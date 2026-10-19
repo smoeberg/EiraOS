@@ -26,11 +26,18 @@ class PeerCredentials:
 def resolve_group_gid(group_name: str) -> int:
     try:
         return grp.getgrnam(group_name).gr_gid
-    except KeyError:
-        return os.getgid()
+    except KeyError as exc:
+        raise RuntimeError(f"Required Unix group '{group_name}' does not exist") from exc
 
 
 def _supplementary_gids(pid: int) -> set[int]:
+    try:
+        with open(f"/proc/{pid}/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("Groups:"):
+                    return {int(gid) for gid in line.split()[1:]}
+    except (OSError, ValueError):
+        return set()
     return set()
 
 
@@ -44,10 +51,13 @@ def socket_access_allowed(
     current_uid = os.getuid()
     if uid is not None:
         creds_uid = uid
-        creds_gid = next(iter(gids)) if gids else os.getgid()
+        peer_gids = set(gids or ())
+        creds_gid = next(iter(peer_gids), os.getgid())
+        peer_gids.add(creds_gid)
     elif isinstance(target, PeerCredentials):
         creds_uid = target.uid
         creds_gid = target.gid
+        peer_gids = {creds_gid, *_supplementary_gids(target.pid)}
     elif isinstance(target, (str, Path)):
         try:
             st = os.stat(target)
@@ -55,45 +65,47 @@ def socket_access_allowed(
             creds_gid = st.st_gid
         except OSError:
             return False
+        peer_gids = {creds_gid}
     else:
         creds_uid = current_uid
         creds_gid = os.getgid()
+        peer_gids = {creds_gid}
 
     if allowed_uids and creds_uid in allowed_uids:
         return True
-    if allowed_gids and creds_gid in allowed_gids:
+    if allowed_gids and peer_gids.intersection(allowed_gids):
         return True
-    if gids and creds_gid in gids and creds_uid == current_uid:
+    if creds_uid == 0:
         return True
-
-    return creds_uid == current_uid or creds_uid == 0 if uid is None else False
+    return creds_uid == current_uid
 
 
 def secure_socket_path(socket_path: str):
     if os.path.exists(socket_path):
-        os.chmod(socket_path, stat.S_IRUSR | stat.S_IWUSR)
         file_mode = stat.S_IMODE(os.stat(socket_path).st_mode)
         if file_mode != 0o600:
             raise PermissionError(
                 f"Security Warning: Socket '{socket_path}' has insecure permissions {oct(file_mode)}. "
                 "Must be strictly 0600."
             )
+        os.chmod(socket_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
 def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") -> socket.socket:
     remove_unix_socket(socket_path)
     os.makedirs(os.path.dirname(socket_path), exist_ok=True)
-    
+
+    gid = resolve_group_gid(group)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old_umask = os.umask(0o117)
     try:
         sock.bind(socket_path)
         os.chmod(socket_path, mode)
-        gid = resolve_group_gid(group)
-        try:
-            os.chown(socket_path, -1, gid)
-        except OSError:
-            pass
+        os.chown(socket_path, -1, gid)
+    except OSError:
+        remove_unix_socket(socket_path)
+        sock.close()
+        raise
     finally:
         os.umask(old_umask)
     return sock
