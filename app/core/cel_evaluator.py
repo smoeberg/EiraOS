@@ -79,6 +79,16 @@ def _normalise_pair(left: Any, right: Any) -> tuple[Any, Any]:
         parsed = _parse_temporal(right)
         if parsed is not None:
             right = parsed
+
+    # String parsing above may have introduced a date next to a datetime.
+    if isinstance(left, datetime) and isinstance(right, date) and not isinstance(right, datetime):
+        right = datetime.combine(right, datetime.min.time(), tzinfo=timezone.utc)
+    elif isinstance(right, datetime) and isinstance(left, date) and not isinstance(left, datetime):
+        left = datetime.combine(left, datetime.min.time(), tzinfo=timezone.utc)
+    if isinstance(left, datetime) and left.tzinfo is None:
+        left = left.replace(tzinfo=timezone.utc)
+    if isinstance(right, datetime) and right.tzinfo is None:
+        right = right.replace(tzinfo=timezone.utc)
     return left, right
 
 
