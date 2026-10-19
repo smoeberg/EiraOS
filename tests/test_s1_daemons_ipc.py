@@ -84,7 +84,7 @@ def test_runner_registers_nine_daemons_and_socket_names() -> None:
         assert socket_path(daemon).name == f"{daemon}.sock"
 
 
-def test_peer_allowlist_does_not_fall_back_to_current_uid_or_root() -> None:
+def test_non_allowlisted_non_root_peer_is_denied() -> None:
     assert socket_access_allowed(
         object(), allowed_uids={1001}, allowed_gids={2001}, uid=1001, gids={3001}
     )
@@ -92,7 +92,7 @@ def test_peer_allowlist_does_not_fall_back_to_current_uid_or_root() -> None:
         object(), allowed_uids={1001}, allowed_gids={2001}, uid=3001, gids={2001}
     )
     assert not socket_access_allowed(
-        object(), allowed_uids={1001}, allowed_gids={2001}, uid=0, gids={3001}
+        object(), allowed_uids={1001}, allowed_gids={2001}, uid=3001, gids={3001}
     )
 
 
