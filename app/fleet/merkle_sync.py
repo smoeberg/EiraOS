@@ -185,7 +185,7 @@ class MerkleSyncEngine:
             commitments = [
                 self._node_commitment(by_id[head], by_id, cache, set()) for head in heads
             ]
-        except RecursionError as exc:
+        except RecursionError:
             raise ValueError("state_dag_too_deep") from None
         material = "\n".join(sorted(commitments)).encode("ascii")
         root = hashlib.sha3_256(b"eira-merkle-dag-v1\x00" + material).hexdigest()
