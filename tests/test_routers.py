@@ -39,6 +39,12 @@ def test_post_mock_login():
     assert "session_id" in data or "status" in data or "session" in data
 
 
+def test_post_mock_login_denied_without_opt_in(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("EIRA_OIDC_MOCK", raising=False)
+    response = client.post("/v1/auth/oidc/mock-login", json={"actor_id": "test_user@eira.local"})
+    assert response.status_code == 403
+
+
 def test_get_audit_unauthorized_and_authorized():
     # 1. Without session header -> 401 Unauthorized
     unauth_resp = client.get("/v1/audit")
