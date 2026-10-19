@@ -25,7 +25,9 @@ jobs:
 
     - name: Create EiraOS IPC group
       run: |
-        sudo groupadd --force eira
+        if ! getent group eira >/dev/null; then
+          sudo groupadd eira
+        fi
 
     - name: Install dependencies
       run: |
