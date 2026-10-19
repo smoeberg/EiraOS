@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -234,7 +235,8 @@ Intention: {json.dumps(raw_input, ensure_ascii=False)}
             body = response.json()
             parsed = json.loads(body.get("response", ""))
             return parsed if isinstance(parsed, Mapping) else None
-        except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError):
+        except Exception:
+            # LLM failures are advisory only; callers must always fall back to rules.
             return None
 
 
@@ -247,6 +249,23 @@ def _parse_number(value: str) -> float:
     ):
         compact = compact.replace(".", "")
     return float(compact)
+
+
+class _FrozenDict(dict):
+    """JSON-serializable dict that rejects mutation."""
+
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("immutable proposal payload")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable
+
+
+def _freeze_json_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _FrozenDict({key: _freeze_json_value(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze_json_value(item) for item in value)
+    return value
 
 
 class IntentParser:
@@ -331,7 +350,7 @@ class IntentParser:
             "state_type": "IntentClarificationState",
             "payload": {"raw_input": raw_input, "status": "CLARIFICATION_NEEDED"},
             "confidence_score": 0.35,
-            "rationale": "Intentionen kunne ikke knyttes entydigt til en transformation.",
+            "rationale": "Ingen transformation blev foreslået — intentionen kunne ikke knyttes entydigt til en transformation.",
         }
 
     @staticmethod
@@ -367,27 +386,47 @@ class IntentParser:
             raise ValueError("raw_input is required")
         structured: dict[str, Any] | None = None
         source_model = self.source_model
-        if self.llm_parser is not None:
-            candidate = self.llm_parser(raw_input)
-            if candidate is not None:
-                structured = self._validate_structured(candidate)
-                source_model = (
-                    "mistral"
-                    if self.source_model == "eira-rule-parser-v1"
-                    else self.source_model
-                )
+        normalized_input = raw_input.strip()
+        if len(normalized_input) > 8192 or self._looks_suspicious(normalized_input):
+            structured = {
+                "suggested_transformation": "clarify_intent",
+                "state_type": "IntentClarificationState",
+                "payload": {"status": "CLARIFICATION_NEEDED"},
+                "confidence_score": 0.05,
+                "rationale": "Input blev afvist som tvetydigt eller potentielt injektionspræget; ingen transformation blev foreslået.",
+            }
+        elif self.llm_parser is not None:
+            try:
+                candidate = self.llm_parser(normalized_input)
+                if candidate is not None:
+                    validated = self._validate_structured(candidate)
+                    if validated["confidence_score"] >= 0.60:
+                        structured = validated
+                        source_model = "mistral" if self.source_model == "eira-rule-parser-v1" else self.source_model
+            except Exception:
+                structured = None
         if structured is None:
-            structured = self._rules(raw_input)
+            structured = self._rules(normalized_input)
 
-        payload = dict(structured["payload"])
+        payload = copy.deepcopy(dict(structured["payload"]))
         if context:
             payload.setdefault("intent_context", dict(context))
-        payload.setdefault("raw_input", raw_input.strip())
+        payload.setdefault("raw_input", normalized_input)
         state = State(
             type=structured["state_type"],
             payload=payload,
             timestamp_ns=int(self.clock().timestamp() * 1e9),
+            # Derive the id from the frozen content so identical input, clock and
+            # context always yield an identical, deterministic proposal.
+            id=uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"{structured['state_type']}|{normalized_input}|{int(self.clock().timestamp() * 1e9)}",
+            ),
         )
+        # Snapshot the mutable payload so caller-owned nested values cannot mutate the proposal.
+        frozen_payload = _freeze_json_value(copy.deepcopy(state.payload))
+        object.__setattr__(state, "payload", frozen_payload)
+        object.__setattr__(state, "hash", state.compute_hash())
         return ProposalState(
             suggested_transformation=structured["suggested_transformation"],
             candidate_state=state,
@@ -395,5 +434,11 @@ class IntentParser:
             source_model=source_model,
             rationale=structured["rationale"],
         )
+
+    @staticmethod
+    def _looks_suspicious(raw_input: str) -> bool:
+        lowered = raw_input.casefold()
+        markers = ("../", "..\\", "${", "{{", "union select", "<script", "javascript:", ";--")
+        return any(marker in lowered for marker in markers) or any(ord(ch) == 0 for ch in raw_input)
 
     parse_to_proposal = parse
