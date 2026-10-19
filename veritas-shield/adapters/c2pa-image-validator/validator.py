@@ -2,7 +2,7 @@
 C2PA Content Credentials Validator Module for EiraOS & Veritas Shield
 """
 import json
-import os
+
 
 class C2PAValidator:
     def __init__(self, trusted_roots_path: str = None):

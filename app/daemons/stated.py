@@ -5,10 +5,11 @@ import time
 from typing import Any
 from uuid import UUID, uuid4
 
+from app.core.audit import StateAuditTrail
 from app.core.state import State
 from app.core.store import StateStore
-from app.core.audit import StateAuditTrail
 from app.ipc.jsonrpc import JsonRpcError
+
 
 def _create_store() -> Any:
     db_path = os.environ.get("EIRA_STATE_DB", "eira_state.db")

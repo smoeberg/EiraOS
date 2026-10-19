@@ -1,6 +1,8 @@
 import uuid
+
 from app.services.audit_service import AuditService
 from app.services.journey_service import JourneyService
+
 
 def test_audit_service_logging():
     service = AuditService()

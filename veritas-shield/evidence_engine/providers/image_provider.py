@@ -3,9 +3,9 @@ Image & Media Evidence Provider for EiraOS (C2PA & AI Synthetic Detection)
 """
 from evidence_engine.base_provider import BaseEvidenceProvider
 
+
 class ImageEvidenceProvider(BaseEvidenceProvider):
     def validate(self, target: dict) -> dict:
-        url = target.get("url", "")
         s = self.score(target)
         sig = self.signature(target)
         exp = self.explain(target)

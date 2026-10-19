@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+
 from app.database import get_connection, utc_now_iso
 from app.models import AuditEvent
 

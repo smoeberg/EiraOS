@@ -11,3 +11,6 @@ build/
 data/*.db
 !data/.gitkeep
 .env
+data/fleet_master.key
+data/fleet_salt
+*.db

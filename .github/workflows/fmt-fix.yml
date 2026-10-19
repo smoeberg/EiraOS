@@ -1,0 +1,17 @@
+name: fmt-fix
+on:
+  workflow_dispatch:
+  push:
+    branches: ["fix/ci-lint-baseline"]
+permissions:
+  contents: write
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt }
+      - run: cargo fmt
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with: { commit_message: "chore: apply cargo fmt (CI baseline)" }
