@@ -44,7 +44,9 @@ class DeviceEnrollment:
 
 
 class DeviceRegistry:
-    def __init__(self, db_path: str = ":memory:", heartbeat_ttl_seconds: int = 300) -> None:
+    def __init__(
+        self, db_path: str = ":memory:", heartbeat_ttl_seconds: int = 300
+    ) -> None:
         if heartbeat_ttl_seconds <= 0:
             raise ValueError("heartbeat_ttl_seconds must be positive")
         self.db_path = db_path
@@ -123,10 +125,7 @@ class DeviceRegistry:
             connection.commit()
             if self._shared is None:
                 connection.close()
-        qr_payload = json.dumps(
-            {"protocol": "eira-pair-v1", "code": code, "expires_at": expires_at},
-            separators=(",", ":"),
-        )
+        qr_payload = code
         return {"code": code, "expires_at": expires_at, "qr_payload": qr_payload}
 
     @staticmethod
