@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from app.core.event import EventBus
 from app.core.cel_evaluator import CELEvaluator
+from app.core.event import EventBus
 from app.core.knowledge import KnowledgeEntry, KnowledgeRepository
 from app.core.policy_store import PolicyStore
 from app.core.state import State
@@ -93,7 +93,7 @@ class IntentDaemonService:
                     proposal.candidate_state, world, evaluator=evaluator
                 ):
                     failed_constraints.append(constraint)
-        except Exception as exc:  # noqa: BLE001 - security boundary must fail closed
+        except Exception:  # noqa: BLE001 - security boundary must fail closed
             raise JsonRpcError(
                 -32603,
                 "INTENT_EXECUTION_FAILED",
@@ -146,7 +146,7 @@ class IntentDaemonService:
                 "CONSTRAINT_VIOLATION",
                 data,
             ) from None
-        except Exception as exc:  # noqa: BLE001 - never leak internals over IPC
+        except Exception:  # noqa: BLE001 - never leak internals over IPC
             raise JsonRpcError(
                 -32603,
                 "INTENT_EXECUTION_FAILED",
@@ -172,7 +172,11 @@ class IntentDaemonService:
             "confidence_score": proposal.confidence_score,
             "rationale": proposal.rationale,
             "applied_constraints": [
-                {"id": item.id, "version": item.version, "expression": item.expression}
+                {
+                    "id": item.id,
+                    "version": item.version,
+                    "expression": item.expression,
+                }
                 for item in constraints
             ],
             "knowledge_entry": knowledge.model_dump(mode="json"),
