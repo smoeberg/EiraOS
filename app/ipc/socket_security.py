@@ -1,12 +1,13 @@
-"""
-EiraOS IPC Socket Security Module
-Enforces strict 0660 / 0600 permissions on Unix Domain Sockets to prevent local privilege escalation.
-"""
+"""EiraOS IPC socket security helpers."""
+
+from __future__ import annotations
+
 import grp
 import logging
 import os
 import socket
 import stat
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -15,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class PeerCredentialError(PermissionError):
-    """Raised when peer credentials (UID/GID) do not match expected owner."""
-    pass
+    """Raised when peer credentials (UID/GID) do not match the allowlist."""
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,16 @@ def _supplementary_gids(pid: int) -> set[int]:
     return set()
 
 
+def _parse_id_allowlist(env_name: str, default: set[int]) -> set[int]:
+    raw = os.environ.get(env_name, "").strip()
+    if not raw:
+        return default
+    try:
+        return {int(value.strip()) for value in raw.split(",") if value.strip()}
+    except ValueError as exc:
+        raise PeerCredentialError(f"{env_name} must be a comma-separated list of integers") from exc
+
+
 def socket_access_allowed(
     target: Any,
     allowed_uids: Iterable[int] | None = None,
@@ -55,39 +65,29 @@ def socket_access_allowed(
     uid: int | None = None,
     gids: Iterable[int] | None = None,
 ) -> bool:
-    current_uid = os.getuid()
     if uid is not None:
         creds_uid = uid
         peer_gids = set(gids or ())
-        creds_gid = next(iter(peer_gids), os.getgid())
-        peer_gids.add(creds_gid)
     elif isinstance(target, PeerCredentials):
         creds_uid = target.uid
-        creds_gid = target.gid
-        peer_gids = {creds_gid, *_supplementary_gids(target.pid)}
+        peer_gids = {target.gid, *_supplementary_gids(target.pid)}
     elif isinstance(target, (str, Path)):
         try:
             st = os.stat(target)
             creds_uid = st.st_uid
-            creds_gid = st.st_gid
+            peer_gids = {st.st_gid}
         except OSError:
             return False
-        peer_gids = {creds_gid}
     else:
-        creds_uid = current_uid
-        creds_gid = os.getgid()
-        peer_gids = {creds_gid}
+        creds_uid = os.getuid()
+        peer_gids = {os.getgid()}
 
-    if allowed_uids and creds_uid in allowed_uids:
-        return True
-    if allowed_gids and peer_gids.intersection(allowed_gids):
-        return True
-    if creds_uid == 0:
-        return True
-    return creds_uid == current_uid
+    uid_allowlist = set(allowed_uids or ())
+    gid_allowlist = set(allowed_gids or ())
+    return creds_uid in uid_allowlist or bool(peer_gids.intersection(gid_allowlist))
 
 
-def secure_socket_path(socket_path: str):
+def secure_socket_path(socket_path: str) -> None:
     if os.path.exists(socket_path):
         file_mode = stat.S_IMODE(os.stat(socket_path).st_mode)
         if file_mode != 0o600:
@@ -117,13 +117,8 @@ def setup_unix_socket(socket_path: str, mode: int = 0o660, group: str = "eira") 
             try:
                 os.chown(socket_path, -1, gid)
             except PermissionError:
-                # The current process is not a member of the target group
-                # (e.g. CI runners). Degrade gracefully: the socket keeps its
-                # 0o660 file mode; group ownership is enforced only when the
-                # runtime has the privilege to apply it.
                 logger.warning(
-                    "Cannot chown socket '%s' to group gid %s; "
-                    "continuing without group ownership",
+                    "Cannot chown socket '%s' to group gid %s; continuing without group ownership",
                     socket_path,
                     gid,
                 )
@@ -149,26 +144,27 @@ def validate_peer_credentials(
     allowed_uids: Iterable[int] | None = None,
     allowed_gids: Iterable[int] | None = None,
 ) -> PeerCredentials:
-    """Verifies SO_PEERCRED on Linux Unix sockets."""
-    if hasattr(sock, "getsockopt") and hasattr(socket, "SO_PEERCRED"):
-        try:
-            import struct
-            creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
-            pid, uid, gid = struct.unpack("3i", creds)
-            peer = PeerCredentials(pid=pid, uid=uid, gid=gid)
-        except Exception as exc:
-            raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
-    else:
-        # Fail closed: an object that cannot prove its identity is never
-        # silently treated as the current process.
-        raise PeerCredentialError(
-            "Peer credentials unavailable: object does not support SO_PEERCRED"
-        )
+    """Validate SO_PEERCRED against configured UID/GID allowlists (fail closed)."""
+    if not hasattr(sock, "getsockopt") or not hasattr(socket, "SO_PEERCRED):
+        raise PeerCredentialError("Peer credentials unavailable: SO_PEERCRED is required")
+    try:
+        creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+        pid, uid, gid = struct.unpack("3i", creds)
+        peer = PeerCredentials(pid=pid, uid=uid, gid=gid)
+    except Exception as exc:
+        raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
 
-    if allowed_uids is not None or allowed_gids is not None:
-        if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
-            raise PeerCredentialError(f"Peer UID {peer.uid} or GID {peer.gid} is not authorized")
+    if allowed_uids is None:
+        allowed_uids = _parse_id_allowlist("EIRA_IPC_ALLOWED_UIDS", {os.getuid()})
+    if allowed_gids is None:
+        default_gids = {os.getgid()}
+        eira_gid = resolve_group_gid("eira")
+        if eira_gid is not None:
+            default_gids.add(eira_gid)
+        allowed_gids = _parse_id_allowlist("EIRA_IPC_ALLOWED_GIDS", default_gids)
 
+    if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
+        raise PeerCredentialError(f"Peer UID {peer.uid} or GID {peer.gid} is not authorized")
     return peer
 
 
