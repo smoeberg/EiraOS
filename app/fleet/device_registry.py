@@ -282,6 +282,7 @@ class DeviceRegistry:
                 connection.close()
 
     def list_active(self) -> list[PairedDevice]:
+        self._expire_stale_devices()
         with self._lock:
             connection = self._connect()
             rows = connection.execute(
