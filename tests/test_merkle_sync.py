@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 from uuid import UUID, uuid5
 
+import pytest
+
 from app.core.state import State
 from app.fleet.merkle_sync import MerkleSyncEngine, StateHeader
-import pytest
 
 
 _NAMESPACE = UUID("4f8b8a9d-cb4f-4ad4-bd37-4b15a77d96f0")
