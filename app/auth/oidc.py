@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.auth.audit import record_auth_event
+from app.config import validate_mock_login_configuration
 from app.database import get_connection, utc_now_iso
 from app.session_store import create_session_from_claims
 
@@ -60,9 +61,12 @@ class OidcConfig:
 
 
 def load_oidc_config() -> OidcConfig:
+    # Recheck on every load as well as import/startup, including tests or
+    # launchers that alter the environment after Python imports this module.
+    validate_mock_login_configuration()
     client_id = os.environ.get("OIDC_CLIENT_ID", "").strip()
-    force_mock = os.environ.get("EIRA_OIDC_MOCK", "").lower() in ("1", "true", "yes")
-    mock_enabled = force_mock or not client_id
+    force_mock = os.environ.get("EIRA_OIDC_MOCK", "").strip().lower() in ("1", "true", "yes")
+    mock_enabled = force_mock
     tenant_id = os.environ.get("OIDC_TENANT_ID", "common").strip() or "common"
     issuer = os.environ.get("OIDC_ISSUER", "").strip()
     if not issuer and not mock_enabled:
@@ -226,22 +230,23 @@ def complete_oidc_callback(
 
 
 def claims_from_mock_login(body: dict[str, Any]) -> dict[str, Any]:
+    """Create deliberately low-assurance mock claims from untrusted input."""
     email = str(body.get("email") or body.get("actor_id") or "").strip().lower()
     if not email or "@" not in email:
         raise ValueError("email required for mock login")
 
     name = str(body.get("name") or body.get("actor_name") or email.split("@")[0])
-    org_unit = str(body.get("org_unit") or body.get("tenant_name") or "Kommune")
-    tenant_id = str(body.get("tenant_id") or body.get("tid") or "mock-tenant")
 
+    # Tenant, organization, subject and identity-provider claims are server
+    # controlled. Request data must never be able to assert trusted identity.
     return {
-        "sub": body.get("sub") or email,
+        "sub": email,
         "email": email,
         "name": name,
-        "org_unit": org_unit,
-        "tenant_id": tenant_id,
-        "idp": body.get("idp") or "entra_mock",
-        "assurance_level": "idp_authenticated",
+        "org_unit": "Mock",
+        "tenant_id": "mock-tenant",
+        "idp": "entra_mock",
+        "assurance_level": "mock_authenticated",
     }
 
 
@@ -274,7 +279,7 @@ def fail_oidc_login(reason: str, *, detail: dict | None = None) -> None:
 def mock_login(body: dict[str, Any]) -> dict[str, Any]:
     cfg = load_oidc_config()
     if not cfg.mock_enabled:
-        raise PermissionError("Mock login disabled — configure OIDC_CLIENT_ID for real flow")
+        raise PermissionError("Mock login disabled — set EIRA_OIDC_MOCK=1 explicitly")
 
     try:
         claims = claims_from_mock_login(body)
