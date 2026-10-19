@@ -90,7 +90,7 @@ def test_session_security_and_revocation(runtime):
     login_info = mock_login({"email": "auditor@eiraos.local", "name": "Test Auditor"})
     assert "session_id" in login_info
 
-    session_id = login_info["session_id"]
+    session_id = login_info["session_id"]  # noqa: F841
     identity_client = IpcClient("identityd")
     
     res = identity_client.call("health")
