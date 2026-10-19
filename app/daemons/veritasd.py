@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
 from app.veritas.c2pa_engine import C2PAEngine
 from app.veritas.layer1_rules import Layer1RulesEngine
 from app.veritas.layer2_qeaa import EUTrustedList, QEAAVerifier
@@ -21,6 +22,9 @@ VERITAS_WEIGHTS = {
     "layer3": 0.20,
     "c2pa": 0.15,
 }
+
+# Reject text-like fields larger than this (JSON-RPC -32602).
+_MAX_TEXT_BYTES = 1 * 1024 * 1024
 
 
 def _input_digest(value: Mapping[str, Any]) -> str:
@@ -45,6 +49,114 @@ def _qeaa_verifier_from_environment() -> QEAAVerifier:
     return QEAAVerifier(eutl_resolver=EUTrustedList.from_json(snapshot))
 
 
+def _utf8_size(value: str) -> int:
+    return len(value.encode("utf-8"))
+
+
+def _fail_closed_result(reason: str = "intern fejl") -> dict[str, Any]:
+    """Safe response when evaluation raises an unexpected exception."""
+    issued_at = datetime.now(timezone.utc).isoformat()
+    layer_scores = {name: 0.0 for name in VERITAS_WEIGHTS}
+    empty_layer = {"score": 0.0, "flags": [], "details": {}}
+    return {
+        "media_type": "text",
+        "trust_score": 0.0,
+        "confidence": 0.0,
+        "layers": {
+            "layer1": dict(empty_layer),
+            "layer2": dict(empty_layer),
+            "layer3": dict(empty_layer),
+            "c2pa": dict(empty_layer),
+        },
+        "rationale": [reason],
+        "hud_certificate": {
+            "certificate_type": "EIRA_VERITAS_HUD_V1",
+            "input_sha3_256": "",
+            "issued_at": issued_at,
+            "trust_score": 0.0,
+            "weights": dict(VERITAS_WEIGHTS),
+            "layer_scores": layer_scores,
+            "certificate_id": "veritas:fail-closed",
+        },
+    }
+
+
+def validate_evaluate_params(params: Any) -> dict[str, Any]:
+    """Validate veritas.evaluate / process_evidence params.
+
+    Raises JsonRpcError(-32602) for missing/invalid structure or oversized payloads.
+    """
+    if not isinstance(params, Mapping):
+        raise JsonRpcError(INVALID_PARAMS, "params must be an object")
+
+    payload = dict(params)
+
+    # Strip IPC auth envelope if still present (should already be stripped by server).
+    payload.pop("_eira", None)
+
+    document = payload.get("document")
+    if document is not None and not isinstance(document, Mapping):
+        raise JsonRpcError(INVALID_PARAMS, "document must be an object when provided")
+
+    claim = payload.get("claim")
+    if claim is not None and not isinstance(claim, Mapping):
+        raise JsonRpcError(INVALID_PARAMS, "claim must be an object when provided")
+
+    media = payload.get("media")
+    if media is not None and not isinstance(media, Mapping):
+        raise JsonRpcError(INVALID_PARAMS, "media must be an object when provided")
+
+    credential = payload.get("credential", payload.get("qeaa"))
+    if credential is not None and not isinstance(credential, (str, Mapping)):
+        raise JsonRpcError(
+            INVALID_PARAMS, "credential/qeaa must be a string or object when provided"
+        )
+
+    text_fields: list[str] = []
+    for key in ("text", "body", "content", "url", "source", "source_domain"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            text_fields.append(value)
+    if isinstance(document, Mapping):
+        for key in ("text", "body", "content", "title"):
+            value = document.get(key)
+            if isinstance(value, str):
+                text_fields.append(value)
+    if isinstance(claim, Mapping):
+        value = claim.get("text")
+        if isinstance(value, str):
+            text_fields.append(value)
+
+    for field in text_fields:
+        if _utf8_size(field) > _MAX_TEXT_BYTES:
+            raise JsonRpcError(
+                INVALID_PARAMS,
+                f"text field exceeds {_MAX_TEXT_BYTES} bytes",
+            )
+
+    # Require at least one evaluable signal so empty/garbage calls fail clearly.
+    has_signal = any(
+        (
+            isinstance(document, Mapping) and document,
+            isinstance(claim, Mapping) and claim,
+            isinstance(media, Mapping) and media,
+            credential is not None,
+            isinstance(payload.get("text"), str) and payload.get("text"),
+            isinstance(payload.get("url"), str) and payload.get("url"),
+            isinstance(payload.get("source_domain"), str) and payload.get("source_domain"),
+            isinstance(payload.get("type"), str) and payload.get("type"),
+            isinstance(payload.get("media_type"), str) and payload.get("media_type"),
+        )
+    )
+    if not has_signal:
+        raise JsonRpcError(
+            INVALID_PARAMS,
+            "params must include document, claim, media, credential, text, url, or media type",
+        )
+
+    return payload
+
+
 class VeritasDaemon:
     def __init__(
         self,
@@ -61,7 +173,30 @@ class VeritasDaemon:
         self.c2pa = c2pa or C2PAEngine()
 
     def evaluate(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
-        payload = dict(input_data)
+        """Run Veritas Shield layers and return a bounded trust score.
+
+        Invalid parameters raise JsonRpcError(-32602). Unexpected exceptions
+        fail closed with trust_score 0 and a generic rationale (no stack traces).
+        """
+        payload = validate_evaluate_params(input_data)
+        try:
+            return self._evaluate_layers(payload)
+        except JsonRpcError:
+            raise
+        except Exception:  # noqa: BLE001 - IPC boundary: never leak internals
+            return _fail_closed_result("intern fejl")
+
+    def process_evidence(self, input_data: Mapping[str, Any]) -> dict[str, Any]:
+        """Process evidence through the same pipeline as ``evaluate``.
+
+        Semantics are intentionally identical to ``evaluate``: both methods run
+        the full Veritas Shield stack (Lag 1–3 + C2PA) and return the same
+        trust score / HUD certificate shape. ``process_evidence`` exists as the
+        evidence-pipeline alias used by runtime/HTTP adapters.
+        """
+        return self.evaluate(input_data)
+
+    def _evaluate_layers(self, payload: dict[str, Any]) -> dict[str, Any]:
         media_type = str(
             payload.get("type") or payload.get("media_type") or "text"
         ).casefold()
@@ -98,10 +233,16 @@ class VeritasDaemon:
             "layer3": float(layer3["score"]),
             "c2pa": float(c2pa["score"]),
         }
+        # Clamp each layer contribution so a buggy provider cannot escape [0, 1].
+        for name, score in list(layer_scores.items()):
+            layer_scores[name] = max(0.0, min(1.0, score))
+
         normalised_score = sum(
             VERITAS_WEIGHTS[name] * layer_scores[name] for name in VERITAS_WEIGHTS
         )
-        trust_score = round(max(0.0, min(1.0, normalised_score)) * 100, 2)
+        normalised_score = max(0.0, min(1.0, normalised_score))
+        trust_score = round(normalised_score * 100, 2)
+        trust_score = max(0.0, min(100.0, trust_score))
 
         rationale: list[str] = []
         for label, result in (
@@ -126,7 +267,11 @@ class VeritasDaemon:
             "weights": dict(VERITAS_WEIGHTS),
             "layer_scores": layer_scores,
         }
-        certificate_digest = _input_digest(hud_certificate)
+        certificate_digest = hashlib.sha3_256(
+            json.dumps(hud_certificate, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
         hud_certificate["certificate_id"] = f"veritas:{certificate_digest}"
 
         return {
@@ -143,10 +288,15 @@ class VeritasDaemon:
             "hud_certificate": hud_certificate,
         }
 
-    process_evidence = evaluate
-
     def run_loop(self) -> None:
-        print(f"[{self.name}] ready")
+        """Run veritasd under the shared runner lifecycle.
+
+        Uses AF_UNIX sockets, SIGTERM/SIGINT graceful shutdown, and socket
+        cleanup on exit — same path as ``python -m app.daemons.runner --daemon veritasd``.
+        """
+        from app.daemons.runner import main as runner_main
+
+        raise SystemExit(runner_main(["--daemon", "veritasd"]))
 
 
 def register_veritas_handlers(
