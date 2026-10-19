@@ -273,8 +273,8 @@ class DeviceRegistry:
             connection = self._connect()
             connection.execute(
                 "UPDATE fleet_devices SET status = 'expired' "
-                "WHERE status = 'active' AND last_heartbeat IS NOT NULL "
-                "AND strftime('%s', last_heartbeat) < ?",
+                "WHERE status = 'active' "
+                "AND strftime('%s', COALESCE(last_heartbeat, paired_at)) < ?",
                 (int(cutoff),),
             )
             connection.commit()
