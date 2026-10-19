@@ -7,6 +7,7 @@ import pytest
 from app.daemons.base import JsonRpcServer
 from app.daemons.runner import DAEMON_NAMES, REGISTRARS
 from app.ipc.paths import canonical_daemon, socket_path
+from app.ipc.jsonrpc import JsonRpcError
 from app.ipc.socket_security import socket_access_allowed
 
 
@@ -108,5 +109,11 @@ def test_all_nine_daemons_answer_health_over_ipc(tmp_path, monkeypatch) -> None:
         for daemon in DAEMON_NAMES:
             health = IpcClient(daemon).call("health")
             assert health["ok"] is True
+
+        with pytest.raises(JsonRpcError) as exc_info:
+            IpcClient("identity").call(
+                "identity.step_up", {"required_assurance": "org_acting"}
+            )
+        assert exc_info.value.data["user_message"]
     finally:
         stop_daemons()
