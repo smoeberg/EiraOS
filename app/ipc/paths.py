@@ -17,6 +17,12 @@ DAEMON_ALIASES = {
     "intentd": "intentd",
     "graph": "graphd",
     "graphd": "graphd",
+    "wallet": "walletd",
+    "walletd": "walletd",
+    "presence": "presenced",
+    "presenced": "presenced",
+    "context": "contextd",
+    "contextd": "contextd",
 }
 
 DAEMON_SOCKETS = {
