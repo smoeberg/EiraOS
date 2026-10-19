@@ -318,3 +318,25 @@ def test_c2pa_missing_manifest_reader_degrades_gracefully() -> None:
     assert "ai_origin_unknown" in result["flags"]
     assert isinstance(result["details"], dict)
 
+def test_qeaa_checks_each_adjacent_certificate_chain_link(monkeypatch) -> None:
+    import app.veritas.layer2_qeaa as qeaa_module
+
+    _, certificate = _certificate()
+    checked: list[tuple[str, str]] = []
+    original = qeaa_module._verify_cert_signature
+
+    def record_check(child: x509.Certificate, issuer: x509.Certificate) -> None:
+        original(child, issuer)
+        checked.append((str(child.serial_number), str(issuer.serial_number)))
+
+    monkeypatch.setattr(qeaa_module, "_verify_cert_signature", record_check)
+    verifier = QEAAVerifier(
+        eutl_resolver=lambda leaf, chain: len(chain) == 3
+    )
+    # Repeated test certificate keeps this focused on whether every adjacent
+    # link is checked; the cryptographic signature is valid for both links.
+    assert verifier._certificate_chain_is_valid(
+        certificate, (certificate, certificate, certificate)
+    ) is True
+    assert len(checked) == 2
+
