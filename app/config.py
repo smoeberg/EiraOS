@@ -5,7 +5,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 _MOCK_TRUE_VALUES = {"1", "true", "yes"}
 
 
