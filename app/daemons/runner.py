@@ -20,6 +20,9 @@ DAEMON_NAMES = (
     "veritasd",
     "intentd",
     "graphd",
+    "walletd",
+    "presenced",
+    "contextd",
 )
 
 _SERVERS: dict[str, JsonRpcServer] = {}
@@ -63,6 +66,82 @@ def _register_graphd(server: JsonRpcServer) -> None:
     register_graph_handlers(server)
 
 
+def _register_walletd(server: JsonRpcServer) -> None:
+    from app.daemons.walletd import WalletDaemon
+
+    wallet = WalletDaemon()
+
+    def optimize_and_pay(params: dict[str, Any]) -> dict[str, Any]:
+        amount = params.get("amount_dkk")
+        merchant = params.get("merchant")
+        rails = params.get("supported_rails", [])
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)) or amount <= 0:
+            from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
+
+            raise JsonRpcError(INVALID_PARAMS, "amount_dkk must be a positive number")
+        if not isinstance(merchant, str) or not merchant.strip():
+            from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
+
+            raise JsonRpcError(INVALID_PARAMS, "merchant must be a non-empty string")
+        if not isinstance(rails, list) or not all(isinstance(rail, str) for rail in rails):
+            from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
+
+            raise JsonRpcError(INVALID_PARAMS, "supported_rails must be a list of strings")
+        return wallet.optimize_and_pay(float(amount), merchant, rails)
+
+    server.register("wallet.optimize_and_pay", optimize_and_pay)
+    server.register("wallet.list_credentials", lambda _: wallet.list_credentials())
+    server.register("health", lambda _: {"daemon": "eira-walletd", "ok": True})
+
+
+def _register_presenced(server: JsonRpcServer) -> None:
+    from app.daemons.presenced import PresenceDaemon
+    from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
+
+    presence = PresenceDaemon()
+
+    def annotate(params: dict[str, Any]) -> dict[str, Any]:
+        object_id = params.get("object_id")
+        author = params.get("author")
+        comment = params.get("comment")
+        decision_point = params.get("decision_point", False)
+        if not all(isinstance(value, str) and value.strip() for value in (object_id, author, comment)):
+            raise JsonRpcError(INVALID_PARAMS, "object_id, author and comment are required")
+        if not isinstance(decision_point, bool):
+            raise JsonRpcError(INVALID_PARAMS, "decision_point must be a boolean")
+        return presence.annotate_object(object_id, author, comment, decision_point)
+
+    def get_presence(params: dict[str, Any]) -> dict[str, Any]:
+        object_id = params.get("object_id")
+        if not isinstance(object_id, str) or not object_id.strip():
+            raise JsonRpcError(INVALID_PARAMS, "object_id is required")
+        return presence.get_object_presence(object_id)
+
+    server.register("presence.annotate_object", annotate)
+    server.register("presence.get_object", get_presence)
+    server.register("health", lambda _: {"daemon": "eira-presenced", "ok": True})
+
+
+def _register_contextd(server: JsonRpcServer) -> None:
+    from app.daemons.contextd import ContextDaemon
+    from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
+
+    context = ContextDaemon()
+
+    def set_context(params: dict[str, Any]) -> dict[str, Any]:
+        name = params.get("context_name")
+        if not isinstance(name, str) or not name.strip():
+            raise JsonRpcError(INVALID_PARAMS, "context_name is required")
+        result = context.set_context(name)
+        if result.get("status") == "ERROR":
+            raise JsonRpcError(INVALID_PARAMS, result["message"])
+        return result
+
+    server.register("context.get", lambda _: context.get_context())
+    server.register("context.set", set_context)
+    server.register("health", lambda _: {"daemon": "eira-contextd", "ok": True})
+
+
 REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "stated": _register_stated,
     "identityd": _register_identityd,
@@ -70,6 +149,9 @@ REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "veritasd": _register_veritasd,
     "intentd": _register_intentd,
     "graphd": _register_graphd,
+    "walletd": _register_walletd,
+    "presenced": _register_presenced,
+    "contextd": _register_contextd,
 }
 
 
@@ -84,7 +166,7 @@ def _selected_daemons(daemon: str) -> tuple[str, ...]:
 def start_daemons(
     daemon: str = "all", socket_dir: str | os.PathLike[str] | None = None
 ) -> dict[str, JsonRpcServer]:
-    """Start one daemon or the complete Sprint 2 daemon set in background threads."""
+    """Start one daemon or the complete nine-daemon set in background threads."""
     requested = _selected_daemons(daemon)
     if socket_dir is not None:
         resolved_dir = str(Path(socket_dir).resolve())
