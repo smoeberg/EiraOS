@@ -145,7 +145,7 @@ def validate_peer_credentials(
     allowed_gids: Iterable[int] | None = None,
 ) -> PeerCredentials:
     """Validate SO_PEERCRED against configured UID/GID allowlists (fail closed)."""
-    if not hasattr(sock, "getsockopt") or not hasattr(socket, "SO_PEERCRED):
+    if not hasattr(sock, "getsockopt") or not hasattr(socket, "SO_PEERCRED"):
         raise PeerCredentialError("Peer credentials unavailable: SO_PEERCRED is required")
     try:
         creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
