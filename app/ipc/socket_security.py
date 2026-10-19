@@ -122,7 +122,9 @@ def validate_peer_credentials(
         except Exception as exc:
             raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
     else:
-        peer = PeerCredentials(pid=os.getpid(), uid=os.getuid(), gid=os.getgid())
+        # Fail closed: without a readable SO_PEERCRED the peer is unverified and
+        # must never inherit the process's own (privileged) credentials.
+        peer = PeerCredentials(pid=-1, uid=-1, gid=-1)
 
     if allowed_uids is not None or allowed_gids is not None:
         if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):
