@@ -6,6 +6,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Generator
 from pathlib import Path
@@ -48,8 +49,10 @@ def test_socket_mode_is_0660(isolated_runner: Path) -> None:
 
 
 def test_sigterm_graceful_shutdown(tmp_path: Path) -> None:
-    socket_dir = tmp_path / "subprocess-sockets"
-    socket_dir.mkdir()
+    # AF_UNIX socket paths are limited to ~108 bytes; use a short dir so the
+    # test does not depend on the length of the pytest tmp_path.
+    socket_dir = Path(tempfile.gettempdir()) / f"eira-t-{os.getpid()}"
+    socket_dir.mkdir(exist_ok=True)
     socket_file = socket_dir / "stated.sock"
     env = os.environ.copy()
     env["EIRA_RUN_DIR"] = str(socket_dir)
