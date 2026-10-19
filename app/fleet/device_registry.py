@@ -276,8 +276,8 @@ class DeviceRegistry:
             connection.execute(
                 "UPDATE fleet_devices SET status = 'expired' "
                 "WHERE status = 'active' "
-                "AND strftime('%s', COALESCE(last_heartbeat, paired_at)) < ?",
-                (int(cutoff),),
+                "AND CAST(strftime('%s', COALESCE(last_heartbeat, paired_at)) AS INTEGER) < ?",
+                (cutoff,),
             )
             connection.commit()
             if self._shared is None:
