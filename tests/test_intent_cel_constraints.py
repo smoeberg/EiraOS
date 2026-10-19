@@ -179,3 +179,96 @@ def test_intent_execute_jsonrpc_contract_does_not_persist_rejection() -> None:
     assert response["error"]["code"] == CONSTRAINT_VIOLATION
     assert response["error"]["data"]["rule_id"] == "grant_amount_limit"
     assert store.count() == 0
+
+
+
+def test_cel_rejects_python_introspection_and_import_chains() -> None:
+    evaluator = CELEvaluator()
+    candidate = {"payload": {"amount": 1}}
+    world = {}
+    hostile = [
+        "candidate.__class__",
+        "candidate.__class__.__subclasses__()",
+        "candidate['payload'].__class__.__mro__",
+        "candidate['payload']['__builtins__']['__import__']('os')",
+        "__builtins__['__import__']('os')",
+        "candidate['payload']['x'][0].__class__.__subclasses__()",
+    ]
+    for expression in hostile:
+        assert evaluator.evaluate(expression, candidate=candidate, world=world) is False
+        assert evaluator.last_error_flag == "cel_rejected"
+
+
+def test_cel_node_budget_rejects_ten_thousand_node_expression() -> None:
+    expression = " + ".join(["1"] * 5_000)
+    evaluator = CELEvaluator(max_expression_length=50_000, max_nodes=128)
+    with pytest.raises(Exception) as error:
+        evaluator.compile(expression)
+    from app.core.cel_evaluator import CELSyntaxError
+
+    assert isinstance(error.value, CELSyntaxError)
+    assert str(error.value) == "expression_too_complex"
+
+
+def test_cel_large_repetition_is_rejected_without_allocating_result() -> None:
+    evaluator = CELEvaluator()
+    assert evaluator.evaluate("'x' * 1000000000", candidate={}, world={}) is False
+    assert evaluator.last_error_flag == "cel_rejected"
+
+
+def test_cel_is_deterministic_for_one_hundred_repetitions() -> None:
+    evaluator = CELEvaluator()
+    candidate = {"payload": {"amount": 75000, "status": "PROPOSED"}}
+    world = {"limits": {"amount": 100000}, "enabled": True}
+    expression = (
+        "candidate.payload.amount <= world.limits.amount "
+        "&& candidate.payload.status == 'PROPOSED' && world.enabled"
+    )
+    results = [
+        evaluator.evaluate(expression, candidate=candidate, world=world)
+        for _ in range(100)
+    ]
+    assert results == [True] * 100
+    assert evaluator.last_error_flag is None
+
+
+def test_cel_unexpected_exception_fails_closed_with_safe_marker() -> None:
+    from collections.abc import Mapping
+
+    class ExplodingMapping(Mapping):
+        def __getitem__(self, key):
+            raise RuntimeError("internal detail must not escape")
+
+        def __iter__(self):
+            return iter(())
+
+        def __len__(self):
+            return 0
+
+    evaluator = CELEvaluator()
+    assert evaluator.evaluate("candidate.payload.amount > 0", candidate=ExplodingMapping(), world={}) is False
+    assert evaluator.last_error_flag == "cel_unexpected_error"
+
+
+def test_cel_temporal_and_scalar_coercion_semantics() -> None:
+    from datetime import date, datetime, timezone
+
+    from app.core.cel_evaluator import _normalise_pair
+
+    day = date(2026, 10, 19)
+    midnight = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    assert _normalise_pair(day, midnight) == (midnight, midnight)
+    assert _normalise_pair("2026-10-19", midnight) == (midnight, midnight)
+    assert _normalise_pair("100000", 100000) == ("100000", 100000)
+    assert _normalise_pair(None, None) == (None, None)
+    assert _normalise_pair(True, 1) == (True, 1)
+
+    evaluator = CELEvaluator()
+    assert evaluator.evaluate("'100000' == 100000", candidate={}, world={}) is False
+    assert evaluator.evaluate("true == 1", candidate={}, world={}) is False
+    assert evaluator.evaluate("null == null", candidate={}, world={}) is True
+    assert evaluator.evaluate(
+        "date('2026-10-19') == timestamp('2026-10-19T00:00:00Z')",
+        candidate={},
+        world={},
+    ) is True
