@@ -107,6 +107,15 @@ def test_reconcile_same_state_id_with_different_hash_fails_closed():
     assert len({header.hash for header in result.snapshot.headers}) == 2
 
 
+def test_snapshot_rejects_state_payload_tampering_after_hash_creation():
+    engine = MerkleSyncEngine()
+    state = _state("original")
+    state.payload["label"] = "tampered"
+
+    with pytest.raises(ValueError, match="state_hash_verification_failed"):
+        engine.snapshot([state])
+
+
 def test_snapshot_rejects_duplicate_id_and_malformed_hash():
     engine = MerkleSyncEngine()
     state_id = str(uuid5(_NAMESPACE, "duplicate"))
