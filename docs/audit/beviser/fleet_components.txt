@@ -1,0 +1,569 @@
+# Fleet Components - Beviser
+
+## 1. Device Registry (REAL - 10/10)
+
+### Fil: app/fleet/device_registry.py
+
+#### Klasse Definition
+```python
+# Linje 1-279
+class DeviceRegistry:
+    """Secure device registry with pairing and authentication."""
+```
+
+#### Database Schema
+```python
+# Linje 67-82 (i _init_db)
+CREATE TABLE IF NOT EXISTS pairing_codes (
+    code_hash TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL,
+    consumed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS fleet_devices (
+    device_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    os_type TEXT NOT NULL,
+    public_key TEXT UNIQUE NOT NULL,
+    auth_token_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    paired_at TEXT NOT NULL,
+    last_heartbeat TEXT
+);
+```
+
+#### Core Metoder
+
+##### create_pairing_token() - Linje 84-105
+```python
+def create_pairing_token(self, ttl_seconds: int = 300) -> dict[str, Any]:
+    if not 30 <= ttl_seconds <= 3600:
+        raise ValueError("Pairing token lifetime must be between 30 and 3600 seconds")
+    code = secrets.token_urlsafe(24)
+    digest = hashlib.sha256(code.encode("ascii")).hexdigest()
+    expires_at = int(time.time()) + ttl_seconds
+    with self._lock:
+        connection = self._connect()
+        connection.execute(
+            "INSERT INTO pairing_codes(code_hash, expires_at) VALUES (?, ?)",
+            (digest, expires_at),
+        )
+        connection.commit()
+        if self._shared is None:
+            connection.close()
+    qr_payload = json.dumps(
+        {"protocol": "eira-pair-v1", "code": code, "expires_at": expires_at},
+        separators=(",", ":"),
+    )
+    return {"code": code, "expires_at": expires_at, "qr_payload": qr_payload}
+```
+
+##### enroll() - Linje 120-165
+```python
+def enroll(
+    self,
+    *,
+    pairing_code: str,
+    device_id: str,
+    name: str,
+    os_type: str,
+    public_key: str,
+) -> DeviceEnrollment:
+    if not device_id or not name:
+        raise ValueError("device_id and name are required")
+    if os_type not in {"Ubuntu", "Android"}:
+        raise ValueError("os_type must be Ubuntu or Android")
+    self._validate_public_key(public_key)
+    digest = hashlib.sha256(pairing_code.encode("ascii")).hexdigest()
+    auth_token = secrets.token_urlsafe(32)
+    auth_token_hash = hashlib.sha256(auth_token.encode("ascii")).hexdigest()
+    now = self._now()
+    with self._lock:
+        connection = self._connect()
+        row = connection.execute(
+            "SELECT * FROM pairing_codes WHERE code_hash = ?", (digest,)
+        ).fetchone()
+        if (
+            row is None
+            or row["consumed_at"] is not None
+            or int(row["expires_at"]) < int(time.time())
+        ):
+            if self._shared is None:
+                connection.close()
+            raise DeviceAuthorizationError("Pairing code is invalid, used, or expired")
+        updated = connection.execute(
+            """
+            UPDATE pairing_codes SET consumed_at = ?
+            WHERE code_hash = ? AND consumed_at IS NULL
+            """,
+            (now, digest),
+        )
+        if updated.rowcount != 1:
+            if self._shared is None:
+                connection.close()
+            raise DeviceAuthorizationError("Pairing code was already consumed")
+        connection.execute(
+            """
+            INSERT INTO fleet_devices
+            (device_id, name, os_type, public_key, auth_token_hash, status, paired_at)
+            VALUES (?, ?, ?, ?, ?, 'active', ?)
+            """,
+            (device_id, name, os_type, public_key, auth_token_hash, now),
+        )
+        connection.commit()
+        if self._shared is None:
+            connection.close()
+    return DeviceEnrollment(self.get(device_id), auth_token)
+```
+
+##### assert_authorized() - Linje 167-189
+```python
+def assert_authorized(
+    self,
+    device_id: str,
+    *,
+    public_key: str | None = None,
+    auth_token: str | None = None,
+    require_token: bool = False,
+) -> PairedDevice:
+    device = self.get(device_id)
+    if device.status != "active":
+        raise DeviceAuthorizationError(f"Device is {device.status}")
+    if public_key is not None and not hmac.compare_digest(device.public_key, public_key):
+        raise DeviceAuthorizationError("Device public key does not match registry")
+    if require_token:
+        if not auth_token:
+            raise DeviceAuthorizationError("Device authentication token is required")
+        with self._lock:
+            connection = self._connect()
+            row = connection.execute(
+                "SELECT auth_token_hash FROM fleet_devices WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+            if self._shared is None:
+                connection.close()
+        supplied = hashlib.sha256(auth_token.encode("ascii")).hexdigest()
+        if row is None or not hmac.compare_digest(row["auth_token_hash"], supplied):
+            raise DeviceAuthorizationError("Device authentication token is invalid")
+    return device
+```
+
+##### heartbeat() - Linje 191-201
+```python
+def heartbeat(self, device_id: str) -> PairedDevice:
+    self.assert_authorized(device_id)
+    with self._lock:
+        connection = self._connect()
+        connection.execute(
+            "UPDATE fleet_devices SET last_heartbeat = ? WHERE device_id = ?",
+            (self._now(), device_id),
+        )
+        connection.commit()
+        if self._shared is None:
+            connection.close()
+    return self.get(device_id)
+```
+
+##### revoke() - Linje 203-215
+```python
+def revoke(self, device_id: str) -> PairedDevice:
+    with self._lock:
+        connection = self._connect()
+        updated = connection.execute(
+            "UPDATE fleet_devices SET status = 'revoked' WHERE device_id = ?",
+            (device_id,),
+        )
+        connection.commit()
+        if self._shared is None:
+            connection.close()
+    if updated.rowcount != 1:
+        raise DeviceAuthorizationError("Device is not paired")
+    return self.get(device_id)
+```
+
+##### list_active() - Linje 217-227
+```python
+def list_active(self) -> list[PairedDevice]:
+    with self._lock:
+        connection = self._connect()
+        rows = connection.execute(
+            """
+            SELECT device_id, name, os_type, public_key, status,
+                   paired_at, last_heartbeat
+            FROM fleet_devices WHERE status = 'active' ORDER BY device_id
+            """
+        ).fetchall()
+        if self._shared is None:
+            connection.close()
+    return [PairedDevice(**dict(row)) for row in rows]
+```
+
+---
+
+## 2. E2EE - StatePayloadEncryptor (REAL - 10/10)
+
+### Fil: app/fleet/e2ee.py
+
+#### Klasse Definition
+```python
+# Linje 1-136
+class StatePayloadEncryptor:
+    ALGORITHM = "ChaCha20-Poly1305+HKDF-SHA256"
+    VERSION = 1
+```
+
+#### Key Generation
+```python
+# Linje 30-42
+@staticmethod
+def generate_master_key() -> bytes:
+    return os.urandom(32)
+
+@staticmethod
+def generate_fleet_salt() -> bytes:
+    return os.urandom(16)
+
+# Linje 20-30 (i __init__)
+def __init__(
+    self,
+    master_pairing_key: bytes,
+    *,
+    fleet_salt: bytes,
+    key_context: bytes = b"state-payload",
+) -> None:
+    if len(master_pairing_key) < 32:
+        raise ValueError("master_pairing_key must contain at least 256 bits")
+    if len(fleet_salt) < 16:
+        raise ValueError("fleet_salt must contain at least 128 bits")
+    self._key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=fleet_salt,
+        info=b"eiraos-fleet-sync-v1\x00" + key_context,
+    ).derive(master_pairing_key)
+```
+
+#### Encryption
+```python
+# Linje 44-72
+def encrypt_state(self, state: State) -> dict[str, Any]:
+    metadata = self._metadata(state)
+    protected_header = {
+        "algorithm": self.ALGORITHM,
+        "envelope_version": self.VERSION,
+        "metadata": metadata,
+    }
+    plaintext = _canonical_json(
+        {
+            "timestamp_ns": state.timestamp_ns,
+            "type": state.type,
+            "payload": state.payload,
+        }
+    )
+    nonce = os.urandom(12)
+    ciphertext = ChaCha20Poly1305(self._key).encrypt(
+        nonce, plaintext, _canonical_json(protected_header)
+    )
+    return {
+        **protected_header,
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+    }
+```
+
+#### Decryption
+```python
+# Linje 74-110
+def decrypt_state(self, envelope: Mapping[str, Any]) -> State:
+    try:
+        protected_header = {
+            "algorithm": envelope["algorithm"],
+            "envelope_version": int(envelope["envelope_version"]),
+            "metadata": dict(envelope["metadata"]),
+        }
+        if protected_header["algorithm"] != self.ALGORITHM:
+            raise PayloadIntegrityError("Unsupported encryption algorithm")
+        if protected_header["envelope_version"] != self.VERSION:
+            raise PayloadIntegrityError("Unsupported envelope version")
+        nonce = base64.b64decode(str(envelope["nonce"]), validate=True)
+        ciphertext = base64.b64decode(
+            str(envelope["ciphertext"]), validate=True
+        )
+        plaintext = ChaCha20Poly1305(self._key).decrypt(
+            nonce, ciphertext, _canonical_json(protected_header)
+        )
+        protected = json.loads(plaintext)
+        metadata = protected_header["metadata"]
+        state = State(
+            id=UUID(str(metadata["id"])),
+            version=int(metadata["version"]),
+            hash=str(metadata["hash"]),
+            previous_state_id=(
+                UUID(str(metadata["previous_state_id"]))
+                if metadata.get("previous_state_id")
+                else None
+            ),
+            timestamp_ns=int(protected["timestamp_ns"]),
+            type=str(protected["type"]),
+            payload=dict(protected["payload"]),
+        )
+    except PayloadIntegrityError:
+        raise
+    except (InvalidTag, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise PayloadIntegrityError("Encrypted state authentication failed") from exc
+    if not state.is_hash_valid():
+        raise PayloadIntegrityError("Decrypted state hash is invalid")
+    return state
+```
+
+---
+
+## 3. Merkle Sync (REAL - 10/10)
+
+### Fil: app/fleet/merkle_sync.py
+
+#### Dataklasser
+```python
+# Linje 1-40
+EMPTY_ROOT = hashlib.sha3_256(b"eira-merkle-dag-v1\x00").hexdigest()
+
+@dataclass(frozen=True)
+class StateHeader:
+    id: str
+    version: int
+    hash: str
+    previous_state_id: str | None
+    timestamp_ns: int = 0
+
+@dataclass(frozen=True)
+class MerkleSnapshot:
+    root: str
+    headers: tuple[StateHeader, ...]
+    heads: tuple[str, ...]
+
+@dataclass(frozen=True)
+class SyncDiff:
+    local_root: str
+    remote_root: str
+    missing_from_local: tuple[str, ...]
+    missing_from_remote: tuple[str, ...]
+    
+    @property
+    def in_sync(self) -> bool:
+        return self.local_root == self.remote_root
+
+@dataclass(frozen=True)
+class ForkResolution:
+    snapshot: MerkleSnapshot
+    canonical_head: str | None
+    conflicting_ids: tuple[str, ...]
+```
+
+#### MerkleSyncEngine Klasse
+```python
+# Linje 43-226
+class MerkleSyncEngine:
+    """Build and reconcile Merkle commitments over immutable State DAGs."""
+```
+
+#### snapshot() - Linje 88-122
+```python
+def snapshot(
+    self, values: Iterable[State | Mapping[str, Any] | StateHeader]
+) -> MerkleSnapshot:
+    headers = self._headers(values)
+    if not headers:
+        return MerkleSnapshot(EMPTY_ROOT, (), ())
+
+    by_id: dict[str, StateHeader] = {}
+    conflicting_ids: set[str] = set()
+    for header in headers:
+        current = by_id.get(header.id)
+        if current and current.hash != header.hash:
+            conflicting_ids.add(header.id)
+            if (header.version, header.timestamp_ns, header.hash) <= (
+                current.version,
+                current.timestamp_ns,
+                current.hash,
+            ):
+                continue
+        by_id[header.id] = header
+    if conflicting_ids:
+        raise ValueError(
+            "Conflicting immutable states share IDs: "
+            + ", ".join(sorted(conflicting_ids))
+        )
+
+    referenced = {
+        header.previous_state_id
+        for header in headers
+        if header.previous_state_id is not None
+    }
+    heads = tuple(sorted(header.id for header in headers if header.id not in referenced))
+    cache: dict[str, str] = {}
+    commitments = [
+        self._node_commitment(by_id[head], by_id, cache, set()) for head in heads
+    ]
+    material = "\n".join(sorted(commitments)).encode("ascii")
+    root = hashlib.sha3_256(b"eira-merkle-dag-v1\x00" + material).hexdigest()
+    return MerkleSnapshot(root=root, headers=headers, heads=heads)
+```
+
+#### diff() - Linje 124-142
+```python
+def diff(
+    self,
+    local: Iterable[State | Mapping[str, Any] | StateHeader],
+    remote: Iterable[State | Mapping[str, Any] | StateHeader],
+) -> SyncDiff:
+    local_snapshot = self.snapshot(local)
+    remote_snapshot = self.snapshot(remote)
+    local_hashes = {header.hash for header in local_snapshot.headers}
+    remote_hashes = {header.hash for header in remote_snapshot.headers}
+    remote_order = [header.hash for header in remote_snapshot.headers]
+    local_order = [header.hash for header in local_snapshot.headers]
+    return SyncDiff(
+        local_root=local_snapshot.root,
+        remote_root=remote_snapshot.root,
+        missing_from_local=tuple(
+            state_hash for state_hash in remote_order if state_hash not in local_hashes
+        ),
+        missing_from_remote=tuple(
+            state_hash for state_hash in local_order if state_hash not in remote_hashes
+        ),
+    )
+```
+
+#### reconcile() - Linje 144-176
+```python
+def reconcile(
+    self,
+    local: Iterable[State | Mapping[str, Any] | StateHeader],
+    remote: Iterable[State | Mapping[str, Any] | StateHeader],
+) -> ForkResolution:
+    combined = (*self._headers(local), *self._headers(remote))
+    by_id: dict[str, StateHeader] = {}
+    conflicts: set[str] = set()
+    for header in combined:
+        current = by_id.get(header.id)
+        if current and current.hash != header.hash:
+            conflicts.add(header.id)
+            winner = max(
+                (current, header),
+                key=lambda item: (item.version, item.timestamp_ns, item.hash),
+            )
+            by_id[header.id] = winner
+        else:
+            by_id[header.id] = header
+    snapshot = self.snapshot(by_id.values())
+    candidates = [by_id[head] for head in snapshot.heads]
+    canonical = (
+        max(
+            candidates,
+            key=lambda item: (item.version, item.timestamp_ns, item.hash),
+        ).id
+        if candidates
+        else None
+    )
+    return ForkResolution(snapshot, canonical, tuple(sorted(conflicts)))
+```
+
+#### _node_commitment() - Linje 62-86
+```python
+@staticmethod
+def _node_commitment(
+    header: StateHeader,
+    by_id: Mapping[str, StateHeader],
+    cache: dict[str, str],
+    active: set[str],
+) -> str:
+    if header.hash in cache:
+        return cache[header.hash]
+    if header.id in active:
+        raise ValueError(f"Cycle detected in State DAG at {header.id}")
+    active.add(header.id)
+    if header.previous_state_id is None:
+        parent = "root"
+    elif header.previous_state_id not in by_id:
+        parent = f"missing:{header.previous_state_id}"
+    else:
+        parent = MerkleSyncEngine._node_commitment(
+            by_id[header.previous_state_id], by_id, cache, active
+        )
+    active.remove(header.id)
+    material = json.dumps(
+        {"hash": header.hash, "parent": parent},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    commitment = hashlib.sha3_256(b"eira-merkle-node-v1\x00" + material).hexdigest()
+    cache[header.hash] = commitment
+    return commitment
+```
+
+---
+
+## 4. Integration i fleetd.py
+
+### FleetSyncService
+```python
+# Linje 24-42 i app/daemons/fleetd.py
+class FleetSyncService:
+    def __init__(
+        self,
+        *,
+        registry: DeviceRegistry,      # ← device_registry
+        store: StateStore,
+        encryptor: StatePayloadEncryptor,  # ← e2ee
+    ) -> None:
+        self.registry = registry
+        self.store = store
+        self.encryptor = encryptor
+        self.merkle = MerkleSyncEngine()  # ← merkle_sync
+```
+
+### default_sync_service()
+```python
+# Linje 340-358
+def default_sync_service() -> FleetSyncService:
+    global _DEFAULT_SERVICE
+    if _DEFAULT_SERVICE is None:
+        master_key = _load_or_create_secret(
+            "EIRA_FLEET_MASTER_KEY", "fleet_master.key", 32
+        )
+        fleet_salt = _load_or_create_secret("EIRA_FLEET_SALT", "fleet_salt", 16)
+        _DEFAULT_SERVICE = FleetSyncService(
+            registry=DeviceRegistry(
+                os.environ.get(
+                    "EIRA_DEVICE_REGISTRY_DB", str(_secret_path("devices.db"))
+                )
+            ),
+            store=RpcStateStore(),
+            encryptor=StatePayloadEncryptor(
+                master_key, fleet_salt=fleet_salt
+            ),
+        )
+    return _DEFAULT_SERVICE
+```
+
+---
+
+## Modenheds Score
+
+| Komponent | Linjer | Metoder | Testet | Score |
+|-----------|--------|---------|--------|-------|
+| device_registry | 279 | 8 | ✅ | 10/10 |
+| e2ee | 136 | 5 | ✅ | 10/10 |
+| merkle_sync | 226 | 5 | ✅ | 10/10 |
+
+**Samlet: 10/10 (REAL)**
+
+---
+
+## Konklusion
+
+✅ **device_registry** - Fuld implementering, alle CRUD operationer, sikkerhedsfeatures
+✅ **e2ee** - Moderne kryptering, ChaCha20-Poly1305 + HKDF-SHA256, fuld encrypt/decrypt
+✅ **merkle_sync** - Komplet Merkle DAG implementation, diff, reconcile, conflict resolution
+✅ **Integration** - Alle tre komponenter integreret i FleetSyncService
+✅ **Produktionsklar** - Ingen stubs, ingen dead code

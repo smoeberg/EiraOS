@@ -1,0 +1,487 @@
+# Systemd Services - Beviser
+
+## Systemd Service Files
+
+### 1. eira.target
+**Fil:** `systemd/eira.target`
+
+```ini
+[Unit]
+Description=EiraOS core IPC daemon target
+Documentation=https://github.com/smoeberg/EiraOS
+Wants=eira-stated.service eira-identityd.service eira-fleetd.service
+Wants=eira-veritasd.service eira-intentd.service eira-graphd.service
+After=eira-stated.service eira-identityd.service eira-fleetd.service
+After=eira-veritasd.service eira-intentd.service eira-graphd.service
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Analyse:**
+- ✅ Alle 6 EIRA daemons inkluderet
+- ✅ Korrekte dependencies (After=)
+- ✅ Installeres som del af multi-user.target
+
+---
+
+### 2. eira-stated.service
+**Fil:** `systemd/eira-stated.service`
+
+```ini
+[Unit]
+Description=EiraOS State IPC daemon
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+Before=eira.target
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-stated
+Restart=always
+RestartSec=2s
+RuntimeDirectory=eira
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+StateDirectory=eira
+StateDirectoryMode=0770
+LogsDirectory=eira
+LogsDirectoryMode=0770
+UMask=0117
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+ReadWritePaths=/data /run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-stated
+
+[Install]
+WantedBy=eira.target
+```
+
+**Analyse:**
+- ✅ Kører som `eira` user (ikke root)
+- ✅ System-level service
+- ✅ Security hardening (ProtectSystem, PrivateTmp, etc.)
+- ✅ Network: AF_UNIX only (ingen inet/inet6)
+- ✅ AppArmor profil specificeret
+- ✅ Runtime directories med korrekte permissions
+
+---
+
+### 3. eira-identityd.service
+**Fil:** `systemd/eira-identityd.service`
+
+```ini
+[Unit]
+Description=EiraOS Identity IPC daemon
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+Before=eira.target
+Requires=eira-stated.service
+After=eira-stated.service
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-identityd
+Restart=always
+RestartSec=2s
+RuntimeDirectory=eira
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+StateDirectory=eira
+StateDirectoryMode=0770
+LogsDirectory=eira
+LogsDirectoryMode=0770
+UMask=0117
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+ReadWritePaths=/run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-identityd
+
+[Install]
+WantedBy=eira.target
+```
+
+**Analyse:**
+- ✅ Kører som `eira` user
+- ✅ Depender på eira-stated.service
+- ✅ Network: AF_UNIX + AF_INET + AF_INET6 (OIDC kræver netværk)
+- ✅ Security hardening
+- ✅ AppArmor profil specificeret
+
+---
+
+### 4. eira-intentd.service
+**Fil:** `systemd/eira-intentd.service`
+
+```ini
+[Unit]
+Description=EiraOS Intent IPC daemon
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+Before=eira.target
+Requires=eira-stated.service
+After=eira-stated.service
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-intentd
+Restart=always
+RestartSec=2s
+RuntimeDirectory=eira
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+StateDirectory=eira
+StateDirectoryMode=0770
+LogsDirectory=eira
+LogsDirectoryMode=0770
+UMask=0117
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+ReadWritePaths=/data /run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-intentd
+
+[Install]
+WantedBy=eira.target
+```
+
+**Analyse:**
+- ✅ Kører som `eira` user
+- ✅ Depender på eira-stated.service
+- ✅ Network: AF_UNIX only (ingen netværk adgang)
+- ✅ ReadWritePaths: /data (til eira-app.db)
+
+---
+
+### 5. eira-fleetd.service
+**Fil:** `systemd/eira-fleetd.service`
+
+```ini
+[Unit]
+Description=EiraOS Fleet IPC daemon
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+Before=eira.target
+Requires=eira-stated.service
+After=eira-stated.service
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+Environment=EIRA_FLEET_WS_ENABLED=1
+Environment=EIRA_FLEET_WS_HOST=127.0.0.1
+Environment=EIRA_FLEET_WS_PORT=8765
+Environment=EIRA_FLEET_KEY_DIR=/data/eira-fleet
+Environment=EIRA_APP_DB=/data/eira-fleet/inventory.db
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-fleetd
+Restart=always
+RestartSec=2s
+RuntimeDirectory=eira
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+StateDirectory=eira
+StateDirectoryMode=0770
+LogsDirectory=eira
+LogsDirectoryMode=0770
+UMask=0117
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictSUIDSGID=true
+ReadWritePaths=/data/eira-fleet /run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-fleetd
+
+[Install]
+WantedBy=eira.target
+```
+
+**Analyse:**
+- ✅ Kører som `eira` user
+- ✅ Depender på eira-stated.service
+- ✅ Network: AF_UNIX + AF_INET + AF_INET6
+- ✅ IPAddressDeny=any, IPAddressAllow=localhost (kun localhost)
+- ✅ Fleet-specifikke environment variabler
+- ✅ ReadWritePaths: /data/eira-fleet
+
+---
+
+### 6. eira-graphd.service
+**Fil:** `systemd/eira-graphd.service`
+
+```ini
+[Unit]
+Description=EiraOS Graph IPC daemon
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+Before=eira.target
+Requires=eira-stated.service
+After=eira-stated.service
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-graphd
+Restart=always
+RestartSec=2s
+RuntimeDirectory=eira
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+StateDirectory=eira
+StateDirectoryMode=0770
+LogsDirectory=eira
+LogsDirectoryMode=0770
+UMask=0117
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+ReadWritePaths=/run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-graphd
+
+[Install]
+WantedBy=eira.target
+```
+
+---
+
+### 7. eira-veritasd.service
+**Fil:** `systemd/eira-veritasd.service`
+
+```ini
+[Unit]
+Description=EiraOS Veritas IPC daemon
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+Before=eira.target
+Requires=eira-stated.service
+After=eira-stated.service
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-veritasd
+Restart=always
+RestartSec=2s
+RuntimeDirectory=eira
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+StateDirectory=eira
+StateDirectoryMode=0770
+LogsDirectory=eira
+LogsDirectoryMode=0770
+UMask=0117
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+ReadWritePaths=/run/eira /var/log/eira
+AppArmorProfile=/usr/bin/eira-veritasd
+
+[Install]
+WantedBy=eira.target
+```
+
+---
+
+## Samlet Systemd Analyse
+
+### Service Level
+| Service | Level | User | Status |
+|---------|-------|------|--------|
+| eira.target | System | - | ✅ Target |
+| eira-stated | System | eira | ✅ Core |
+| eira-identityd | System | eira | ✅ Core |
+| eira-fleetd | System | eira | ✅ Core |
+| eira-intentd | System | eira | ✅ Core |
+| eira-graphd | System | eira | ✅ Core |
+| eira-veritasd | System | eira | ✅ Core |
+
+**✅ Alle services er system-level (ikke user-level)**
+
+### Security Configuration
+| Service | Network | AppArmor | RestrictAddressFamilies |
+|---------|---------|---------|------------------------|
+| eira-stated | ❌ | ✅ | AF_UNIX |
+| eira-identityd | ✅ | ✅ | AF_UNIX + AF_INET + AF_INET6 |
+| eira-fleetd | ✅ | ✅ | AF_UNIX + AF_INET + AF_INET6 |
+| eira-intentd | ❌ | ✅ | AF_UNIX |
+| eira-graphd | ❌ | ✅ | AF_UNIX |
+| eira-veritasd | ❌ | ✅ | AF_UNIX |
+
+**✅ Alle services har korrekte network restrictions**
+
+### Dependencies
+```
+eira.target
+├── eira-stated.service (P0 - base)
+├── eira-identityd.service (depends on stated)
+├── eira-fleetd.service (depends on stated)
+├── eira-veritasd.service (depends on stated)
+├── eira-intentd.service (depends on stated)
+└── eira-graphd.service (depends on stated)
+```
+
+**✅ Alle services depender korrekt på eira-stated**
+
+---
+
+## Forventet systemctl status output
+
+### Når services kører
+```bash
+$ systemctl status eira.target
+● eira.target - EiraOS core IPC daemon target
+   Loaded: loaded (/usr/lib/systemd/system/eira.target; enabled; vendor preset: enabled)
+   Active: active since Sat 2026-10-19 12:00:00 UTC; 1h ago
+   
+$ systemctl status eira-stated.service
+● eira-stated.service - EiraOS State IPC daemon
+   Loaded: loaded (/usr/lib/systemd/system/eira-stated.service; enabled; vendor preset: enabled)
+   Active: active (running) since Sat 2026-10-19 12:00:00 UTC; 1h ago
+   Main PID: 12345 (eira)
+   CGroup: /system.slice/eira.target/eira-stated.service
+       └─12345 /usr/bin/python3 /usr/bin/eira-stated
+   
+$ systemctl status eira-identityd.service
+● eira-identityd.service - EiraOS Identity IPC daemon
+   Loaded: loaded (/usr/lib/systemd/system/eira-identityd.service; enabled; vendor preset: enabled)
+   Active: active (running) since Sat 2026-10-19 12:00:00 UTC; 1h ago
+   Main PID: 12346 (eira)
+   CGroup: /system.slice/eira.target/eira-identityd.service
+       └─12346 /usr/bin/python3 /usr/bin/eira-identityd
+```
+
+---
+
+## Wayland Info (Forventet)
+
+### Når eira-shell kører under Wayland
+```bash
+$ wayland-info
+interface: wl_compositor
+interface: wl_shm
+interface: wl_display
+interface: wl_seat
+interface: wl_pointer
+interface: wl_keyboard
+interface: wl_touch
+...
+
+$ echo $WAYLAND_DISPLAY
+wayland-0
+
+$ echo $XDG_SESSION_TYPE
+wayland
+```
+
+---
+
+## Konklusion
+
+✅ **Alle systemd services er korrekt konfigureret**
+✅ **System-level services (ikke user-level)**
+✅ **Kører som eira user (ikke root)**
+✅ **Korrekte dependencies**
+✅ **Security hardening applikeret**
+✅ **Network restrictions korrekte**
+✅ **AppArmor profiler specificeret**
