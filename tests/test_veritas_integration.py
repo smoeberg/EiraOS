@@ -71,12 +71,13 @@ def fixed_daemon(scores: tuple[float, float, float, float]) -> VeritasDaemon:
 
 
 @pytest.fixture
-def veritas_process() -> Any:
+def veritas_process(monkeypatch: pytest.MonkeyPatch) -> Any:
     # Keep the AF_UNIX path comfortably below the platform's ~108-byte limit.
     socket_dir = Path(tempfile.mkdtemp(prefix="ev-"))
     socket_file = socket_dir / "veritasd.sock"
     env = os.environ.copy()
     env["EIRA_RUN_DIR"] = str(socket_dir)
+    monkeypatch.setenv("EIRA_RUN_DIR", str(socket_dir))
     process = subprocess.Popen(
         [
             sys.executable, "-m", "app.daemons.runner",
