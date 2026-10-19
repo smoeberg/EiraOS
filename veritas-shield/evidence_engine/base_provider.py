@@ -2,7 +2,8 @@
 Universal Evidence Provider Interface for EiraOS Veritas Engine (eira-veritasd)
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 
 class BaseEvidenceProvider(ABC):
     """

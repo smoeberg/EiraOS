@@ -1,18 +1,29 @@
 import asyncio
 import json
+import os
 import socket
+
 from websockets.asyncio.client import connect
+
+from app.core.store import StateStore
+from app.daemons.fleetd import FleetSyncService, FleetWebSocketServer, generate_device_keypair
 from app.fleet.device_registry import DeviceRegistry
 from app.fleet.e2ee import StatePayloadEncryptor
-from app.fleet.merkle_sync import MerkleSyncEngine
-from app.daemons.fleetd import FleetSyncService, FleetWebSocketServer, generate_device_keypair
+
 
 def _services():
     device_a = generate_device_keypair("device-a", "Laptop")
     device_b = generate_device_keypair("device-b", "Phone")
     registry = DeviceRegistry()
-    registry.register(device_b)
-    tokens = {"device-b": registry.issue_auth_token("device-b")}
+    code = registry.create_pairing_token(ttl_seconds=300)
+    enrollment = registry.enroll(
+        pairing_code=code["code"],
+        device_id=device_b.device_id,
+        name=device_b.name,
+        os_type=device_b.os_type,
+        public_key=device_b.public_key,
+    )
+    tokens = {"device-b": enrollment.auth_token}
     return device_a, device_b, registry, tokens
 
 def get_free_port():
@@ -27,7 +38,14 @@ def test_websocket_handshake_uses_the_same_authorization_boundary() -> None:
         device_a, _, registry, tokens = _services()
         public_key = registry.get("device-b").public_key
         port = get_free_port()
-        websocket_server = FleetWebSocketServer(device_a, port=port)
+        websocket_server = FleetWebSocketServer(
+            FleetSyncService(
+                registry=registry,
+                store=StateStore(),
+                encryptor=StatePayloadEncryptor(os.urandom(32), fleet_salt=os.urandom(16)),
+            ),
+            port=port,
+        )
         await websocket_server.start()
         try:
             async with connect(f"ws://127.0.0.1:{websocket_server.port}") as websocket:

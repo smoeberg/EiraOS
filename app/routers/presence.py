@@ -1,9 +1,11 @@
 """
 FastAPI Router for presenced (Object-Based Presence & Collaboration)
 """
+from typing import Optional
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional
+
 from app.daemons.presenced import PresenceDaemon
 
 router = APIRouter(prefix="/v1/presence", tags=["Eira Presence & Object Collaboration"])

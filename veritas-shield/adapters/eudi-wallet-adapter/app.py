@@ -3,6 +3,7 @@ EUDI Wallet Bridge REST API mock implementation for EiraOS.
 """
 import json
 
+
 def verify_signature(payload: dict) -> dict:
     signature = payload.get("signature")
     issuer = payload.get("issuer")

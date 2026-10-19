@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.routers.common import fleet_ipc, ipc_http
 
 router = APIRouter(prefix="/v1/fleet", tags=["Fleet Management"])

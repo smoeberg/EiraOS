@@ -2,7 +2,8 @@
 capabilityd — EiraOS Capability & Policy Engine Daemon
 Central OS Bus for capability registration, policy checks, and provider routing.
 """
-from app.core.capability import CapabilityRouter, CapabilityRequest, CapabilityType, SecurityClassification
+from app.core.capability import CapabilityRequest, CapabilityRouter, CapabilityType, SecurityClassification
+
 
 class CapabilityDaemon:
     def __init__(self):

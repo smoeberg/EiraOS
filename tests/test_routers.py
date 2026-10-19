@@ -1,12 +1,14 @@
 import os
 from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 
 os.environ["EIRA_DISABLE_DAEMONS"] = "1"
 
-from app.http_bridge import app
 from app.database import init_db
+from app.http_bridge import app
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException
+
 from app.ipc.jsonrpc import JsonRpcError
 from app.models import ParseIntentRequest
 from app.routers.common import intent_ipc, ipc_http, sid

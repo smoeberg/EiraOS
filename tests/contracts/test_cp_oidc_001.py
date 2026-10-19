@@ -1,7 +1,9 @@
 import uuid
-from app.session_store import init_db, ensure_session, get_session
-from app.daemons import identityd
+
 from app.auth.oidc import mock_login
+from app.daemons import identityd
+from app.session_store import ensure_session, get_session, init_db
+
 
 def test_cp_oidc_session_isolation_after_sso():
     init_db()

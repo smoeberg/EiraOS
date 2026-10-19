@@ -79,7 +79,7 @@ def contract_description(
     depends_on: list | str | None,
     acceptance_hint: str = "",
 ) -> str:
-    schema_line = schema or f"contracts/schemas/{contract_id.lower().replace('cp-', 'ipc-').rsplit('-', 1)[0]}-v1.json"
+    schema_line = schema or f"contracts/schemas/{contract_id.lower().replace('cp-', 'ipc-').rsplit('-', 1)[0]}-v1.json"  # noqa: F841
     deps = depends_str(depends_on)
     lines = [
         "h2. Kontrakt",

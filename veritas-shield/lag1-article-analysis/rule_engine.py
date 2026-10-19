@@ -4,6 +4,7 @@ Lag 1 Artikelanalyse - Rule Engine for Veritas Shield EiraOS
 import json
 import os
 
+
 class VeritasRuleEngine:
     def __init__(self, parameters_path: str):
         with open(parameters_path, "r", encoding="utf-8") as f:

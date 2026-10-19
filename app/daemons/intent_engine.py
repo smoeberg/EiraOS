@@ -4,7 +4,6 @@ import json
 import uuid
 
 from app.capability import list_manifests
-from app.daemons import identityd
 from app.database import get_connection, utc_now_iso
 from app.executor import execute_intent
 from app.intent_parser import list_trust_items, parse_intent_request, plan_intent
