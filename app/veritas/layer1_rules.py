@@ -48,6 +48,30 @@ SENSATIONAL_PATTERNS: tuple[tuple[str, re.Pattern[str], float], ...] = (
         ),
         0.10,
     ),
+    (
+        "conspiracy_framing",
+        re.compile(
+            r"\b(sandheden skjules|medierne tier om|they(?:'re| are) hiding the truth|the media won't tell you)\b",
+            re.IGNORECASE,
+        ),
+        0.12,
+    ),
+    (
+        "viral_bombshell",
+        re.compile(
+            r"\b(chokafsløring|bombe(?:n)? under|bombshell revelation|shocking revelation)\b",
+            re.IGNORECASE,
+        ),
+        0.10,
+    ),
+    (
+        "share_before_censorship",
+        re.compile(
+            r"\b(del før det fjernes|del inden de sletter det|share before it gets deleted|share before they take it down)\b",
+            re.IGNORECASE,
+        ),
+        0.14,
+    ),
 )
 
 
@@ -107,14 +131,18 @@ class Layer1RulesEngine:
 
     def evaluate(
         self,
-        evidence: Mapping[str, Any] | str,
+        evidence: Mapping[str, Any] | str | None,
         **overrides: Any,
     ) -> dict[str, Any]:
         data: dict[str, Any]
-        if isinstance(evidence, str):
+        if evidence is None:
+            data = {}
+        elif isinstance(evidence, str):
             data = {"text": evidence}
-        else:
+        elif isinstance(evidence, Mapping):
             data = dict(evidence)
+        else:
+            data = {"text": str(evidence)}
         data.update(overrides)
 
         text = str(data.get("text") or data.get("content") or "")
