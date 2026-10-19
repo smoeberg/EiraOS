@@ -85,16 +85,25 @@ def test_secure_socket_path_verifies_before_chmod(
     assert chmod_calls == []
 
 
-def test_missing_group_fails_loudly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_group_disables_group_enforcement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def missing_group(_name: str) -> object:
         raise KeyError("eira")
 
+    chown_calls: list[tuple[object, ...]] = []
     monkeypatch.setattr(socket_security.grp, "getgrnam", missing_group)
+    monkeypatch.setattr(socket_security.os, "chown", lambda *args: chown_calls.append(args))
 
-    with pytest.raises(RuntimeError, match="Required Unix group 'eira' does not exist"):
-        setup_unix_socket(str(tmp_path / "stated.sock"))
+    socket_path = tmp_path / "stated.sock"
+    server = setup_unix_socket(str(socket_path))
 
-    assert not (tmp_path / "stated.sock").exists()
+    try:
+        assert stat.S_IMODE(socket_path.stat().st_mode) == 0o660
+        assert chown_calls == []
+    finally:
+        server.close()
+        remove_unix_socket(str(socket_path))
 
 
 def test_chown_failure_is_not_swallowed(
