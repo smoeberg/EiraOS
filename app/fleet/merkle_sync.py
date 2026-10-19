@@ -107,6 +107,8 @@ class MerkleSyncEngine:
         by_hash: dict[str, StateHeader] = {}
         by_id: dict[str, StateHeader] = {}
         for value in values:
+            if isinstance(value, State) and not value.is_hash_valid():
+                raise ValueError("state_hash_verification_failed")
             header = value if isinstance(value, StateHeader) else StateHeader.from_value(value)
             if not header.id or not _HASH_RE.fullmatch(header.hash):
                 raise ValueError("invalid_state_header")
