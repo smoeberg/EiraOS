@@ -27,7 +27,7 @@ function proposal(metadata: Metadata = {}): ProposalRecord {
 }
 
 function cardFor(state: string) {
-  const card = document.querySelector(\`[data-state="\${state}"]\`);
+  const card = document.querySelector(`[data-state="${state}"]`);
   expect(card).not.toBeNull();
   return card as HTMLElement;
 }
