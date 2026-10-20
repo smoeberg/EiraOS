@@ -294,12 +294,11 @@ pub extern "C" fn eira_stated_invalid_argument_code() -> i32 {
     EIRA_INVALID_ARGUMENT
 }
 
-
 #[cfg(test)]
 mod ffi_tests {
     use super::{
-        eira_stated_close, eira_stated_count, eira_stated_free_string, eira_stated_last_error,
-        eira_stated_open, StateStore,
+        StateStore, eira_stated_close, eira_stated_count, eira_stated_free_string,
+        eira_stated_last_error, eira_stated_open,
     };
     use std::ffi::CString;
     use std::ptr;
