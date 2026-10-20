@@ -92,10 +92,7 @@ function fallbackSnapshot(states: StateRecord[]): GraphSnapshot {
   return { nodes, edges };
 }
 
-function proposalsFrom(states: StateRecord[]): ProposalRecord[] {
-  const existingStateIds = new Set(
-    states.filter((state) => state.type !== "ProposalState").map((state) => state.id),
-  );
+function proposalsFrom(states: StateRecord[], existingStateIds: Set<string>): ProposalRecord[] {
   return states.flatMap((state) => {
     if (state.type !== "ProposalState") return [];
     const payload = state.payload as Partial<ProposalRecord>;
@@ -151,7 +148,7 @@ export function SpatialCanvas({
       edges: graph.edges,
     };
     setSnapshot(merged.nodes.length || graph.edges.length ? merged : fallback);
-    onProposals?.(proposalsFrom(states));
+    onProposals?.(proposalsFrom(states, new Set(merged.nodes.map((node) => node.id))));
     setError(null);
     setLoading(false);
   }, [onProposals]);
