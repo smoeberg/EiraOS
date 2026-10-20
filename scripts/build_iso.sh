@@ -137,12 +137,30 @@ EOF
 #!/bin/sh
 set -eu
 systemctl enable eira.target
-systemctl enable eira-session.service
+systemctl enable greetd.service
 install -d -m 0755 /etc/greetd /etc/labwc
-# Session files are staged by live-build through config/includes.chroot.
-if id ubuntu >/dev/null 2>&1; then
-    adduser ubuntu eira
-fi
+# The live user may be created by casper only at boot. Add it to the
+# supplementary group even when the account does not yet exist in the build
+# chroot, so it can access the group-restricted EiraOS IPC sockets.
+python3 - <<'PYGROUP'
+from pathlib import Path
+
+group_file = Path("/etc/group")
+lines = group_file.read_text(encoding="utf-8").splitlines()
+for index, line in enumerate(lines):
+    fields = line.split(":")
+    if fields[0] != "eira":
+        continue
+    members = [member for member in fields[3].split(",") if member]
+    if "ubuntu" not in members:
+        members.append("ubuntu")
+    fields[3] = ",".join(members)
+    lines[index] = ":".join(fields)
+    group_file.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    break
+else:
+    raise SystemExit("eira group missing after package installation")
+PYGROUP
 EOF
     chmod 0755 config/hooks/live/050-eira-session.hook.chroot
 
