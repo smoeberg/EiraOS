@@ -276,3 +276,59 @@ pub unsafe extern "C" fn eira_stated_free_string(pointer: *mut c_char) {
 pub extern "C" fn eira_stated_invalid_argument_code() -> i32 {
     EIRA_INVALID_ARGUMENT
 }
+
+
+#[cfg(test)]
+mod ffi_tests {
+    use super::{
+        eira_stated_close, eira_stated_count, eira_stated_free_string, eira_stated_last_error,
+        eira_stated_open, StateStore,
+    };
+    use std::ffi::CString;
+    use std::ptr;
+
+    #[test]
+    fn rejects_unregistered_handles_without_dereferencing() {
+        let invalid = 1_usize as *mut StateStore;
+        // SAFETY: unregistered tokens are checked in the registry before use.
+        assert_eq!(unsafe { eira_stated_count(invalid) }, -1);
+        // SAFETY: close/free ignore tokens not allocated by this library.
+        unsafe {
+            eira_stated_close(invalid);
+            eira_stated_free_string(1_usize as *mut std::ffi::c_char);
+        }
+    }
+
+    #[test]
+    fn close_is_idempotent_and_stale_handles_are_rejected() {
+        let path = CString::new(":memory:").unwrap();
+        // SAFETY: path is a live, NUL-terminated C string for this call.
+        let handle = unsafe { eira_stated_open(path.as_ptr()) };
+        assert!(!handle.is_null());
+        // SAFETY: handle was returned by eira_stated_open and remains open.
+        assert_eq!(unsafe { eira_stated_count(handle) }, 0);
+        // SAFETY: close accepts a live handle; repeated close is contained.
+        unsafe {
+            eira_stated_close(handle);
+            eira_stated_close(handle);
+        }
+        // SAFETY: stale handles are rejected by the registry before access.
+        assert_eq!(unsafe { eira_stated_count(handle) }, -1);
+    }
+
+    #[test]
+    fn null_pointers_and_repeated_string_free_are_contained() {
+        // SAFETY: null is explicitly supported by the FFI contract.
+        unsafe {
+            eira_stated_close(ptr::null_mut());
+            eira_stated_free_string(ptr::null_mut());
+        }
+        let error = eira_stated_last_error();
+        assert!(!error.is_null());
+        // SAFETY: error is library-allocated; the second free must be ignored.
+        unsafe {
+            eira_stated_free_string(error);
+            eira_stated_free_string(error);
+        }
+    }
+}
