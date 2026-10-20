@@ -11,7 +11,13 @@ from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
 from app.journey import advance_journey, get_journey, list_journeys
 from app.mistral import is_mistral_available
 from app.models import ParseIntentRequest
-from app.pending_intents import delete_pending, get_pending, mark_executed, save_pending
+from app.pending_intents import (
+    claim_pending,
+    get_pending,
+    mark_executed,
+    mark_execution_failed,
+    save_pending,
+)
 from app.session_store import (
     ensure_session,
     get_presentation_mode,
@@ -77,29 +83,51 @@ def intent_confirm(params: dict) -> dict:
 
     required = pending.get("required_assurance")
     session = get_session(sid)
-    if required == "org_acting" and session and session.get("assurance_level") != "org_acting":
+    current_assurance = session.get("assurance_level") if session else None
+    if required and current_assurance != required:
         raise JsonRpcError(
             ASSURANCE_REQUIRED,
             "assurance_required",
             {
-                "required": "org_acting",
-                "current": session.get("assurance_level", "eid_low"),
-                "user_message": "Denne handling kræver MitID Erhverv",
+                "required": required,
+                "current": current_assurance or "unknown",
+                "user_message": (
+                    "Denne handling kræver et højere eller specifikt "
+                    "verificeret sikkerhedsniveau"
+                ),
             },
         )
 
+    # A negative plan decision is authoritative. Re-plan after changing
+    # capabilities, resolving ambiguity, or completing a verified step-up.
     if pending.get("can_execute") is False:
-        assurance_ok = not required or session.get("assurance_level") == required
-        if not (assurance_ok and pending.get("capability_match")):
-            raise JsonRpcError(
-                -32002,
-                "cannot_execute",
-                {"user_message": pending.get("block_reason", "Handling kan ikke udføres")},
-            )
+        raise JsonRpcError(
+            -32002,
+            "cannot_execute",
+            {"user_message": pending.get("block_reason", "Handling kan ikke udføres")},
+        )
 
-    execution = execute_intent(pending)
+    if not claim_pending(intent_id, sid):
+        raise JsonRpcError(
+            -32002,
+            "intent_not_pending",
+            {
+                "intent_id": intent_id,
+                "user_message": (
+                    "Intentionen er allerede under behandling eller er afsluttet"
+                ),
+            },
+        )
+
+    try:
+        execution = execute_intent(pending)
+    except Exception:
+        # Keep the intent non-retryable after an execution attempt: once real
+        # adapters exist, an exception may occur after an external side effect.
+        mark_execution_failed(intent_id)
+        raise
+
     mark_executed(intent_id)
-
     result = {
         "intent_id": intent_id,
         "session_id": sid,
@@ -117,7 +145,6 @@ def intent_confirm(params: dict) -> dict:
                 utc_now_iso(),
             ),
         )
-    delete_pending(intent_id)
     return result
 
 
