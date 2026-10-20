@@ -80,7 +80,7 @@ export function SituationUI({ proposals, onActivate }: SituationUIProps) {
 
             return (
               <article
-                className={\`action-card action-card--\${state}\`}
+                className={`action-card action-card--${state}`}
                 key={proposal.proposal_id}
                 data-state={state}
                 style={cardStyle}
