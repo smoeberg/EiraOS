@@ -264,8 +264,8 @@ impl SharedMemoryWriter {
         fence(Ordering::SeqCst);
 
         // Step 2: odd generation = write in progress.
-        let gen = generation_atomic(&self.map).fetch_add(1, Ordering::AcqRel);
-        let writing_gen = gen.wrapping_add(1);
+        let previous_generation = generation_atomic(&self.map).fetch_add(1, Ordering::AcqRel);
+        let writing_gen = previous_generation.wrapping_add(1);
         debug_assert!(writing_gen % 2 == 1);
 
         // Step 3: payload + metadata.
