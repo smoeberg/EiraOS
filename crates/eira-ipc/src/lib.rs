@@ -86,9 +86,7 @@ pub enum IpcError {
     TruncatedFrame,
     #[error("JSON-RPC protocol error: {0}")]
     Protocol(String),
-    #[error(
-        "JSON-RPC request timed out (server may still process the request; no cancellation)"
-    )]
+    #[error("JSON-RPC request timed out (server may still process the request; no cancellation)")]
     Timeout,
     #[error("remote JSON-RPC error {0:?}")]
     Remote(RpcErrorObject),
@@ -408,7 +406,12 @@ async fn serve_connection<H: RpcHandler>(
         if !has_frame {
             return Ok(());
         }
-        encode_response(handler.as_ref(), &frame, &mut response, config.max_frame_bytes)?;
+        encode_response(
+            handler.as_ref(),
+            &frame,
+            &mut response,
+            config.max_frame_bytes,
+        )?;
         write_half.write_all(&response).await?;
     }
 }
@@ -600,13 +603,11 @@ mod tests {
     #[test]
     fn ipc01_oversized_response_is_bounded() {
         let large = "x".repeat(64);
-        let handler = |_method: &str,
-                       _params: Option<&RawValue>|
-         -> Result<Box<RawValue>, RpcErrorObject> {
-            RawValue::from_string(format!("\"{large}\"")).map_err(|e| {
-                RpcErrorObject::new(-32603, e.to_string())
-            })
-        };
+        let handler =
+            |_method: &str, _params: Option<&RawValue>| -> Result<Box<RawValue>, RpcErrorObject> {
+                RawValue::from_string(format!("\"{large}\""))
+                    .map_err(|e| RpcErrorObject::new(-32603, e.to_string()))
+            };
         let request = br#"{"jsonrpc":"2.0","id":1,"method":"x","params":null}"#;
         let mut output = Vec::new();
         let max = 32;
@@ -700,9 +701,7 @@ mod tests {
         data.push(b'\n');
         let mut reader = BufReader::new(data.as_slice());
         let mut frame = Vec::new();
-        let err = read_frame(&mut reader, &mut frame, 16)
-            .await
-            .unwrap_err();
+        let err = read_frame(&mut reader, &mut frame, 16).await.unwrap_err();
         assert!(matches!(err, IpcError::FrameTooLarge(16)));
     }
 }
