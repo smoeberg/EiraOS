@@ -1,7 +1,7 @@
 use crate::{StateRecord, StateStore};
 use std::cell::RefCell;
-use std::ffi::{CStr, CString, c_char};
 use std::collections::{HashMap, HashSet};
+use std::ffi::{CStr, CString, c_char};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -50,22 +50,33 @@ fn register_store(store: StateStore) -> *mut StateStore {
     if token == 0 {
         return ptr::null_mut();
     }
-    handles().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .insert(token, Arc::new(store));
     token as *mut StateStore
 }
 
 fn store_from_handle(handle: *mut StateStore) -> Result<Arc<StateStore>, String> {
-    if handle.is_null() { return Err("state-store handle is null".to_owned()); }
-    handles().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
-        .get(&(handle as usize)).cloned()
+    if handle.is_null() {
+        return Err("state-store handle is null".to_owned());
+    }
+    handles()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&(handle as usize))
+        .cloned()
         .ok_or_else(|| "state-store handle is invalid or closed".to_owned())
 }
 
 fn owned_string(value: String) -> *mut c_char {
-    let Ok(value) = CString::new(value) else { return ptr::null_mut(); };
+    let Ok(value) = CString::new(value) else {
+        return ptr::null_mut();
+    };
     let pointer = value.into_raw();
-    strings().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    strings()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .insert(pointer as usize);
     pointer
 }
@@ -101,8 +112,11 @@ pub unsafe extern "C" fn eira_stated_open(db_path: *const c_char) -> *mut StateS
 pub unsafe extern "C" fn eira_stated_close(handle: *mut StateStore) {
     // Never allow a Rust panic to unwind across the C ABI, including drop.
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        if handle.is_null() { return; }
-        handles().lock()
+        if handle.is_null() {
+            return;
+        }
+        handles()
+            .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(&(handle as usize));
     }));
@@ -261,8 +275,11 @@ pub unsafe extern "C" fn eira_stated_free_string(pointer: *mut c_char) {
     // The pointer must still be null or allocated by this library; catch_unwind
     // cannot make an arbitrary or already-freed pointer safe to dereference.
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        if pointer.is_null() { return; }
-        let registered = strings().lock()
+        if pointer.is_null() {
+            return;
+        }
+        let registered = strings()
+            .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(&(pointer as usize));
         if registered {
