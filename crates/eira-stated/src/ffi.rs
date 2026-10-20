@@ -21,17 +21,11 @@ unsafe fn read_input(input: *const c_char) -> Result<String, String> {
     if input.is_null() {
         return Err("input pointer is null".to_owned());
     }
-    // SAFETY: the caller promises a live, NUL-terminated C string.
+    // SAFETY: callers are required to pass a live, NUL-terminated C string.
     unsafe { CStr::from_ptr(input) }
         .to_str()
         .map(str::to_owned)
         .map_err(|error| error.to_string())
-}
-
-unsafe fn store_from_handle<'a>(handle: *mut StateStore) -> Result<&'a StateStore, String> {
-    // SAFETY: the caller owns a handle returned by eira_stated_open and keeps it
-    // alive for this call.
-    unsafe { handle.as_ref() }.ok_or_else(|| "state-store handle is null".to_owned())
 }
 
 fn owned_string(value: String) -> *mut c_char {
@@ -41,11 +35,11 @@ fn owned_string(value: String) -> *mut c_char {
 /// Opens a pooled Rust state store. The returned handle must be closed once.
 ///
 /// # Safety
-/// `db_path` must point to a valid NUL-terminated UTF-8 string.
+/// db_path must point to a valid NUL-terminated UTF-8 string for this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_open(db_path: *const c_char) -> *mut StateStore {
     match catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: this function's caller upholds the pointer contract.
+        // SAFETY: the FFI caller owns the input pointer for this call.
         let path = unsafe { read_input(db_path) }?;
         StateStore::open(path).map_err(|error| error.to_string())
     })) {
@@ -61,15 +55,23 @@ pub unsafe extern "C" fn eira_stated_open(db_path: *const c_char) -> *mut StateS
     }
 }
 
-/// Closes a state-store handle returned by `eira_stated_open`.
+/// Closes a state-store handle returned by eira_stated_open.
 ///
 /// # Safety
-/// `handle` must be null or a live handle that has not already been closed.
+/// handle must be null or a live handle that has not already been closed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_close(handle: *mut StateStore) {
-    if !handle.is_null() {
-        // SAFETY: this function's caller upholds the allocation contract.
+    if handle.is_null() {
+        return;
+    }
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the FFI caller owns a live allocation returned by
+        // eira_stated_open and has not previously closed it.
         drop(unsafe { Box::from_raw(handle) });
+    }));
+    if result.is_err() {
+        set_error("panic caught while closing Rust state store");
     }
 }
 
@@ -83,11 +85,12 @@ pub unsafe extern "C" fn eira_stated_append_json(
     state_json: *const c_char,
 ) -> i32 {
     match catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: this function's caller upholds both pointer contracts.
-        let store = unsafe { store_from_handle(handle) }?;
-        // SAFETY: this function's caller upholds both pointer contracts.
+        // SAFETY: pointer dereferences are contained within this unwind boundary.
+        let store = unsafe { handle.as_ref() }
+            .ok_or_else(|| "state-store handle is null".to_owned())?;
         let input = unsafe { read_input(state_json) }?;
-        let state: StateRecord = serde_json::from_str(&input).map_err(|error| error.to_string())?;
+        let state: StateRecord =
+            serde_json::from_str(&input).map_err(|error| error.to_string())?;
         store.append(&state).map_err(|error| error.to_string())
     })) {
         Ok(Ok(_)) => EIRA_OK,
@@ -108,9 +111,9 @@ unsafe fn get_state_json(
     by_hash: bool,
 ) -> *mut c_char {
     match catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: the outer FFI function's caller upholds both contracts.
-        let store = unsafe { store_from_handle(handle) }?;
-        // SAFETY: the outer FFI function's caller upholds both contracts.
+        // SAFETY: pointer dereferences are contained within this unwind boundary.
+        let store = unsafe { handle.as_ref() }
+            .ok_or_else(|| "state-store handle is null".to_owned())?;
         let key = unsafe { read_input(key) }?;
         let value = if by_hash {
             store.get_by_hash(&key)
@@ -132,7 +135,7 @@ unsafe fn get_state_json(
     }
 }
 
-/// Returns a JSON state or JSON `null` for an unknown id.
+/// Returns a JSON state or JSON null for an unknown id.
 ///
 /// # Safety
 /// Both pointers must remain valid for this call.
@@ -141,11 +144,11 @@ pub unsafe extern "C" fn eira_stated_get_by_id_json(
     handle: *mut StateStore,
     state_id: *const c_char,
 ) -> *mut c_char {
-    // SAFETY: this function's caller upholds both pointer contracts.
+    // SAFETY: the FFI caller owns both pointers for this call.
     unsafe { get_state_json(handle, state_id, false) }
 }
 
-/// Returns a JSON state or JSON `null` for an unknown hash.
+/// Returns a JSON state or JSON null for an unknown hash.
 ///
 /// # Safety
 /// Both pointers must remain valid for this call.
@@ -154,19 +157,20 @@ pub unsafe extern "C" fn eira_stated_get_by_hash_json(
     handle: *mut StateStore,
     state_hash: *const c_char,
 ) -> *mut c_char {
-    // SAFETY: this function's caller upholds both pointer contracts.
+    // SAFETY: the FFI caller owns both pointers for this call.
     unsafe { get_state_json(handle, state_hash, true) }
 }
 
 /// Returns all states as an ordered JSON array.
 ///
 /// # Safety
-/// `handle` must remain valid for this call.
+/// handle must remain valid for this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_list_json(handle: *mut StateStore) -> *mut c_char {
     match catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: this function's caller upholds the pointer contract.
-        let store = unsafe { store_from_handle(handle) }?;
+        // SAFETY: pointer dereference is contained within this unwind boundary.
+        let store = unsafe { handle.as_ref() }
+            .ok_or_else(|| "state-store handle is null".to_owned())?;
         let states = store.list_states().map_err(|error| error.to_string())?;
         serde_json::to_string(&states).map_err(|error| error.to_string())
     })) {
@@ -185,12 +189,13 @@ pub unsafe extern "C" fn eira_stated_list_json(handle: *mut StateStore) -> *mut 
 /// Returns the state count, or -1 on error.
 ///
 /// # Safety
-/// `handle` must remain valid for this call.
+/// handle must remain valid for this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_count(handle: *mut StateStore) -> i64 {
     match catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: this function's caller upholds the pointer contract.
-        unsafe { store_from_handle(handle) }?
+        // SAFETY: pointer dereference is contained within this unwind boundary.
+        unsafe { handle.as_ref() }
+            .ok_or_else(|| "state-store handle is null".to_owned())?
             .count()
             .map_err(|error| error.to_string())
     })) {
@@ -209,19 +214,29 @@ pub unsafe extern "C" fn eira_stated_count(handle: *mut StateStore) -> i64 {
 /// Returns an allocated copy of the calling thread's last FFI error.
 #[unsafe(no_mangle)]
 pub extern "C" fn eira_stated_last_error() -> *mut c_char {
-    LAST_ERROR.with(|slot| owned_string(slot.borrow().clone()))
+    match catch_unwind(AssertUnwindSafe(|| {
+        LAST_ERROR.with(|slot| owned_string(slot.borrow().clone()))
+    })) {
+        Ok(pointer) => pointer,
+        Err(_) => ptr::null_mut(),
+    }
 }
 
 /// Releases a string returned by an eira-stated FFI function.
 ///
 /// # Safety
-/// `pointer` must be null or a pointer returned exactly once by this library.
+/// pointer must be null or a pointer returned exactly once by this library.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_free_string(pointer: *mut c_char) {
-    if !pointer.is_null() {
-        // SAFETY: this function's caller upholds the allocation contract.
-        drop(unsafe { CString::from_raw(pointer) });
+    if pointer.is_null() {
+        return;
     }
+
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the FFI caller must pass a pointer returned exactly once by
+        // this library.
+        drop(unsafe { CString::from_raw(pointer) });
+    }));
 }
 
 #[unsafe(no_mangle)]
