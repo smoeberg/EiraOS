@@ -6,16 +6,10 @@
 
 ## Findings
 
-### [blocker] Kotlin hash-format validation accepts strings containing a valid substring
-
-- **Location:** `android/eira-core-binding/src/main/java/app/eira/core/EiraStateEngine.kt:53` on PR #74 (`feat/s6-kotlin-binding`).
-- **Evidence:** `HASH_PATTERN = Regex("[0-9a-f]{64}")` is used with `matches(hash)` at lines 24–26. The regex is not anchored; Kotlin's `Regex.matches` does require the entire input to match, so this specific combination does **not** accept a valid substring with a prefix/suffix. No finding is raised for this pattern as currently used. (Recorded to clarify the audit checked the call site, not just the regex.)
-- **Disposition:** no defect confirmed for this call site.
-
 ### [blocker] Mixed-validity sync batch mutates state instead of rejecting the whole batch
 
-- **Location:** `app/daemons/fleetd.py:98-133` (main).
-- **Evidence:** `push_blocks()` increments `invalid` when `decrypt_state()` raises `PayloadIntegrityError` (lines 102–107), then proceeds to append successfully decrypted states from `pending` (lines 109–130) and returns both `accepted` and `invalid` (lines 132–137).
+- **Location:** `app/daemons/fleetd.py:102-106, 130-144` (main).
+- **Evidence:** `push_blocks()` increments `invalid` when `decrypt_state()` raises `PayloadIntegrityError` (lines 102–106), then proceeds to append successfully decrypted states from `pending` (lines 108–133) and returns both `accepted` and `invalid` (lines 138–144).
 - **Impact:** a batch containing at least one invalid envelope can still commit other states. This violates the stated reject-all fail-closed contract for a mixed-validity batch.
 - **Coverage:** the visible E2EE tests in PR #76 cover wrong-key rejection and assert no blocks are stored when all submitted blocks use the wrong key. They do not establish reject-all behavior for a batch containing both valid and invalid blocks. Add a regression test asserting the store remains unchanged for that mixed batch.
 
@@ -26,13 +20,6 @@
 - **Impact:** ordering/escaping and numeric representation differences (especially large integers, floats, Unicode and nested payloads) can produce different hashes across Python, native FFI and Android.
 - **Verification boundary:** PR #77 supplies shared vectors for Unicode, 200-level nesting, integers above 2^53 and floats, but the Room PR's added instrumented test is a disabled skeleton according to its PR description. The available evidence does not prove Room serialization passes the shared vectors.
 - **Required verification:** make the Room hash-input path consume the shared fixtures and assert exact hash equality with the Python/native expected values. This is an audit finding about missing demonstrated parity, not a claim that a specific vector has already failed.
-
-### [major] Sprint 6 Room replay test is not active CI evidence
-
-- **Location:** `android/app/src/androidTest/...` in PR #79; PR description identifies the instrumented test skeleton as `@Ignore`.
-- **Evidence:** PR #79 states that the instrumented test is ignored. The patch adds `replayAll()` in `RoomStateStore.kt:50-68`, which validates chain ancestry and recomputes each stored state's hash.
-- **Impact:** the new replay validation path lacks an active test proving tampered hashes, broken links and duplicate IDs fail closed in the Android/Room runtime.
-- **Recommendation:** enable an Android test that exercises these cases and consumes the shared vectors. The test's exact path/line is not asserted here because the available PR metadata did not provide the ignored test's changed-file patch.
 
 ### [minor] Sprint 5 header parsing coerces input types rather than strictly rejecting them
 
@@ -64,6 +51,6 @@ No evidence of out-of-scope files was found in these changed-file lists. This is
 
 **Confirmed blocker:** mixed-validity batches in `FleetSyncService.push_blocks()` can partially mutate the store.
 
-**Major verification gap:** Room's `JSONObject` hash serialization has not been shown to match the canonical Python/native bytes using the shared fixtures, and the Room replay test is reported as ignored.
+**Major verification gap:** Room's `JSONObject` hash serialization has not been shown to match the canonical Python/native bytes using the shared fixtures.
 
 The Kotlin regex concern was checked against its use of `Regex.matches` and is **not** reported as a defect. Findings above distinguish confirmed behavior from missing verification; no implementation changes are proposed in this audit PR.
