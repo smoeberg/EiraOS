@@ -108,9 +108,13 @@ class C2PAEngine:
         *,
         manifest_reader: ManifestReader | None = None,
         ai_detector: Callable[[bytes | Path, str | None], float] | None = None,
+        hardware_signature_verifier: Callable[[Mapping[str, Any]], bool] | None = None,
     ) -> None:
         self.manifest_reader = manifest_reader or C2PAToolReader()
         self.ai_detector = ai_detector
+        # A marker in a manifest is only a claim, not proof of a hardware signature.
+        # Deployments must inject a verifier bound to their trusted camera/device roots.
+        self.hardware_signature_verifier = hardware_signature_verifier
 
     def _read_manifest(
         self, media: Mapping[str, Any] | bytes | str | Path | None
@@ -241,7 +245,15 @@ class C2PAEngine:
             ).to_dict()
 
         valid, trusted, status_codes = self._manifest_state(manifest)
-        hardware_signed, ai_declared = self._provenance_markers(manifest)
+        hardware_claimed, ai_declared = self._provenance_markers(manifest)
+        hardware_signed = False
+        if hardware_claimed and valid and trusted and self.hardware_signature_verifier is not None:
+            try:
+                hardware_signed = bool(self.hardware_signature_verifier(manifest))
+            except (OSError, RuntimeError, TypeError, ValueError):
+                flags.append("hardware_signature_verification_error")
+        if hardware_claimed and not hardware_signed:
+            flags.append("hardware_signature_unverified")
         if not valid:
             flags.append("c2pa_manifest_invalid")
             score = 0.10
