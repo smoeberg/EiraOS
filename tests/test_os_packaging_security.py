@@ -147,6 +147,7 @@ def test_debian_manifest_is_complete_and_offline_install_safe() -> None:
         "python3-httpx",
         "python3-pydantic",
         "python3-websockets",
+        "labwc",
     ):
         assert dependency in dependencies
 
