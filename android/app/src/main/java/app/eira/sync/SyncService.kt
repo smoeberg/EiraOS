@@ -285,7 +285,7 @@ class FleetSyncClient(
     private val authToken: String,
     private val store: RoomStateStore,
     private val crypto: StatePayloadEncryptor,
-    private val merkle: MerkleSyncEngine? = null,
+    private val merkle: MerkleSyncEngine = CanonicalMerkleSyncEngine(),
     private val client: OkHttpClient = OkHttpClient(),
 ) {
     suspend fun syncOnce(): Boolean {
