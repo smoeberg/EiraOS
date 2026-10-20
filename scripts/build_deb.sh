@@ -117,7 +117,7 @@ manifest = {
         "python": output([sys.executable, "--version"]),
     },
 }
-manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 echo "Built $OUTPUT_DIR/eira-os-core.deb"
 echo "Build provenance: $OUTPUT_DIR/eira-os-core.deb.build-info.json"
