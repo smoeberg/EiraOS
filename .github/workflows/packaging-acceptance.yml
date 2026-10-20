@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            debhelper debhelper-compat dh-python python3-all python3-pytest \
+            debhelper debhelper-compat dh-python python3-all python3-pytest python3-venv \
             nodejs npm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             build-essential python3-dev cargo rustc \
             librsvg2-dev patchelf apparmor-utils python3-cryptography \
