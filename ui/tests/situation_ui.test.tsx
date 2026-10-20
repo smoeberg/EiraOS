@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ProposalRecord } from "../src/components/SpatialCanvas";
 import { SituationUI } from "../src/components/SituationUI";
