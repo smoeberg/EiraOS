@@ -73,8 +73,10 @@ class _NativeLibrary:
             raise RustStateError(self.last_error() or "Rust stated returned a null pointer")
         try:
             return ctypes.string_at(pointer).decode("utf-8")
+        except (UnicodeDecodeError, ValueError, OSError) as exc:
+            raise RustStateError(f"Invalid UTF-8 string returned by Rust stated: {exc}") from exc
         finally:
-            self.value.eira_stated_free_string(pointer)
+            self.value.eira_stated_free_string(ctypes.c_void_p(pointer))
 
     def last_error(self) -> str:
         pointer = self.value.eira_stated_last_error()
@@ -82,8 +84,10 @@ class _NativeLibrary:
             return ""
         try:
             return ctypes.string_at(pointer).decode("utf-8", errors="replace")
+        except (ValueError, OSError):
+            return "Unable to read Rust stated error"
         finally:
-            self.value.eira_stated_free_string(pointer)
+            self.value.eira_stated_free_string(ctypes.c_void_p(pointer))
 
 
 class RustStateStore:
@@ -99,7 +103,9 @@ class RustStateStore:
         self._lock = threading.RLock()
         self._handle = self._native.value.eira_stated_open(os.fsencode(db_path))
         if not self._handle:
-            raise RustStateError(self._native.last_error() or "Failed to open Rust state store")
+            error = self._native.last_error() or "Failed to open Rust state store"
+            self._native = None
+            raise RustStateError(error)
 
     def _ensure_open(self) -> int:
         if not self._handle:
@@ -170,10 +176,12 @@ class RustStateStore:
             return value
 
     def close(self) -> None:
+        # Serialize close against every operation and make it idempotent.
         with self._lock:
-            if self._handle:
-                self._native.value.eira_stated_close(self._handle)
+            handle = self._handle
+            if handle:
                 self._handle = None
+                self._native.value.eira_stated_close(ctypes.c_void_p(handle))
 
     def __enter__(self) -> RustStateStore:
         return self
