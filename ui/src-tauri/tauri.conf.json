@@ -20,7 +20,6 @@
         "minHeight": 640,
         "resizable": true,
         "fullscreen": true,
-        "kiosk": true,
         "decorations": false
       }
     ],
@@ -31,6 +30,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": []
+    "icon": [
+      "icons/icon.png"
+    ]
   }
 }

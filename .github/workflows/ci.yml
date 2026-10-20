@@ -60,3 +60,33 @@ jobs:
         run: cargo check --workspace
       - name: Cargo test workspace
         run: cargo test --workspace -- --nocapture
+
+  # ui/src-tauri is `exclude`d from the root Cargo workspace, so
+  # `cargo test --workspace` above never builds or tests it. This job
+  # tests the Tauri desktop shell (notably the IPC module) separately.
+  rust-tauri-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ui/src-tauri/target
+          key: tauri-${{ runner.os }}-cargo-${{ hashFiles('ui/src-tauri/Cargo.toml') }}
+          restore-keys: tauri-${{ runner.os }}-cargo-
+      - name: Install Tauri system dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          # NB: no --locked here: ui/src-tauri/Cargo.lock is gitignored, so
+          # --locked would fail with "cannot create the lock file". The root
+          # workspace lock does not apply (src-tauri is excluded from it).
+      - name: Cargo test ui/src-tauri
+        run: cargo test --manifest-path ui/src-tauri/Cargo.toml -- --nocapture

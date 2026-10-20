@@ -324,6 +324,11 @@ mod tests {
         MAX_REQUEST_BYTES,
     };
     use serde_json::{json, Value};
+    use std::sync::Mutex;
+
+    // These tests mutate process-global EIRA_* env vars; serialize them so
+    // parallel test threads cannot observe each other's env changes.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn daemon_names_are_allowlisted() {
@@ -360,24 +365,26 @@ mod tests {
 
     #[test]
     fn socket_root_prefers_eira_socket_dir() {
-        std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sock-test");
-        std::env::remove_var("EIRA_RUN_DIR");
+        let _env_guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sock-test"); }
+        unsafe { std::env::remove_var("EIRA_RUN_DIR"); }
         assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-sock-test"));
-        std::env::remove_var("EIRA_SOCKET_DIR");
-        std::env::set_var("EIRA_RUN_DIR", "/tmp/eira-run-test");
+        unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
+        unsafe { std::env::set_var("EIRA_RUN_DIR", "/tmp/eira-run-test"); }
         assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-run-test"));
-        std::env::remove_var("EIRA_RUN_DIR");
+        unsafe { std::env::remove_var("EIRA_RUN_DIR"); }
         assert_eq!(socket_root(), std::path::PathBuf::from("/run/eira"));
     }
 
     #[test]
     fn socket_path_joins_daemon_sock() {
-        std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sp");
+        let _env_guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sp"); }
         assert_eq!(
             socket_path("intentd"),
             std::path::PathBuf::from("/tmp/eira-sp/intentd.sock")
         );
-        std::env::remove_var("EIRA_SOCKET_DIR");
+        unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
     }
 
     #[test]
@@ -388,6 +395,7 @@ mod tests {
     #[cfg(unix)]
     mod mock_socket {
         use super::super::{exchange, send_ipc_request, socket_path};
+        use super::ENV_LOCK;
         use serde_json::{json, Value};
         use std::path::PathBuf;
         use std::time::Duration;
@@ -625,11 +633,14 @@ mod tests {
 
         #[tokio::test]
         async fn send_ipc_request_roundtrip_via_env_socket_dir() {
+            let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
             let sock_path = dir.join("walletd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind walletd");
-            std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
-            std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "2000");
+
+            unsafe { std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str()); }
+            unsafe { std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "2000"); }
+
             let server = tokio::spawn(async move {
                 let (mut stream, _) = listener.accept().await.expect("accept");
                 let mut reader = BufReader::new(&mut stream);
@@ -658,8 +669,8 @@ mod tests {
             assert_eq!(result["status"], "ok");
             assert_eq!(result["rails"][0], "sepa_instant");
             server.await.expect("server");
-            std::env::remove_var("EIRA_SOCKET_DIR");
-            std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS");
+            unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
+            unsafe { std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS"); }
             let _ = std::fs::remove_dir_all(&dir);
         }
 
@@ -678,11 +689,13 @@ mod tests {
 
         #[tokio::test]
         async fn send_ipc_request_timeout_is_fail_closed() {
+            let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
             let sock_path = dir.join("fleetd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind");
-            std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
-            std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "150");
+            unsafe { std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str()); }
+            unsafe { std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "150"); }
+
             let server = tokio::spawn(async move {
                 let (_stream, _) = listener.accept().await.expect("accept");
                 tokio::time::sleep(Duration::from_secs(5)).await;
@@ -698,8 +711,8 @@ mod tests {
             assert_eq!(parsed["kind"], "timeout");
             assert_eq!(parsed["daemon"], "fleetd");
             server.abort();
-            std::env::remove_var("EIRA_SOCKET_DIR");
-            std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS");
+            unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
+            unsafe { std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS"); }
             let _ = std::fs::remove_dir_all(&dir);
         }
 
