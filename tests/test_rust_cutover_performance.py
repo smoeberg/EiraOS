@@ -250,3 +250,36 @@ def test_rust_rejects_integers_beyond_64_bit_fail_closed(rust_library: Path) -> 
                 rust_store.append(state)
         # The store stays consistent: nothing beyond 64-bit was persisted.
         assert rust_store.count() == 0
+
+
+def test_bit_identical_sha3_hashes_python_vs_rust(rust_library: Path) -> None:
+    """Same states through Python and Rust paths → bit-identical SHA3-256 digests.
+
+    Hard gate for docs/EIRA_Sprint8_Cutover_Checklist.md full cutover clearance.
+    """
+    states = _chain(25)
+    # Extra edge vectors: empty payload keys, unicode, large timestamp, null parent.
+    states.append(
+        State(
+            version=100,
+            timestamp_ns=9_007_199_254_740_991,
+            type="UnicodeState",
+            payload={"note": "æøå — 漢字", "nested": {"a": 1, "b": [True, False, None]}},
+            previous_state_id=states[-1].id,
+        )
+    )
+    python_store = StateStore(":memory:")
+    with RustStateStore(":memory:", rust_library) as rust_store:
+        for state in states:
+            python_store.append(state)
+            rust_store.append(state)
+            # Bit-identical: full 64-char lowercase hex, not a prefix.
+            rust_row = rust_store.get_by_hash(state.hash)
+            assert rust_row is not None, f"Rust store missing hash {state.hash}"
+            assert rust_row.hash == state.hash
+            assert len(state.hash) == 64
+            assert state.hash == state.compute_hash()
+            assert rust_row.hash == rust_row.compute_hash()
+        python_hashes = [s.hash for s in python_store.list_states()]
+        rust_hashes = [s.hash for s in rust_store.list_states()]
+        assert python_hashes == rust_hashes
