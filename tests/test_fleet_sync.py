@@ -270,3 +270,30 @@ def test_unauthorized_push_never_touches_store() -> None:
         service.push_blocks({"device_id": "device-x", "auth_token": "tok",
                              "blocks": [service.encryptor.encrypt_state(s1)]})
     assert service.store.count() == 0
+
+
+# Audit finding 1 (Major): a batch containing any invalid block must be
+# rejected in its entirety — no partial inserts, and the response must
+# report the number of invalid blocks. The current implementation applies
+# the valid subset, so this contract test is expected to fail until
+# Agent 9 lands the fix in app/daemons/fleetd.py (see fix plan).
+@pytest.mark.xfail(reason="push_blocks applies partial inserts; reject-all fix is Agent 9's task")
+def test_mixed_batch_is_rejected_in_full() -> None:
+    service, _, encryptor = make_service()
+    good = signed_state()
+    forged = signed_state()
+    forged.hash = "0" * 64  # hash does not match payload -> integrity failure
+
+    result = service.push_blocks({
+        "device_id": "device-a",
+        "auth_token": "tok",
+        "blocks": [
+            encryptor.encrypt_state(good),
+            encryptor.encrypt_state(forged),
+        ],
+    })
+
+    # Contract: one bad block poisons the whole batch.
+    assert result["accepted"] == 0
+    assert result["invalid"] == 1
+    assert service.store.count() == 0
