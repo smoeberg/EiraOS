@@ -1,4 +1,4 @@
-# Sprint 7 Summary — Spatial Canvas UI, Situation UI og Tauri v2 Desktop App Shell (v0.6.0, WIP)
+# Sprint 7 Summary — Spatial Canvas UI, Situation UI og Tauri v2 Desktop App Shell (v0.7.0)
 
 Sprint 7 (uge 13–14) forbinder React-grænsefladen til dæmonernes Unix Domain Sockets via en
 Tauri v2 Desktop App Shell og bygger den spatial-brugergrænseflade, som de tidligere sprints'
@@ -61,7 +61,7 @@ daemons og state-lag blev bygget til at betjene. Leverancen kom ind via to PR'er
 - Rust: `ui/src-tauri/` bygger med Tauri v2; `crates/eira-ipc` og `crates/eira-stated`
   (fra Sprint 8-forberedelsen i samme commit) dækker delte kontrakter.
 
-## Udestående før v0.6.0 kan markeres som release
+## Tag-beslutning (lukket)
 
 1. Merge af resterende åbne Sprint 6–7-PR'er (#86 Spatial Canvas accessibility, #87 Android
    Background Sync Service).
