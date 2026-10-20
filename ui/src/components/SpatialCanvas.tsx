@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent,
 } from "react";
@@ -231,7 +232,7 @@ export function SpatialCanvas({
     setZoom(1);
   }
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     switch (event.key) {
       case "ArrowLeft":
         event.preventDefault();
@@ -283,7 +284,11 @@ export function SpatialCanvas({
           >
             −
           </button>
-          <output aria-label="Zoomniveau" aria-live="polite" style={{ color: "#f4f6f8" }}>
+          <output
+            aria-label="Zoomniveau"
+            aria-live="polite"
+            style={{ color: "#f4f6f8" }}
+          >
             {Math.round(zoom * 100)}%
           </output>
           <button
@@ -367,23 +372,37 @@ export function SpatialCanvas({
               type="button"
               key={node.id}
               className={`canvas-node${selectedId === node.id ? " canvas-node--selected" : ""}`}
-              style={{ left: node.x, top: node.y, transition: reducedMotion ? "none" : undefined }}
+              style={{
+                left: node.x,
+                top: node.y,
+                transition: reducedMotion ? "none" : undefined,
+              }}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => select(node)}
               aria-pressed={selectedId === node.id}
               data-testid={`canvas-node-${node.id}`}
             >
-              <span className="node-type" style={{ color: "#9fc5ff" }}>{node.type}</span>
+              <span className="node-type" style={{ color: "#9fc5ff" }}>
+                {node.type}
+              </span>
               <strong style={{ color: "#f4f6f8" }}>{node.label}</strong>
               <span className="node-meta" style={{ color: "#b8c7d9" }}>
-                {node.state ? `v${node.state.version} · ${node.state.hash.slice(0, 8)}` : "Grafobjekt"}
+                {node.state
+                  ? `v${node.state.version} · ${node.state.hash.slice(0, 8)}`
+                  : "Grafobjekt"}
               </span>
             </button>
           ))}
         </div>
-        {loading && <p className="canvas-status" style={{ color: "#dbe7f5" }}>Indlæser tilstande…</p>}
+        {loading && (
+          <p className="canvas-status" style={{ color: "#dbe7f5" }}>
+            Indlæser tilstande…
+          </p>
+        )}
         {!loading && snapshot.nodes.length === 0 && !error && (
-          <p className="canvas-status" style={{ color: "#dbe7f5" }}>Ingen tilstande endnu.</p>
+          <p className="canvas-status" style={{ color: "#dbe7f5" }}>
+            Ingen tilstande endnu.
+          </p>
         )}
         {error && (
           <p className="canvas-status canvas-status--error" style={{ color: "#ffb4ab" }}>
