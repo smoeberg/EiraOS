@@ -115,41 +115,63 @@ class FleetSyncService:
                 "root": snapshot.root,
             }
 
-        accepted = 0
+        existing_states = self.store.list_states()
+        existing_by_id = {state.id: state for state in existing_states}
+        existing_hashes = {state.hash for state in existing_states}
+        batch_by_id = {}
+        candidates = []
         skipped = 0
-        while pending:
-            progress = False
-            for state in tuple(pending):
-                current = self.store.get_by_hash(state.hash)
-                if current is not None:
-                    pending.remove(state)
-                    skipped += 1
-                    progress = True
-                    continue
-                same_id = self.store.get_by_id(state.id)
-                if same_id is not None and same_id.hash != state.hash:
-                    pending.remove(state)
+        for state in pending:
+            if state.hash in existing_hashes:
+                skipped += 1
+                continue
+            previous = batch_by_id.get(state.id)
+            if previous is not None:
+                if previous.hash != state.hash:
                     invalid += 1
-                    progress = True
+                    break
+                skipped += 1
+                continue
+            existing = existing_by_id.get(state.id)
+            if existing is not None and existing.hash != state.hash:
+                invalid += 1
+                break
+            batch_by_id[state.id] = state
+            candidates.append(state)
+
+        ordered = []
+        available_ids = set(existing_by_id)
+        unresolved = list(candidates)
+        while unresolved and not invalid:
+            progressed = False
+            for state in tuple(unresolved):
+                parent_id = state.previous_state_id
+                if parent_id is not None and parent_id not in available_ids:
                     continue
-                if (
-                    state.previous_state_id is not None
-                    and self.store.get_by_id(state.previous_state_id) is None
-                ):
-                    continue
-                self.store.append(state)
-                pending.remove(state)
-                accepted += 1
-                progress = True
-            if not progress:
-                invalid += len(pending)
+                ordered.append(state)
+                available_ids.add(state.id)
+                unresolved.remove(state)
+                progressed = True
+            if not progressed:
+                invalid += len(unresolved)
                 break
 
+        if invalid:
+            snapshot = self.merkle.snapshot(existing_states)
+            return {
+                "accepted": 0,
+                "skipped": 0,
+                "invalid": invalid,
+                "root": snapshot.root,
+            }
+
+        for state in ordered:
+            self.store.append(state)
         snapshot = self.merkle.snapshot(self.store.list_states())
         return {
-            "accepted": accepted,
+            "accepted": len(ordered),
             "skipped": skipped,
-            "invalid": invalid,
+            "invalid": 0,
             "root": snapshot.root,
         }
 
