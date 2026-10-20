@@ -7,17 +7,18 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent,
 } from "react";
+import React from "react";
 import { ipcErrorMessage, sendIpcRequest } from "../lib/ipc";
-
-export interface StateRecord {
-  id: string;
-  version: number;
-  timestamp_ns: number;
-  type: string;
-  payload: Record<string, unknown>;
-  previous_state_id: string | null;
-  hash: string;
-}
+import {
+  filterVisibleNodes,
+  createGridSnapshot,
+  updateLayoutIncrementally,
+  DEFAULT_GRID_CONFIG,
+  type Viewport,
+  type CanvasNode,
+  type CanvasEdge,
+  type StateRecord,
+} from "../lib/canvasLayout";
 
 export interface ProposalRecord {
   proposal_id: string;
@@ -25,23 +26,6 @@ export interface ProposalRecord {
   candidate_state: StateRecord;
   confidence_score: number;
   rationale: string;
-}
-
-export interface CanvasNode {
-  id: string;
-  label: string;
-  type: string;
-  x: number;
-  y: number;
-  trust_score?: number;
-  state?: StateRecord;
-}
-
-interface CanvasEdge {
-  id: string;
-  source: string;
-  target: string;
-  relation: string;
 }
 
 interface StateListResult {
@@ -60,35 +44,165 @@ interface SpatialCanvasProps {
   onProposals?: (proposals: ProposalRecord[]) => void;
 }
 
-function labelForState(state: StateRecord): string {
-  const title = state.payload.title ?? state.payload.name ?? state.payload.label;
-  return typeof title === "string" && title.trim() ? title : state.type;
-}
-
-function fallbackSnapshot(states: StateRecord[]): GraphSnapshot {
-  const nodes = states.map((state, index) => ({
-    id: state.id,
-    label: labelForState(state),
-    type: state.type,
-    x: 120 + (index % 4) * 300,
-    y: 100 + Math.floor(index / 4) * 220,
-    state,
-  }));
-  const edges = states.flatMap((state) =>
-    state.previous_state_id
-      ? [
-          {
-            id: `${state.previous_state_id}:${state.id}`,
-            source: state.previous_state_id,
-            target: state.id,
-            relation: "previous",
-          },
-        ]
-      : [],
+/**
+ * Memoized node component to prevent unnecessary re-renders.
+ * Only re-renders when props change.
+ */
+const CanvasNodeComponent = React.memo(function CanvasNodeComponent({
+  node,
+  isSelected,
+  onClick,
+  onPointerDown,
+}: {
+  node: CanvasNode;
+  isSelected: boolean;
+  onClick: () => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`canvas-node${isSelected ? " canvas-node--selected" : ""}`}
+      style={{ left: node.x, top: node.y }}
+      onPointerDown={onPointerDown}
+      onClick={onClick}
+      aria-pressed={isSelected}
+      data-testid={`canvas-node-${node.id}`}
+    >
+      <span className="node-type">{node.type}</span>
+      <strong>{node.label}</strong>
+      <span className="node-meta">
+        {node.state ? `v${node.state.version} 3 ${node.state.hash.slice(0, 8)}` : "Grafobjekt"}
+      </span>
+    </button>
   );
-  return { nodes, edges };
+});
+
+CanvasNodeComponent.displayName = "CanvasNodeComponent";
+
+/**
+ * Memoized edge component to prevent unnecessary re-renders.
+ */
+const CanvasEdgeComponent = React.memo(function CanvasEdgeComponent({
+  edge,
+  sourceNode,
+  targetNode,
+}: {
+  edge: CanvasEdge;
+  sourceNode: CanvasNode | null;
+  targetNode: CanvasNode | null;
+}) {
+  if (!sourceNode || !targetNode) return null;
+
+  return (
+    <g key={edge.id}>
+      <line
+        x1={sourceNode.x + 92}
+        y1={sourceNode.y + 42}
+        x2={targetNode.x + 92}
+        y2={targetNode.y + 42}
+      />
+      <text
+        x={(sourceNode.x + targetNode.x) / 2 + 92}
+        y={(sourceNode.y + targetNode.y) / 2 + 34}
+      >
+        {edge.relation}
+      </text>
+    </g>
+  );
+});
+
+CanvasEdgeComponent.displayName = "CanvasEdgeComponent";
+
+/**
+ * Memoized SVG edges container to prevent re-rendering when nodes don't change.
+ */
+const CanvasEdgesContainer = React.memo(function CanvasEdgesContainer({
+  edges,
+  nodeById,
+}: {
+  edges: CanvasEdge[];
+  nodeById: Map<string, CanvasNode>;
+}) {
+  return (
+    <svg className="canvas-edges" width="1600" height="1000" aria-hidden="true">
+      {edges.map((edge) => (
+        <CanvasEdgeComponent
+          key={edge.id}
+          edge={edge}
+          sourceNode={nodeById.get(edge.source) || null}
+          targetNode={nodeById.get(edge.target) || null}
+        />
+      ))}
+    </svg>
+  );
+});
+
+CanvasEdgesContainer.displayName = "CanvasEdgesContainer";
+
+/**
+ * Memoized nodes container with virtualization support.
+ * Only renders nodes that are visible in the viewport.
+ */
+const CanvasNodesContainer = React.memo(function CanvasNodesContainer({
+  nodes,
+  selectedId,
+  viewport,
+  onNodeClick,
+  onNodePointerDown,
+}: {
+  nodes: CanvasNode[];
+  selectedId: string | null;
+  viewport: Viewport;
+  onNodeClick: (node: CanvasNode) => void;
+  onNodePointerDown: (event: ReactPointerEvent<HTMLButtonElement>, node: CanvasNode) => void;
+}) {
+  // Filter nodes to only visible ones (virtualization)
+  const visibleNodes = useMemo(
+    () => filterVisibleNodes(nodes, viewport, 280, 180),
+    [nodes, viewport.x, viewport.y, viewport.width, viewport.height, viewport.zoom],
+  );
+
+  const handleClick = useCallback(
+    (n: CanvasNode) => () => onNodeClick(n),
+    [onNodeClick],
+  );
+
+  const handlePointerDown = useCallback(
+    (n: CanvasNode) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      onNodePointerDown(event, n);
+    },
+    [onNodePointerDown],
+  );
+
+  return (
+    <>
+      {visibleNodes.map((n) => (
+        <CanvasNodeComponent
+          key={n.id}
+          node={n}
+          isSelected={selectedId === n.id}
+          onClick={handleClick(n)}
+          onPointerDown={handlePointerDown(n)}
+        />
+      ))}
+    </>
+  );
+});
+
+CanvasNodesContainer.displayName = "CanvasNodesContainer";
+
+/**
+ * Create fallback snapshot using grid layout
+ */
+function fallbackSnapshot(states: StateRecord[]): GraphSnapshot {
+  return createGridSnapshot(states, DEFAULT_GRID_CONFIG);
 }
 
+/**
+ * Convert states to proposals
+ */
 function proposalsFrom(states: StateRecord[]): ProposalRecord[] {
   return states.flatMap((state) => {
     if (state.type !== "ProposalState") return [];
@@ -119,6 +233,22 @@ export function SpatialCanvas({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
 
+  // Memoize viewport for virtualization
+  const viewport = useMemo<Viewport>(() => ({
+    x: pan.x,
+    y: pan.y,
+    width: window.innerWidth || 800,
+    height: window.innerHeight || 600,
+    zoom,
+  }), [pan.x, pan.y, zoom]);
+
+  // Memoize nodeById map to prevent recreation on every render
+  const nodeById = useMemo(
+    () => new Map(snapshot.nodes.map((node) => [node.id, node])),
+    [snapshot.nodes],
+  );
+
+  // Stable callback for refresh
   const refresh = useCallback(async () => {
     const [statesResult, graphResult] = await Promise.allSettled([
       sendIpcRequest<StateListResult>("stated", "state.list", { limit: 2_000 }),
@@ -135,18 +265,25 @@ export function SpatialCanvas({
     const fallback = fallbackSnapshot(states);
     const graph = graphResult.status === "fulfilled" ? graphResult.value : fallback;
     const stateById = new Map(states.map((state) => [state.id, state]));
+    
+    // Incrementally update layout - only compute positions for new nodes
     const merged = {
-      nodes: graph.nodes.map((node) => ({
-        ...node,
-        state: node.state ?? stateById.get(node.id),
+      nodes: updateLayoutIncrementally(
+        snapshot.nodes,
+        states,
+        DEFAULT_GRID_CONFIG,
+      ).map((n) => ({
+        ...n,
+        state: n.state ?? stateById.get(n.id),
       })),
       edges: graph.edges,
     };
+    
     setSnapshot(merged.nodes.length || graph.edges.length ? merged : fallback);
     onProposals?.(proposalsFrom(states));
     setError(null);
     setLoading(false);
-  }, [onProposals]);
+  }, [snapshot.nodes, onProposals]);
 
   useEffect(() => {
     let active = true;
@@ -166,53 +303,72 @@ export function SpatialCanvas({
     };
   }, [pollIntervalMs, refresh]);
 
-  const nodeById = useMemo(
-    () => new Map(snapshot.nodes.map((node) => [node.id, node])),
-    [snapshot.nodes],
+  // Memoized handlers for pan and zoom
+  const onWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setZoom((current) =>
+        Math.min(2.4, Math.max(0.45, current * (event.deltaY > 0 ? 0.9 : 1.1))),
+      );
+    },
+    [],
   );
 
-  function select(node: CanvasNode) {
-    setSelectedId(node.id);
-    onSelect?.(node);
-  }
+  const startPan = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      dragOrigin.current = { x: event.clientX, y: event.clientY };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    [],
+  );
 
-  function onWheel(event: WheelEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setZoom((current) =>
-      Math.min(2.4, Math.max(0.45, current * (event.deltaY > 0 ? 0.9 : 1.1))),
-    );
-  }
+  const movePan = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const previous = dragOrigin.current;
+      if (!previous) return;
+      setPan((current) => ({
+        x: current.x + event.clientX - previous.x,
+        y: current.y + event.clientY - previous.y,
+      }));
+      dragOrigin.current = { x: event.clientX, y: event.clientY };
+    },
+    [],
+  );
 
-  function startPan(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    dragOrigin.current = { x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  }
+  const stopPan = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      dragOrigin.current = null;
+      if (
+        typeof event.currentTarget.hasPointerCapture === "function" &&
+        event.currentTarget.hasPointerCapture(event.pointerId)
+      ) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    [],
+  );
 
-  function movePan(event: ReactPointerEvent<HTMLDivElement>) {
-    const previous = dragOrigin.current;
-    if (!previous) return;
-    setPan((current) => ({
-      x: current.x + event.clientX - previous.x,
-      y: current.y + event.clientY - previous.y,
-    }));
-    dragOrigin.current = { x: event.clientX, y: event.clientY };
-  }
-
-  function stopPan(event: ReactPointerEvent<HTMLDivElement>) {
-    dragOrigin.current = null;
-    if (
-      typeof event.currentTarget.hasPointerCapture === "function" &&
-      event.currentTarget.hasPointerCapture(event.pointerId)
-    ) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }
-
-  function resetView() {
+  const resetView = useCallback(() => {
     setPan({ x: 0, y: 0 });
     setZoom(1);
-  }
+  }, []);
+
+  // Memoized handler for node selection
+  const handleNodeClick = useCallback(
+    (n: CanvasNode) => {
+      setSelectedId(n.id);
+      onSelect?.(n);
+    },
+    [onSelect],
+  );
+
+  const handleNodePointerDown = useCallback(
+    (_event: ReactPointerEvent<HTMLButtonElement>, _n: CanvasNode) => {
+      _event.stopPropagation();
+    },
+    [],
+  );
 
   return (
     <section className="canvas-panel" aria-label="Spatial Canvas workspace">
@@ -221,9 +377,9 @@ export function SpatialCanvas({
           <span className="eyebrow">Levende tilstandsgraf</span>
           <h2>Spatial Canvas</h2>
         </div>
-        <div className="canvas-tools" aria-label="Canvasværktøjer">
+        <div className="canvas-tools" aria-label="Canvasvrktojer">
           <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value - 0.15))}>
-            −
+            
           </button>
           <output aria-label="Zoomniveau">{Math.round(zoom * 100)}%</output>
           <button type="button" onClick={() => setZoom((value) => Math.min(2.4, value + 0.15))}>
@@ -247,49 +403,17 @@ export function SpatialCanvas({
           className="canvas-scene"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
         >
-          <svg className="canvas-edges" width="1600" height="1000" aria-hidden="true">
-            {snapshot.edges.map((edge) => {
-              const source = nodeById.get(edge.source);
-              const target = nodeById.get(edge.target);
-              if (!source || !target) return null;
-              return (
-                <g key={edge.id}>
-                  <line
-                    x1={source.x + 92}
-                    y1={source.y + 42}
-                    x2={target.x + 92}
-                    y2={target.y + 42}
-                  />
-                  <text
-                    x={(source.x + target.x) / 2 + 92}
-                    y={(source.y + target.y) / 2 + 34}
-                  >
-                    {edge.relation}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-          {snapshot.nodes.map((node) => (
-            <button
-              type="button"
-              key={node.id}
-              className={`canvas-node${selectedId === node.id ? " canvas-node--selected" : ""}`}
-              style={{ left: node.x, top: node.y }}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => select(node)}
-              aria-pressed={selectedId === node.id}
-              data-testid={`canvas-node-${node.id}`}
-            >
-              <span className="node-type">{node.type}</span>
-              <strong>{node.label}</strong>
-              <span className="node-meta">
-                {node.state ? `v${node.state.version} · ${node.state.hash.slice(0, 8)}` : "Grafobjekt"}
-              </span>
-            </button>
-          ))}
+          <CanvasEdgesContainer edges={snapshot.edges} nodeById={nodeById} />
+          
+          <CanvasNodesContainer
+            nodes={snapshot.nodes}
+            selectedId={selectedId}
+            viewport={viewport}
+            onNodeClick={handleNodeClick}
+            onNodePointerDown={handleNodePointerDown}
+          />
         </div>
-        {loading && <p className="canvas-status">Indlæser tilstande…</p>}
+        {loading && <p className="canvas-status">Indlser tilstande</p>}
         {!loading && snapshot.nodes.length === 0 && !error && (
           <p className="canvas-status">Ingen tilstande endnu.</p>
         )}
@@ -298,3 +422,6 @@ export function SpatialCanvas({
     </section>
   );
 }
+
+// Re-export types from canvasLayout for App.tsx
+export type { CanvasNode, CanvasEdge, StateRecord };
