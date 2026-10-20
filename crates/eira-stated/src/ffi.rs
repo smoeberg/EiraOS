@@ -4,6 +4,7 @@ use std::ffi::{CStr, CString, c_char};
 use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 const EIRA_OK: i32 = 0;
@@ -31,6 +32,7 @@ unsafe fn read_input(input: *const c_char) -> Result<String, String> {
 }
 
 static HANDLES: OnceLock<Mutex<HashMap<usize, Arc<StateStore>>>> = OnceLock::new();
+static NEXT_HANDLE: AtomicUsize = AtomicUsize::new(1);
 static STRINGS: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
 
 fn handles() -> &'static Mutex<HashMap<usize, Arc<StateStore>>> {
@@ -42,10 +44,15 @@ fn strings() -> &'static Mutex<HashSet<usize>> {
 }
 
 fn register_store(store: StateStore) -> *mut StateStore {
-    let token = Box::into_raw(Box::new(0_u8));
+    // Integer tokens are never dereferenced, and monotonically increasing IDs
+    // prevent a closed handle from becoming valid again through allocator reuse.
+    let token = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
+    if token == 0 {
+        return ptr::null_mut();
+    }
     handles().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
-        .insert(token as usize, Arc::new(store));
-    token.cast()
+        .insert(token, Arc::new(store));
+    token as *mut StateStore
 }
 
 fn store_from_handle(handle: *mut StateStore) -> Result<Arc<StateStore>, String> {
@@ -95,14 +102,9 @@ pub unsafe extern "C" fn eira_stated_close(handle: *mut StateStore) {
     // Never allow a Rust panic to unwind across the C ABI, including drop.
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if handle.is_null() { return; }
-        let removed = handles().lock()
+        handles().lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(&(handle as usize));
-        if removed.is_some() {
-            // Only registered tokens are reconstructed; arbitrary and repeated
-            // closes are ignored without dereferencing an untrusted pointer.
-            drop(unsafe { Box::from_raw(handle.cast::<u8>()) });
-        }
     }));
 }
 
