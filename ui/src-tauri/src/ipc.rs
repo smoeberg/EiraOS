@@ -425,11 +425,11 @@ mod tests {
                 let listener = UnixListener::bind(&server_path).expect("bind after first attempt");
                 serve_one_response(
                     listener,
-                    "{\\"jsonrpc\\":\\"2.0\\",\\"id\\":11,\\"result\\":{\\"ok\\":true}}\\n".to_owned(),
+                    "{\"jsonrpc\":\"2.0\",\"id\":11,\"result\":{\"ok\":true}}\n".to_owned(),
                 ).await;
             });
 
-            let request = b"{\\"jsonrpc\\":\\"2.0\\",\\"id\\":11,\\"method\\":\\"health\\",\\"params\\":{}}\\n";
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"health\",\"params\":{}}\n";
             let result = exchange_with_retry(
                 &sock, "intentd", "health", 11, request, Duration::from_secs(2),
             ).await.expect("retry should connect");
@@ -444,7 +444,7 @@ mod tests {
 
             let dir = short_temp_dir();
             let sock = dir.join("missing.sock");
-            let request = b"{\\"jsonrpc\\":\\"2.0\\",\\"id\\":12,\\"method\\":\\"health\\",\\"params\\":{}}\\n";
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"health\",\"params\":{}}\n";
             let err = exchange_with_retry(
                 &sock, "intentd", "health", 12, request, Duration::from_secs(1),
             ).await.expect_err("missing socket exhausts retries");
@@ -470,10 +470,10 @@ mod tests {
                 let mut reader = BufReader::new(&mut stream);
                 let mut request = String::new();
                 reader.read_line(&mut request).await.expect("read request");
-                stream.write_all(b"not-json\\n").await.expect("write invalid response");
+                stream.write_all(b"not-json\n").await.expect("write invalid response");
             });
 
-            let request = b"{\\"jsonrpc\\":\\"2.0\\",\\"id\\":13,\\"method\\":\\"health\\",\\"params\\":{}}\\n";
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"health\",\"params\":{}}\n";
             let err = exchange_with_retry(
                 &sock, "intentd", "health", 13, request, Duration::from_secs(2),
             ).await.expect_err("protocol error is final");
