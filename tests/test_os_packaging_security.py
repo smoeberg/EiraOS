@@ -83,7 +83,7 @@ def test_production_daemon_policy_matches_runtime_and_package() -> None:
     assert profile_names == set(production)
 
     target = (REPO_ROOT / "systemd" / "eira.target").read_text(encoding="utf-8")
-    target_services = set(re.findall(r"\\beira-([a-z]+)\\.service\\b", target))
+    target_services = set(re.findall(r"\beira-([a-z]+)\.service\b", target))
     assert target_services == set(production)
 
     rules = (REPO_ROOT / "packaging" / "debian" / "rules").read_text(encoding="utf-8")
