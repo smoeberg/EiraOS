@@ -59,6 +59,40 @@ interface MerkleSyncEngine {
     fun reconcile(local: List<SyncStateHeader>, remote: List<SyncStateHeader>): SyncForkResolution
 }
 interface StatePayloadEncryptor { fun encrypt_state(state: StateEntity): JSONObject; fun decrypt_state(envelope: JSONObject): StateEntity }
+class CanonicalMerkleSyncEngine : MerkleSyncEngine {
+    override fun snapshot(values: List<SyncStateHeader>): SyncMerkleSnapshot {
+        val byId = linkedMapOf<String, SyncStateHeader>(); val byHash = linkedMapOf<String, SyncStateHeader>()
+        values.forEach { h ->
+            require(h.id.isNotBlank() && h.hash.matches(Regex("^[0-9a-f]{64}$")) && h.version >= 1 && h.timestampNs >= 0) { "invalid_state_header" }
+            require(byHash[h.hash]?.let { it == h } != false) { "conflicting_metadata_for_state_hash" }
+            require(byId[h.id]?.let { it.hash == h.hash } != false) { "conflicting_immutable_state_id:" + h.id }
+            byHash[h.hash] = h; byId[h.id] = h
+        }
+        val headers = byHash.values.sortedWith(compareBy<SyncStateHeader>({ it.timestampNs }, { it.id }, { it.hash }))
+        val completed = mutableSetOf<String>()
+        byId.keys.forEach { start -> val path = mutableSetOf<String>(); var current: String? = start; while (current != null && byId.containsKey(current)) { if (current in completed) break; require(path.add(current)) { "state_dag_cycle_detected" }; current = byId.getValue(current).previousStateId }; completed.addAll(path) }
+        val referenced = headers.mapNotNull { it.previousStateId }.toSet(); val heads = headers.filter { it.id !in referenced }.map { it.id }.sorted()
+        val cache = mutableMapOf<String, String>()
+        fun commitment(h: SyncStateHeader, active: MutableSet<String>): String {
+            cache[h.hash]?.let { return it }; require(active.add(h.id)) { "state_dag_cycle_detected" }
+            val parent = when { h.previousStateId == null -> "root"; !byId.containsKey(h.previousStateId) -> "missing:" + h.previousStateId; else -> commitment(byId.getValue(h.previousStateId), active) }; active.remove(h.id)
+            val material = JSONObject().put("hash", h.hash).put("parent", parent).toString().toByteArray(StandardCharsets.UTF_8)
+            val bytes = MessageDigest.getInstance("SHA3-256").digest("eira-merkle-node-v1\u0000".toByteArray(StandardCharsets.UTF_8) + material)
+            return bytes.hex().also { cache[h.hash] = it }
+        }
+        val root = if (headers.isEmpty()) digest("eira-merkle-dag-v1\u0000".toByteArray(StandardCharsets.UTF_8)) else digest("eira-merkle-dag-v1\u0000".toByteArray(StandardCharsets.UTF_8) + heads.map { commitment(byId.getValue(it), mutableSetOf()) }.sorted().joinToString("\n").toByteArray(StandardCharsets.US_ASCII))
+        return SyncMerkleSnapshot(root, headers, heads)
+    }
+    override fun diff(local: List<SyncStateHeader>, remote: List<SyncStateHeader>): SyncDiff { val l = snapshot(local); val r = snapshot(remote); val lh = l.headers.map { it.hash }.toSet(); val rh = r.headers.map { it.hash }.toSet(); return SyncDiff(l.root, r.root, r.headers.filter { it.hash !in lh }.map { it.hash }, l.headers.filter { it.hash !in rh }.map { it.hash }) }
+    override fun reconcile(local: List<SyncStateHeader>, remote: List<SyncStateHeader>): SyncForkResolution {
+        val all = (local + remote).distinctBy { it.hash }.sortedWith(compareBy<SyncStateHeader>({ it.timestampNs }, { it.id }, { it.hash }))
+        val conflicts = all.groupBy { it.id }.filterValues { it.map { h -> h.hash }.distinct().size > 1 }.keys.sorted()
+        if (conflicts.isNotEmpty()) { val material = all.joinToString("\n") { it.id + ":" + it.hash + ":" + (it.previousStateId ?: "") }.toByteArray(StandardCharsets.UTF_8); val root = digest("eira-merkle-conflict-v1\u0000".toByteArray(StandardCharsets.UTF_8) + material); val refs = all.mapNotNull { it.previousStateId }.toSet(); return SyncForkResolution(SyncMerkleSnapshot(root, all, all.filter { it.id !in refs }.map { it.id }.distinct().sorted()), null, conflicts) }
+        val snap = snapshot(all); val forks = if (snap.heads.size > 1) snap.heads else emptyList(); return SyncForkResolution(snap, if (forks.isEmpty()) snap.heads.firstOrNull() else null, forks)
+    }
+    private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA3-256").digest(bytes).hex()
+    private fun ByteArray.hex() = joinToString("") { "%02x".format(Locale.ROOT, it) }
+}
 data class SyncConfiguration(
     val serverUrl: String,
     val deviceId: String,
