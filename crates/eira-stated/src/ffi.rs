@@ -1,8 +1,10 @@
 use crate::{StateRecord, StateStore};
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_char};
+use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
+use std::sync::{Arc, Mutex, OnceLock};
 
 const EIRA_OK: i32 = 0;
 const EIRA_INVALID_ARGUMENT: i32 = -1;
@@ -28,14 +30,37 @@ unsafe fn read_input(input: *const c_char) -> Result<String, String> {
         .map_err(|error| error.to_string())
 }
 
-unsafe fn store_from_handle<'a>(handle: *mut StateStore) -> Result<&'a StateStore, String> {
-    // SAFETY: the caller owns a handle returned by eira_stated_open and keeps it
-    // alive for this call.
-    unsafe { handle.as_ref() }.ok_or_else(|| "state-store handle is null".to_owned())
+static HANDLES: OnceLock<Mutex<HashMap<usize, Arc<StateStore>>>> = OnceLock::new();
+static STRINGS: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
+
+fn handles() -> &'static Mutex<HashMap<usize, Arc<StateStore>>> {
+    HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn strings() -> &'static Mutex<HashSet<usize>> {
+    STRINGS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn register_store(store: StateStore) -> *mut StateStore {
+    let token = Box::into_raw(Box::new(0_u8));
+    handles().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(token as usize, Arc::new(store));
+    token.cast()
+}
+
+fn store_from_handle(handle: *mut StateStore) -> Result<Arc<StateStore>, String> {
+    if handle.is_null() { return Err("state-store handle is null".to_owned()); }
+    handles().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&(handle as usize)).cloned()
+        .ok_or_else(|| "state-store handle is invalid or closed".to_owned())
 }
 
 fn owned_string(value: String) -> *mut c_char {
-    CString::new(value).map_or(ptr::null_mut(), CString::into_raw)
+    let Ok(value) = CString::new(value) else { return ptr::null_mut(); };
+    let pointer = value.into_raw();
+    strings().lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(pointer as usize);
+    pointer
 }
 
 /// Opens a pooled Rust state store. The returned handle must be closed once.
@@ -49,7 +74,7 @@ pub unsafe extern "C" fn eira_stated_open(db_path: *const c_char) -> *mut StateS
         let path = unsafe { read_input(db_path) }?;
         StateStore::open(path).map_err(|error| error.to_string())
     })) {
-        Ok(Ok(store)) => Box::into_raw(Box::new(store)),
+        Ok(Ok(store)) => register_store(store),
         Ok(Err(error)) => {
             set_error(error);
             ptr::null_mut()
@@ -69,10 +94,14 @@ pub unsafe extern "C" fn eira_stated_open(db_path: *const c_char) -> *mut StateS
 pub unsafe extern "C" fn eira_stated_close(handle: *mut StateStore) {
     // Never allow a Rust panic to unwind across the C ABI, including drop.
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        if !handle.is_null() {
-            // SAFETY: the caller must pass a live, not-yet-closed handle returned
-            // by eira_stated_open. Null is explicitly accepted.
-            drop(unsafe { Box::from_raw(handle) });
+        if handle.is_null() { return; }
+        let removed = handles().lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&(handle as usize));
+        if removed.is_some() {
+            // Only registered tokens are reconstructed; arbitrary and repeated
+            // closes are ignored without dereferencing an untrusted pointer.
+            drop(unsafe { Box::from_raw(handle.cast::<u8>()) });
         }
     }));
 }
@@ -88,7 +117,7 @@ pub unsafe extern "C" fn eira_stated_append_json(
 ) -> i32 {
     match catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: this function's caller upholds both pointer contracts.
-        let store = unsafe { store_from_handle(handle) }?;
+        let store = store_from_handle(handle)?;
         // SAFETY: this function's caller upholds both pointer contracts.
         let input = unsafe { read_input(state_json) }?;
         let state: StateRecord = serde_json::from_str(&input).map_err(|error| error.to_string())?;
@@ -113,7 +142,7 @@ unsafe fn get_state_json(
 ) -> *mut c_char {
     match catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: the outer FFI function's caller upholds both contracts.
-        let store = unsafe { store_from_handle(handle) }?;
+        let store = store_from_handle(handle)?;
         // SAFETY: the outer FFI function's caller upholds both contracts.
         let key = unsafe { read_input(key) }?;
         let value = if by_hash {
@@ -170,7 +199,7 @@ pub unsafe extern "C" fn eira_stated_get_by_hash_json(
 pub unsafe extern "C" fn eira_stated_list_json(handle: *mut StateStore) -> *mut c_char {
     match catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: this function's caller upholds the pointer contract.
-        let store = unsafe { store_from_handle(handle) }?;
+        let store = store_from_handle(handle)?;
         let states = store.list_states().map_err(|error| error.to_string())?;
         serde_json::to_string(&states).map_err(|error| error.to_string())
     })) {
@@ -194,7 +223,7 @@ pub unsafe extern "C" fn eira_stated_list_json(handle: *mut StateStore) -> *mut 
 pub unsafe extern "C" fn eira_stated_count(handle: *mut StateStore) -> i64 {
     match catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: this function's caller upholds the pointer contract.
-        unsafe { store_from_handle(handle) }?
+        store_from_handle(handle)?
             .count()
             .map_err(|error| error.to_string())
     })) {
@@ -230,8 +259,12 @@ pub unsafe extern "C" fn eira_stated_free_string(pointer: *mut c_char) {
     // The pointer must still be null or allocated by this library; catch_unwind
     // cannot make an arbitrary or already-freed pointer safe to dereference.
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        if !pointer.is_null() {
-            // SAFETY: this function's caller upholds the allocation contract.
+        if pointer.is_null() { return; }
+        let registered = strings().lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&(pointer as usize));
+        if registered {
+            // Only pointers allocated by owned_string reach CString::from_raw.
             drop(unsafe { CString::from_raw(pointer) });
         }
     }));
