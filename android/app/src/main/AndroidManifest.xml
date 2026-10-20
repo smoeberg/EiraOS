@@ -3,5 +3,9 @@
     <application
         android:allowBackup="false"
         android:label="EiraOS"
-        android:supportsRtl="true" />
+        android:supportsRtl="true">
+        <service
+            android:name="app.eira.sync.SyncService"
+            android:exported="false" />
+    </application>
 </manifest>
