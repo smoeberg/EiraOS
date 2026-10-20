@@ -276,6 +276,9 @@ mod tests {
         assert_eq!(canonical_daemon("presenced"), Some("presenced"));
         assert_eq!(canonical_daemon("context"), Some("contextd"));
         assert_eq!(canonical_daemon("../../tmp/evil"), None);
+        assert_eq!(canonical_daemon("/run/eira/stated"), None);
+        assert_eq!(canonical_daemon("stated/../fleetd"), None);
+        assert_eq!(canonical_daemon("stated.sock"), None);
         assert_eq!(canonical_daemon(""), None);
         assert_eq!(canonical_daemon("unknown"), None);
     }
@@ -334,7 +337,6 @@ mod tests {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
         use tokio::net::UnixListener;
 
-        /// AF_UNIX sun_path is ~108 bytes; keep paths short under /tmp.
         fn short_temp_dir() -> PathBuf {
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -364,7 +366,6 @@ mod tests {
             let dir = short_temp_dir();
             let sock = dir.join("intentd.sock");
             let listener = UnixListener::bind(&sock).expect("bind mock socket");
-
             let server = tokio::spawn(async move {
                 serve_one_response(
                     listener,
@@ -373,7 +374,6 @@ mod tests {
                 )
                 .await;
             });
-
             let request = b"{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"health\",\"params\":{}}\n";
             let result = tokio::time::timeout(
                 Duration::from_secs(2),
@@ -382,7 +382,6 @@ mod tests {
             .await
             .expect("no timeout")
             .expect("exchange ok");
-
             assert_eq!(result["ok"], true);
             assert_eq!(result["daemon"], "intentd");
             server.await.expect("server task");
@@ -394,7 +393,6 @@ mod tests {
             let dir = short_temp_dir();
             let sock = dir.join("graphd.sock");
             let listener = UnixListener::bind(&sock).expect("bind");
-
             let server = tokio::spawn(async move {
                 serve_one_response(
                     listener,
@@ -403,7 +401,6 @@ mod tests {
                 )
                 .await;
             });
-
             let request = b"{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"nope\",\"params\":{}}\n";
             let err = exchange(&sock, "graphd", "nope", 7, request)
                 .await
@@ -438,10 +435,8 @@ mod tests {
             let dir = short_temp_dir();
             let sock_path = dir.join("walletd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind walletd");
-
             std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
             std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "2000");
-
             let server = tokio::spawn(async move {
                 let (mut stream, _) = listener.accept().await.expect("accept");
                 let mut reader = BufReader::new(&mut stream);
@@ -459,9 +454,7 @@ mod tests {
                 stream.write_all(&out).await.expect("write");
                 stream.flush().await.expect("flush");
             });
-
             assert_eq!(socket_path("walletd"), sock_path);
-
             let result = send_ipc_request(
                 "wallet".to_owned(),
                 "wallet.list_credentials".to_owned(),
@@ -469,10 +462,8 @@ mod tests {
             )
             .await
             .expect("send_ipc_request ok");
-
             assert_eq!(result["status"], "ok");
             assert_eq!(result["rails"][0], "sepa_instant");
-
             server.await.expect("server");
             std::env::remove_var("EIRA_SOCKET_DIR");
             std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS");
@@ -499,12 +490,10 @@ mod tests {
             let listener = UnixListener::bind(&sock_path).expect("bind");
             std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
             std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "150");
-
             let server = tokio::spawn(async move {
                 let (_stream, _) = listener.accept().await.expect("accept");
                 tokio::time::sleep(Duration::from_secs(5)).await;
             });
-
             let err = send_ipc_request(
                 "fleetd".to_owned(),
                 "fleet.heartbeat".to_owned(),
@@ -515,10 +504,39 @@ mod tests {
             let parsed: Value = serde_json::from_str(&err).expect("json");
             assert_eq!(parsed["kind"], "timeout");
             assert_eq!(parsed["daemon"], "fleetd");
-
             server.abort();
             std::env::remove_var("EIRA_SOCKET_DIR");
             std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
+        async fn path_like_daemon_names_rejected() {
+            for evil in ["../../tmp/evil", "/tmp/x", "stated/../fleetd", "stated.sock"] {
+                let err = send_ipc_request(evil.to_owned(), "health".to_owned(), json!({}))
+                    .await
+                    .expect_err("must reject");
+                let parsed: Value = serde_json::from_str(&err).unwrap();
+                assert_eq!(parsed["kind"], "invalid_daemon");
+            }
+        }
+
+        #[tokio::test]
+        async fn non_socket_endpoint_rejected() {
+            let dir = short_temp_dir();
+            let path = dir.join("intentd.sock");
+            std::fs::write(&path, b"not-a-socket").unwrap();
+            let err = exchange(
+                &path,
+                "intentd",
+                "health",
+                1,
+                b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"health\",\"params\":{}}\n",
+            )
+            .await
+            .expect_err("not a socket");
+            let parsed: Value = serde_json::from_str(&err).unwrap();
+            assert_eq!(parsed["kind"], "invalid_endpoint");
             let _ = std::fs::remove_dir_all(&dir);
         }
     }
