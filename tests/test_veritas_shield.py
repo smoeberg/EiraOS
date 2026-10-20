@@ -199,9 +199,16 @@ def test_c2pa_reads_valid_hardware_manifest_mock() -> None:
     result = C2PAEngine().evaluate({"c2pa_manifest": manifest}, mime_type="image/jpeg")
     assert result["valid"] is True
     assert result["trusted"] is True
-    assert result["score"] >= 0.95
+    assert result["score"] == 0.94
     assert result["manifest"]["active_manifest"] == "urn:c2pa:test"
-    assert result["details"]["hardware_signed"] is True
+    assert result["details"]["hardware_signed"] is False
+    assert "hardware_signature_unverified" in result["flags"]
+
+    verified = C2PAEngine(
+        hardware_signature_verifier=lambda _: True
+    ).evaluate({"c2pa_manifest": manifest}, mime_type="image/jpeg")
+    assert verified["details"]["hardware_signed"] is True
+    assert verified["score"] >= 0.95
 
 
 def test_veritas_evaluate_over_ipc(tmp_path: Path, monkeypatch) -> None:
