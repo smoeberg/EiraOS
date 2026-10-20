@@ -19,8 +19,9 @@
 //! - Reader loads `ready` with `Acquire`, snapshots generation (must be even),
 //!   copies/validates digest, then re-checks generation — reject on mismatch
 //!   (publisher raced a second publish).
-//! - Crash cleanup: writer always `shm_unlink`s on `Drop`; `create` recovers
-//!   from orphaned segments left by a previous crash.
+//! - Cleanup: writer unlinks its name on `Drop`. Existing names are never
+//!   unlinked implicitly; stale segments require explicit cleanup once the
+//!   previous writer is known to be gone, avoiding displacement of live writers.
 
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use serde::{Deserialize, Serialize};
@@ -173,8 +174,10 @@ pub struct SharedMemoryWriter {
 impl SharedMemoryWriter {
     /// Create a new exclusive POSIX shm segment with owner-only mode (0600).
     ///
-    /// If a leftover segment from a crashed process exists, it is unlinked once
-    /// and creation is retried (crash cleanup).
+    /// Existing names fail with `EEXIST` and are never removed implicitly:
+    /// a name collision cannot distinguish a stale segment from a live writer.
+    /// Callers may use `unlink_segment` only after establishing the prior owner
+    /// is no longer active.
     pub fn create(
         name: impl Into<String>,
         payload_capacity: usize,
@@ -189,15 +192,9 @@ impl SharedMemoryWriter {
                     capacity: usize::MAX - HEADER_LEN,
                 })?;
 
-        let file = match open_exclusive(&c_name) {
-            Ok(file) => file,
-            Err(err) if err.raw_os_error() == Some(libc::EEXIST) => {
-                // Crash cleanup: previous writer may have died without Drop.
-                unlink_segment(&name)?;
-                open_exclusive(&c_name)?
-            }
-            Err(err) => return Err(err.into()),
-        };
+        // Never unlink on EEXIST: the existing segment may belong to a live
+        // producer, and unlinking its name would permit a second writer to race.
+        let file = open_exclusive(&c_name)?;
 
         if let Err(error) = enforce_owner_mode(file.as_raw_fd()) {
             let _ = unlink_segment(&name);
@@ -492,12 +489,13 @@ mod tests {
     }
 
     #[test]
-    fn crash_cleanup_recovers_orphaned_segment() {
+    fn stale_segment_can_be_explicitly_cleaned_after_owner_stops() {
         let name = unique_name("crash");
         let writer = SharedMemoryWriter::create(&name, 32).unwrap();
-        // Simulate crash: forget Drop (leak the writer) then force unlink path via create.
+        // Simulate a crashed owner: forget Drop. Cleanup is explicit so a live
+        // segment is never displaced just because a second writer wants its name.
         std::mem::forget(writer);
-        // Second create must succeed by unlinking the orphan first.
+        unlink_segment(&name).unwrap();
         let mut writer2 = SharedMemoryWriter::create(&name, 32).unwrap();
         let descriptor = writer2.publish(b"after-crash").unwrap();
         let reader = SharedMemoryReader::open(&descriptor).unwrap();
