@@ -395,6 +395,7 @@ mod tests {
     #[cfg(unix)]
     mod mock_socket {
         use super::super::{exchange, send_ipc_request, socket_path};
+        use super::ENV_LOCK;
         use serde_json::{json, Value};
         use std::path::PathBuf;
         use std::time::Duration;
