@@ -12,7 +12,9 @@ override_dh_auto_build:
 	cd ui && npm run tauri -- build --no-bundle
 
 override_dh_auto_test:
-	PYTHONPATH=. python3 -m pytest -q tests
+	python3 -m venv debian/.test-venv
+	debian/.test-venv/bin/python -m pip install -r requirements-dev.txt alembic
+	PYTHONPATH=. debian/.test-venv/bin/python -m pytest -q tests
 	npm test --prefix ui
 
 override_dh_auto_install:

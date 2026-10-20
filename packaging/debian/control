@@ -7,6 +7,7 @@ Build-Depends:
  dh-python,
  python3-all (>= 3.12),
  python3-pytest,
+ python3-venv,
  nodejs,
  npm,
  cargo (>= 1.85),

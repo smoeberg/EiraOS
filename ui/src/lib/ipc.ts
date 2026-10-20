@@ -32,13 +32,14 @@ export async function sendIpcRequest<T>(
 }
 
 export function ipcErrorMessage(error: unknown): string {
-  if (typeof error === "string") {
-    try {
-      const value = JSON.parse(error) as { message?: unknown };
-      if (typeof value.message === "string") return value.message;
-    } catch {
-      return error;
-    }
+  const message = error instanceof Error ? error.message : error;
+  if (typeof message !== "string") return "Ukendt IPC-fejl";
+
+  try {
+    const value = JSON.parse(message) as { message?: unknown };
+    if (typeof value.message === "string") return value.message;
+  } catch {
+    // The error was plain text rather than a serialized IPC error object.
   }
-  return error instanceof Error ? error.message : "Ukendt IPC-fejl";
+  return message;
 }

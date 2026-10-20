@@ -8,6 +8,7 @@ interface SituationUIProps {
 
 type CardState = "active" | "low-confidence" | "unverified" | "applied";
 
+// Keep template interpolation unescaped: this file is type-checked by tsc.
 const CONFIDENCE_THRESHOLD = 0.6;
 const MISSING_RATIONALE = "Intet rationale angivet";
 
@@ -80,7 +81,7 @@ export function SituationUI({ proposals, onActivate }: SituationUIProps) {
 
             return (
               <article
-                className={\`action-card action-card--\${state}\`}
+                className={`action-card action-card--${state}`}
                 key={proposal.proposal_id}
                 data-state={state}
                 style={cardStyle}

@@ -1,0 +1,117 @@
+name: Ubuntu 24.04 Packaging Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "scripts/build_deb.sh"
+      - "scripts/build_iso.sh"
+      - "packaging/**"
+      - "systemd/**"
+      - "ui/**"
+      - ".github/workflows/packaging-acceptance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install package build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper debhelper-compat dh-python python3-all python3-pytest python3-venv \
+            nodejs npm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            build-essential python3-dev cargo rustc \
+            librsvg2-dev patchelf apparmor-utils python3-cryptography \
+            python3-httpx python3-pydantic python3-websockets
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify build toolchain and AppArmor profiles
+        run: |
+          rustc --version
+          cargo --version
+          apparmor_parser --version
+          sudo apparmor_parser -Q -K packaging/apparmor/usr.bin.eira-*
+
+      - name: Build Debian package
+        env:
+          EIRA_DPKG_SKIP_BUILD_DEPS_CHECK: "1"
+        run: scripts/build_deb.sh --output-dir dist
+
+      - name: Inspect package metadata and payload
+        run: |
+          dpkg-deb --info dist/eira-os-core.deb
+          dpkg-deb --contents dist/eira-os-core.deb | tee dist/eira-os-core.contents.txt
+          dpkg-deb --field dist/eira-os-core.deb Package Version Architecture Depends
+          dpkg-deb --contents dist/eira-os-core.deb | grep -E 'eira-(stated|identityd|fleetd|veritasd|intentd|graphd|spatial-desktop|session)'
+          python3 - <<'PY' > dist/eira-os-core.deb.sha3-256
+          import hashlib, pathlib
+          p = pathlib.Path("dist/eira-os-core.deb")
+          h = hashlib.sha3_256(p.read_bytes()).hexdigest()
+          print(f"{h}  {p.name}")
+          PY
+
+      - name: Upload Debian package and inspection evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: eira-deb-ubuntu-24.04
+          path: |
+            dist/eira-os-core.deb
+            dist/eira-os-core.contents.txt
+            dist/eira-os-core.deb.sha3-256
+          if-no-files-found: error
+          retention-days: 14
+
+  build-live-iso:
+    needs: build-deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: eira-deb-ubuntu-24.04
+          path: dist
+
+      - name: Install live-build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y live-build xorriso squashfs-tools isolinux syslinux-common
+
+      - name: Build amd64 Ubuntu 24.04 live ISO
+        run: |
+          sudo --preserve-env=EIRA_ISO_OUTPUT_DIR scripts/build_iso.sh \
+            --deb dist/eira-os-core.deb \
+            --output-dir "$GITHUB_WORKSPACE/dist" \
+            --keep-work
+
+      - name: Verify ISO and record SHA3-256
+        run: |
+          test -s dist/EiraOS-1.0-RC1-amd64.iso
+          test -s dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
+          cat dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
+          file dist/EiraOS-1.0-RC1-amd64.iso
+          xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -toc
+
+      - name: Upload ISO and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: eira-live-iso-ubuntu-24.04-amd64
+          path: |
+            dist/EiraOS-1.0-RC1-amd64.iso
+            dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
+          if-no-files-found: error
+          retention-days: 14
