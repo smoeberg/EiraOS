@@ -28,25 +28,27 @@ def test_labwc_autostart_launches_eira_shell():
     assert "eira-spatial-desktop" in autostart
 
 
-def test_eira_session_service_binds_to_eira_target():
-    unit = _read("packaging/systemd/eira-session.service")
-    assert "Wants=eira.target" in unit
-    assert "After=eira.target graphical.target" in unit
-    assert "User=ubuntu" in unit
-    assert "NoNewPrivileges=true" in unit
+def test_legacy_session_unit_is_not_shipped():
+    # greetd owns the live user's session; a second systemd service would launch
+    # a competing labwc process for the same account.
+    assert not (REPO / "packaging" / "systemd" / "eira-session.service").exists()
 
 
-def test_build_iso_installs_session_stack_and_enables_service():
+def test_build_iso_installs_session_stack_and_enables_greetd():
     script = _read("scripts/build_iso.sh")
     assert "labwc" in script
     assert "greetd" in script
-    assert "systemctl enable eira-session.service" in script
+    assert "systemctl enable greetd.service" in script
+    assert "systemctl enable eira-session.service" not in script
     assert "gdm3" not in script
 
 
-def test_ubuntu_install_enables_eira_session_service():
+def test_ubuntu_installer_uses_supported_deb_package():
     script = _read("packaging/ubuntu/install.sh")
-    assert "labwc" in script
-    assert "greetd" in script
-    assert "systemctl enable eira-session.service" in script
-    assert "gdm3" not in script
+    assert "scripts/build_deb.sh" in script
+    assert 'apt-get install -y "$DEB_PATH"' in script
+    assert "packaging/systemd/*.service" not in script
+    assert "systemctl enable eira-session.service" not in script
+    assert "walletd" not in script
+    assert "presenced" not in script
+    assert "contextd" not in script
