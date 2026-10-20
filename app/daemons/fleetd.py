@@ -105,6 +105,16 @@ class FleetSyncService:
             except PayloadIntegrityError:
                 invalid += 1
 
+        # Reject the entire batch before any write if envelope validation fails.
+        if invalid:
+            snapshot = self.merkle.snapshot(self.store.list_states())
+            return {
+                "accepted": 0,
+                "skipped": 0,
+                "invalid": invalid,
+                "root": snapshot.root,
+            }
+
         accepted = 0
         skipped = 0
         while pending:
