@@ -314,9 +314,10 @@ class FleetSyncClient(
 
         override fun onOpen(webSocket: WebSocket, response: Response) {
             scope.launch {
-                val headers = JSONArray().also { array ->
-                    store.headers().forEach(array::put)
-                }
+                val localHeaders = store.headers().map { SyncStateHeader.fromJson(it) }
+                val localSnapshot = merkle.snapshot(localHeaders)
+                val snapshotWire = localSnapshot.asDict()
+                val headers = snapshotWire.getJSONArray("headers")
                 webSocket.send(
                     JSONObject()
                         .put("id", "android-handshake")
@@ -327,6 +328,7 @@ class FleetSyncClient(
                                 .put("device_id", configuration.deviceId)
                                 .put("public_key", configuration.publicKey)
                                 .put("auth_token", authToken)
+                                .put("root_hash", localSnapshot.root)
                                 .put("headers", headers),
                         )
                         .toString(),
