@@ -604,7 +604,7 @@ mod tests {
     fn ipc01_oversized_response_is_bounded() {
         let large = "x".repeat(64);
         let handler =
-            |_method: &str, _params: Option<&RawValue>| -> Result<Box<RawValue>, RpcErrorObject> {
+            move |_method: &str, _params: Option<&RawValue>| -> Result<Box<RawValue>, RpcErrorObject> {
                 RawValue::from_string(format!("\"{large}\""))
                     .map_err(|e| RpcErrorObject::new(-32603, e.to_string()))
             };
