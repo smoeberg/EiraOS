@@ -267,6 +267,7 @@ mod tests {
         MAX_REQUEST_BYTES,
     };
     use serde_json::{json, Value};
+    use std::sync::Mutex;
 
     // These tests mutate process-global EIRA_* env vars; serialize them so
     // parallel test threads cannot observe each other's env changes.
@@ -338,8 +339,7 @@ mod tests {
         use std::path::PathBuf;
         use std::time::Duration;
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        use std::sync::Mutex;
-    use tokio::net::UnixListener;
+        use tokio::net::UnixListener;
 
         /// AF_UNIX sun_path is ~108 bytes; keep paths short under /tmp.
         fn short_temp_dir() -> PathBuf {
