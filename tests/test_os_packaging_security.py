@@ -163,6 +163,11 @@ def test_debian_manifest_is_complete_and_offline_install_safe() -> None:
     assert "dpkg-buildpackage" not in rules
     assert "dh_installsystemd --no-start" in rules
 
+    deb_builder = (REPO_ROOT / "scripts" / "build_deb.sh").read_text(encoding="utf-8")
+    assert "eira-os-core.deb.build-info.json" in deb_builder
+    assert '"source_commit_verified"' in deb_builder
+    assert '"sha3_256"' in deb_builder
+
 
 def test_iso_builder_targets_noble_and_embeds_local_deb() -> None:
     script = (REPO_ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
@@ -176,7 +181,10 @@ def test_iso_builder_targets_noble_and_embeds_local_deb() -> None:
     assert "install -m 0644 packaging/session/config/greetd/config.toml" not in script
     assert "ubuntu-desktop-minimal" in script
     assert "systemctl enable eira.target" in script
-    assert "adduser ubuntu eira" in script
+    assert "systemctl enable greetd.service" in script
+    assert "systemctl enable eira-session.service" not in script
+    assert "group_file.write_text" in script
+    assert "package_commit_matches_iso_source" in script
     assert "--mirror-bootstrap https://archive.ubuntu.com/ubuntu" in script
     assert "--mirror-chroot https://archive.ubuntu.com/ubuntu" in script
     assert "EIRA_SOURCE_COMMIT" in script
