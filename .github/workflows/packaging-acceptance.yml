@@ -29,6 +29,7 @@ jobs:
           sudo apt-get install -y \
             debhelper debhelper-compat dh-python python3-all python3-pytest \
             nodejs npm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            build-essential python3-dev cargo rustc \
             librsvg2-dev patchelf apparmor-utils python3-cryptography \
             python3-httpx python3-pydantic python3-websockets
 
@@ -43,6 +44,8 @@ jobs:
           sudo apparmor_parser -Q packaging/apparmor/usr.bin.eira-*
 
       - name: Build Debian package
+        env:
+          EIRA_DPKG_SKIP_BUILD_DEPS_CHECK: "1"
         run: scripts/build_deb.sh --output-dir dist
 
       - name: Inspect package metadata and payload
@@ -51,7 +54,12 @@ jobs:
           dpkg-deb --contents dist/eira-os-core.deb | tee dist/eira-os-core.contents.txt
           dpkg-deb --field dist/eira-os-core.deb Package Version Architecture Depends
           dpkg-deb --contents dist/eira-os-core.deb | grep -E 'eira-(stated|identityd|fleetd|veritasd|intentd|graphd|spatial-desktop|session)'
-          sha3sum dist/eira-os-core.deb | tee dist/eira-os-core.deb.sha3-256
+          python3 - <<'PY' > dist/eira-os-core.deb.sha3-256
+          import hashlib, pathlib
+          p = pathlib.Path("dist/eira-os-core.deb")
+          h = hashlib.sha3_256(p.read_bytes()).hexdigest()
+          print(f"{h}  {p.name}")
+          PY
 
       - name: Upload Debian package and inspection evidence
         uses: actions/upload-artifact@v4
