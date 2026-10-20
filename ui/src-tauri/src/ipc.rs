@@ -74,6 +74,59 @@ fn socket_path(daemon: &str) -> PathBuf {
     socket_root().join(format!("{daemon}.sock"))
 }
 
+const IPC_MAX_ATTEMPTS: usize = 4;
+const IPC_RETRY_BACKOFF_MS: [u64; IPC_MAX_ATTEMPTS - 1] = [100, 200, 400];
+
+fn retryable_connect_error(error: &str) -> bool {
+    serde_json::from_str::<Value>(error)
+        .ok()
+        .and_then(|value| value.get("kind").and_then(Value::as_str).map(str::to_owned))
+        .is_some_and(|kind| matches!(kind.as_str(), "socket_unavailable" | "connect_refused"))
+}
+
+#[cfg(unix)]
+async fn exchange_with_retry(
+    path: &Path,
+    daemon: &str,
+    method: &str,
+    request_id: u64,
+    request: &[u8],
+    timeout: Duration,
+) -> Result<Value, String> {
+    for attempt in 0..IPC_MAX_ATTEMPTS {
+        let outcome = tokio::time::timeout(
+            timeout,
+            exchange(path, daemon, method, request_id, request),
+        )
+        .await;
+
+        match outcome {
+            Ok(Ok(result)) => return Ok(result),
+            // A timeout can occur after the daemon received or acted on the request.
+            // Never replay it automatically: request IDs alone do not guarantee deduplication.
+            Err(_) => {
+                return Err(bridge_error(
+                    "timeout",
+                    format!(
+                        "request exceeded {} ms; not retried because delivery is unknown",
+                        timeout.as_millis()
+                    ),
+                    daemon,
+                    method,
+                ));
+            }
+            Ok(Err(error)) => {
+                if attempt + 1 >= IPC_MAX_ATTEMPTS || !retryable_connect_error(&error) {
+                    return Err(error);
+                }
+                tokio::time::sleep(Duration::from_millis(IPC_RETRY_BACKOFF_MS[attempt])).await;
+            }
+        }
+    }
+
+    unreachable!("the retry loop always returns on its final attempt")
+}
+
 fn request_timeout() -> Duration {
     let milliseconds = std::env::var("EIRA_UI_IPC_TIMEOUT_MS")
         .ok()
@@ -108,12 +161,12 @@ async fn exchange(
     request: &[u8],
 ) -> Result<Value, String> {
     let metadata = std::fs::symlink_metadata(path).map_err(|error| {
-        bridge_error(
-            "socket_unavailable",
-            format!("{}: {error}", path.display()),
-            daemon,
-            method,
-        )
+        let kind = if error.kind() == std::io::ErrorKind::NotFound {
+            "socket_unavailable"
+        } else {
+            "endpoint_check_failed"
+        };
+        bridge_error(kind, format!("{}: {error}", path.display()), daemon, method)
     })?;
     if !metadata.file_type().is_socket() {
         return Err(bridge_error(
@@ -125,7 +178,15 @@ async fn exchange(
     }
 
     let mut stream = UnixStream::connect(path).await.map_err(|error| {
-        bridge_error("connect_failed", error.to_string(), daemon, method)
+        let kind = if matches!(
+            error.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+        ) {
+            "connect_refused"
+        } else {
+            "connect_failed"
+        };
+        bridge_error(kind, error.to_string(), daemon, method)
     })?;
     stream
         .write_all(request)
@@ -233,19 +294,15 @@ pub async fn send_ipc_request(
     #[cfg(unix)]
     {
         let path = socket_path(canonical);
-        return tokio::time::timeout(
+        return exchange_with_retry(
+            &path,
+            canonical,
+            &method,
+            request_id,
+            &request,
             request_timeout(),
-            exchange(&path, canonical, &method, request_id, &request),
         )
-        .await
-        .map_err(|_| {
-            bridge_error(
-                "timeout",
-                format!("request exceeded {} ms", request_timeout().as_millis()),
-                canonical,
-                &method,
-            )
-        })?;
+        .await;
     }
 
     #[cfg(not(unix))]
@@ -281,6 +338,9 @@ mod tests {
         assert_eq!(canonical_daemon("presenced"), Some("presenced"));
         assert_eq!(canonical_daemon("context"), Some("contextd"));
         assert_eq!(canonical_daemon("../../tmp/evil"), None);
+        assert_eq!(canonical_daemon("/run/eira/stated"), None);
+        assert_eq!(canonical_daemon("stated/../fleetd"), None);
+        assert_eq!(canonical_daemon("stated.sock"), None);
         assert_eq!(canonical_daemon(""), None);
         assert_eq!(canonical_daemon("unknown"), None);
     }
@@ -341,7 +401,6 @@ mod tests {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
         use tokio::net::UnixListener;
 
-        /// AF_UNIX sun_path is ~108 bytes; keep paths short under /tmp.
         fn short_temp_dir() -> PathBuf {
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -367,11 +426,146 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn exchange_retries_missing_socket_then_succeeds() {
+            use super::super::exchange_with_retry;
+
+            let dir = short_temp_dir();
+            let sock = dir.join("intentd.sock");
+            let server_path = sock.clone();
+            let server = tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(35)).await;
+                let listener = UnixListener::bind(&server_path).expect("bind after first attempt");
+                serve_one_response(
+                    listener,
+                    "{\"jsonrpc\":\"2.0\",\"id\":11,\"result\":{\"ok\":true}}\n".to_owned(),
+                )
+                .await;
+            });
+
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"health\",\"params\":{}}\n";
+            let result = exchange_with_retry(
+                &sock,
+                "intentd",
+                "health",
+                11,
+                request,
+                Duration::from_secs(2),
+            )
+            .await
+            .expect("retry should connect");
+            assert_eq!(result["ok"], true);
+            server.await.expect("server task");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
+        async fn exchange_fails_after_maximum_connect_attempts() {
+            use super::super::{exchange_with_retry, IPC_MAX_ATTEMPTS};
+
+            let dir = short_temp_dir();
+            let sock = dir.join("missing.sock");
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"health\",\"params\":{}}\n";
+            let started = std::time::Instant::now();
+            let err = exchange_with_retry(
+                &sock,
+                "intentd",
+                "health",
+                12,
+                request,
+                Duration::from_secs(1),
+            )
+            .await
+            .expect_err("missing socket exhausts retries");
+            let elapsed = started.elapsed();
+            let parsed: Value = serde_json::from_str(&err).expect("structured error");
+            assert_eq!(parsed["kind"], "socket_unavailable");
+            assert_eq!(IPC_MAX_ATTEMPTS, 4);
+            assert!(elapsed >= Duration::from_millis(650), "all backoffs should run: {elapsed:?}");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
+        async fn exchange_does_not_retry_protocol_errors() {
+            use super::super::exchange_with_retry;
+            use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
+            let dir = short_temp_dir();
+            let sock = dir.join("intentd.sock");
+            let listener = UnixListener::bind(&sock).expect("bind");
+            let accepted = Arc::new(AtomicUsize::new(0));
+            let accepted_server = Arc::clone(&accepted);
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.expect("accept");
+                accepted_server.fetch_add(1, Ordering::SeqCst);
+                let mut reader = BufReader::new(&mut stream);
+                let mut request = String::new();
+                reader.read_line(&mut request).await.expect("read request");
+                stream
+                    .write_all(b"not-json\n")
+                    .await
+                    .expect("write invalid response");
+            });
+
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"health\",\"params\":{}}\n";
+            let err = exchange_with_retry(
+                &sock,
+                "intentd",
+                "health",
+                13,
+                request,
+                Duration::from_secs(2),
+            )
+            .await
+            .expect_err("protocol error is final");
+            let parsed: Value = serde_json::from_str(&err).expect("structured error");
+            assert_eq!(parsed["kind"], "invalid_response");
+            server.await.expect("server task");
+            assert_eq!(accepted.load(Ordering::SeqCst), 1);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
+        async fn exchange_does_not_retry_timeout_with_unknown_delivery() {
+            use super::super::exchange_with_retry;
+            use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
+            let dir = short_temp_dir();
+            let sock = dir.join("intentd.sock");
+            let listener = UnixListener::bind(&sock).expect("bind");
+            let accepted = Arc::new(AtomicUsize::new(0));
+            let accepted_server = Arc::clone(&accepted);
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.expect("accept");
+                accepted_server.fetch_add(1, Ordering::SeqCst);
+                let mut reader = BufReader::new(&mut stream);
+                let mut request = String::new();
+                reader.read_line(&mut request).await.expect("read request");
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            });
+
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"health\",\"params\":{}}\n";
+            let err = exchange_with_retry(
+                &sock,
+                "intentd",
+                "health",
+                14,
+                request,
+                Duration::from_millis(60),
+            )
+            .await
+            .expect_err("ambiguous timeout is not retried");
+            let parsed: Value = serde_json::from_str(&err).expect("structured error");
+            assert_eq!(parsed["kind"], "timeout");
+            server.abort();
+            assert_eq!(accepted.load(Ordering::SeqCst), 1);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
         async fn exchange_succeeds_against_mock_daemon() {
             let dir = short_temp_dir();
             let sock = dir.join("intentd.sock");
             let listener = UnixListener::bind(&sock).expect("bind mock socket");
-
             let server = tokio::spawn(async move {
                 serve_one_response(
                     listener,
@@ -380,7 +574,6 @@ mod tests {
                 )
                 .await;
             });
-
             let request = b"{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"health\",\"params\":{}}\n";
             let result = tokio::time::timeout(
                 Duration::from_secs(2),
@@ -389,7 +582,6 @@ mod tests {
             .await
             .expect("no timeout")
             .expect("exchange ok");
-
             assert_eq!(result["ok"], true);
             assert_eq!(result["daemon"], "intentd");
             server.await.expect("server task");
@@ -401,7 +593,6 @@ mod tests {
             let dir = short_temp_dir();
             let sock = dir.join("graphd.sock");
             let listener = UnixListener::bind(&sock).expect("bind");
-
             let server = tokio::spawn(async move {
                 serve_one_response(
                     listener,
@@ -410,7 +601,6 @@ mod tests {
                 )
                 .await;
             });
-
             let request = b"{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"nope\",\"params\":{}}\n";
             let err = exchange(&sock, "graphd", "nope", 7, request)
                 .await
@@ -467,9 +657,7 @@ mod tests {
                 stream.write_all(&out).await.expect("write");
                 stream.flush().await.expect("flush");
             });
-
             assert_eq!(socket_path("walletd"), sock_path);
-
             let result = send_ipc_request(
                 "wallet".to_owned(),
                 "wallet.list_credentials".to_owned(),
@@ -477,10 +665,8 @@ mod tests {
             )
             .await
             .expect("send_ipc_request ok");
-
             assert_eq!(result["status"], "ok");
             assert_eq!(result["rails"][0], "sepa_instant");
-
             server.await.expect("server");
             unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
             unsafe { std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS"); }
@@ -513,7 +699,6 @@ mod tests {
                 let (_stream, _) = listener.accept().await.expect("accept");
                 tokio::time::sleep(Duration::from_secs(5)).await;
             });
-
             let err = send_ipc_request(
                 "fleetd".to_owned(),
                 "fleet.heartbeat".to_owned(),
@@ -524,10 +709,39 @@ mod tests {
             let parsed: Value = serde_json::from_str(&err).expect("json");
             assert_eq!(parsed["kind"], "timeout");
             assert_eq!(parsed["daemon"], "fleetd");
-
             server.abort();
             unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
             unsafe { std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS"); }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
+        async fn path_like_daemon_names_rejected() {
+            for evil in ["../../tmp/evil", "/tmp/x", "stated/../fleetd", "stated.sock"] {
+                let err = send_ipc_request(evil.to_owned(), "health".to_owned(), json!({}))
+                    .await
+                    .expect_err("must reject");
+                let parsed: Value = serde_json::from_str(&err).unwrap();
+                assert_eq!(parsed["kind"], "invalid_daemon");
+            }
+        }
+
+        #[tokio::test]
+        async fn non_socket_endpoint_rejected() {
+            let dir = short_temp_dir();
+            let path = dir.join("intentd.sock");
+            std::fs::write(&path, b"not-a-socket").unwrap();
+            let err = exchange(
+                &path,
+                "intentd",
+                "health",
+                1,
+                b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"health\",\"params\":{}}\n",
+            )
+            .await
+            .expect_err("not a socket");
+            let parsed: Value = serde_json::from_str(&err).unwrap();
+            assert_eq!(parsed["kind"], "invalid_endpoint");
             let _ = std::fs::remove_dir_all(&dir);
         }
     }
