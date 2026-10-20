@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 
 import pytest
@@ -12,6 +13,7 @@ from app.fleet.e2ee import (
     NonceReuseError,
     PayloadIntegrityError,
     StatePayloadEncryptor,
+    _canonical_json,
 )
 
 
@@ -83,13 +85,37 @@ def test_tampered_cleartext_metadata_fails_integrity():
         enc.decrypt_state(envelope)
 
 
-def test_empty_payload_round_trip():
-    """Empty payloads are allowed: they encrypt and decrypt unchanged."""
+def test_empty_payload_is_rejected_on_encrypt():
     enc = _encryptor()
     empty = State(type="empty", payload={})
-    envelope = enc.encrypt_state(empty)
-    decrypted = enc.decrypt_state(envelope)
-    assert decrypted.payload == {}
+    with pytest.raises(PayloadIntegrityError, match="non-empty"):
+        enc.encrypt_state(empty)
+
+
+def test_authenticated_empty_payload_is_rejected_on_decrypt():
+    enc = _encryptor()
+    state = State(type="empty", payload={})
+    metadata = enc._metadata(state)
+    header = {
+        "algorithm": enc.ALGORITHM,
+        "envelope_version": enc.VERSION,
+        "metadata": metadata,
+    }
+    nonce = os.urandom(12)
+    plaintext = _canonical_json({
+        "timestamp_ns": state.timestamp_ns,
+        "type": state.type,
+        "payload": {},
+    })
+    envelope = {
+        **header,
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext": base64.b64encode(
+            enc._aead.encrypt(nonce, plaintext, _canonical_json(header))
+        ).decode("ascii"),
+    }
+    with pytest.raises(PayloadIntegrityError, match="missing or empty"):
+        enc.decrypt_state(envelope)
 
 
 def test_missing_ciphertext_fail_closed_on_decrypt():
