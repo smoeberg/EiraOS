@@ -58,6 +58,15 @@ class EiraStateEngineTest {
     }
 
     @Test
+    fun unknown_positive_native_validation_result_fails_closed() {
+        val engine = EiraStateEngine(FakeNativeApi(validationResult = 2))
+
+        assertFailsWith<StateValidationException> {
+            engine.validateChain("[{}]")
+        }
+    }
+
+    @Test
     fun null_native_hash_fails_closed() {
         val engine = EiraStateEngine(FakeNativeApi(hash = null))
 
