@@ -603,11 +603,12 @@ mod tests {
     #[test]
     fn ipc01_oversized_response_is_bounded() {
         let large = "x".repeat(64);
-        let handler =
-            move |_method: &str, _params: Option<&RawValue>| -> Result<Box<RawValue>, RpcErrorObject> {
-                RawValue::from_string(format!("\"{large}\""))
-                    .map_err(|e| RpcErrorObject::new(-32603, e.to_string()))
-            };
+        let handler = move |_method: &str,
+                            _params: Option<&RawValue>|
+              -> Result<Box<RawValue>, RpcErrorObject> {
+            RawValue::from_string(format!("\"{large}\""))
+                .map_err(|e| RpcErrorObject::new(-32603, e.to_string()))
+        };
         let request = br#"{"jsonrpc":"2.0","id":1,"method":"x","params":null}"#;
         let mut output = Vec::new();
         let max = 32;
