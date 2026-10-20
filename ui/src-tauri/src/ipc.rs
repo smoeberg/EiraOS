@@ -506,7 +506,7 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(300)).await;
             });
 
-            let request = b"{\\"jsonrpc\\":\\"2.0\\",\\"id\\":14,\\"method\\":\\"health\\",\\"params\\":{}}\\n";
+            let request = b"{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"health\",\"params\":{}}\n";
             let err = exchange_with_retry(
                 &sock, "intentd", "health", 14, request, Duration::from_millis(60),
             ).await.expect_err("ambiguous timeout is not retried");
