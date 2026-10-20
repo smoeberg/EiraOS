@@ -546,4 +546,21 @@ mod tests {
         unlink_segment(&name).unwrap();
         unlink_segment(&name).unwrap();
     }
+    #[test]
+    fn create_does_not_unlink_an_existing_live_segment() {
+        let name = unique_name("live");
+        let mut writer = SharedMemoryWriter::create(&name, 64).unwrap();
+        let err = SharedMemoryWriter::create(&name, 64)
+            .err()
+            .expect("duplicate live name must be rejected");
+        assert!(matches!(
+            err,
+            SharedMemoryError::Io(ref error) if error.raw_os_error() == Some(libc::EEXIST)
+        ));
+
+        let descriptor = writer.publish(b"still owned by first writer").unwrap();
+        let reader = SharedMemoryReader::open(&descriptor).unwrap();
+        assert_eq!(reader.payload(), b"still owned by first writer");
+    }
+
 }
