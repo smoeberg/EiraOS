@@ -9,10 +9,10 @@ Denne fil tildeles udelukkende tilføjelser: hver 2025-påstand fra manifestet k
 
 | Manifest-påstand (2025) | 2026-spec | 2026-implementering | Status |
 |---|---|---|---|
-| En brugers tilstand følger brugeren — ikke enheden | E2EE sync mellem brugerens enheder | `app/fleet/merkle_sync.py`, `app/fleet/e2ee.py` | ✅ merged (#67; E2EE-modul på main) |
+| En brugers tilstand følger brugeren — ikke enheden | E2EE sync mellem brugerens enheder | `app/fleet/merkle_sync.py` (#67), `app/fleet/e2ee.py` (formel leverance: PR #68, åben — blokerer #69 og Android-kæden) | ✅ #67 merged / ⏳ #68 åben |
 | Flåde af Ubuntu-PC'er, bærbare og Android-kloner | Real-time WebSockets sync i fleetd | `app/daemons/fleetd.py` | ✅ på main (WebSocket-handshake, request/push blocks) |
 | Enhedsparinger styres af brugeren — ikke af platformen | Pairing-registry i egen daemon, ingen tredjepart | `app/fleet/device_registry.py` (#70) | ✅ merged |
-| Sikkerhed før bekvemmelighed | Fail-closed ved ukendt enhed eller korrupt payload | `DeviceAuthorizationError`, `PayloadIntegrityError` | ✅ enforced i tests |
+| Sikkerhed før bekvemmelighed | Fail-closed ved ukendt enhed eller korrupt payload | `DeviceAuthorizationError`, `PayloadIntegrityError` | ✅ #70 merged / ⏳ E2EE via #68 |
 
 ### Kontrakter tilføjet i Sprint 5
 
@@ -21,7 +21,9 @@ Denne fil tildeles udelukkende tilføjelser: hver 2025-påstand fra manifestet k
   (`sort_keys`, kompakte separatorer, `allow_nan=False`), og defineret tom-rod-konstant.
 - **E2EE-konvention:** `ChaCha20-Poly1305+HKDF-SHA256`, payload-version 1, HKDF-info
   `eiraos-fleet-sync-v1\x00 + key_context`, master-nøgle ≥ 256 bit, fleet-salt ≥ 128 bit.
-  Integritetsfejl = afvisning; der findes ingen ukrypteret fallback.
+  Integritetsfejl = afvisning; der findes ingen ukrypteret fallback. **Status:** forberedende
+  kode på main; den formelle leverance er PR #68 (åben) — den eneste tilbageværende blokering
+  på Sprint 5's kritiske vej.
 - **Device-lifecycle:** paringstokens med TTL (standard 300 s) → enrollment (X25519-nøgle,
   navn, OS-type) → heartbeat (TTL 300 s) → udløb/revokering. Uparret eller revokeret enhed
   afvises altid — fail-closed.

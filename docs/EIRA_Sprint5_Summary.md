@@ -2,8 +2,12 @@
 
 Sprint 5 (uge 9–10) etablerede grundlaget for E2EE tilstandssynkronisering mellem en brugers
 flåde af enheder (Ubuntu PC'er, bærbare og Android-kloner). Sprintet omfattede fem opgaver
-(Task 5.1–5.5) og leveredes på brancherne `feat/s5-merkle-sync` (#67) og
-`feat/s5-device-registry` (#70), begge merged til `main`.
+(Task 5.1–5.5). Merged til `main`: `feat/s5-merkle-sync` (#67) og `feat/s5-device-registry`
+(#70). **Task 5.2 (E2EE) er den formelle leverance stadig åben som PR #68** — krypteringsmodulet
+nedenfor kom med forberedende sprint-5/6-commits, men #68 er den autoritative leverance og
+blokerer i øjeblikket #69 (fleetd-sync) og hele Android-synkroniseringskæden.
+Merge-rækkefølge: #67 ✅ → #70 ✅ → #68 → #69 → 6.1 → 6.5 → 6.2/6.5b → 6.3 → 6.4 → 7.1 →
+audit → docs.
 
 ## Leverancer
 
@@ -20,7 +24,7 @@ flåde af enheder (Ubuntu PC'er, bærbare og Android-kloner). Sprintet omfattede
   tom-rod-konstant for tom historik. Alle hashes valideres mod `^[0-9a-f]{64}$`.
 - Coverage: `tests/test_merkle_sync.py` (163 linjer, tilføjet i #67).
 
-### Task 5.2 — E2EE payload-sikkerhedsmodul (til stede i main fra sprint-5/6-forberedende commits)
+### Task 5.2 — E2EE payload-sikkerhedsmodul — **ÅBEN: PR #68** (forberedende kode på main)
 `app/fleet/e2ee.py`:
 
 - `StatePayloadEncryptor` med ChaCha20-Poly1305 + HKDF-SHA256, algoritmetag
@@ -74,8 +78,12 @@ flåde af enheder (Ubuntu PC'er, bærbare og Android-kloner). Sprintet omfattede
 
 ## Hvad mangler (Sprint 7–10)
 
-- **PR #76 (åben):** Fleet E2EE sync — envelope encryption for fleetd. Sprint 5-arkitekturen er
-  i main, men envelope-krypteringen venter på merge.
+- **PR #68 (åben, kritisk vej):** Formel E2EE-leverance (`StatePayloadEncryptor`). Blokerer
+  #69 og hele Android-sync-kæden — den eneste tilbageværende blokering på Sprint 5's kritiske vej.
+- **PR #69 (åben):** fleetd-sync over den rigtige `MerkleSyncEngine`
+  (API: `compute_block_hash`, `verify_block`, `missing_blocks`); `StatePayloadEncryptor`
+  stubs/injektion indtil #68 merger.
+- **PR #76 (åben):** Fleet E2EE sync — envelope encryption for fleetd.
 - **Sprint 7:** Spatial Canvas UI, Situation UI og Tauri v2 desktop shell over IPC.
 - **Sprint 8:** Produktivisering af flåden (stabilitet, opsamling af Sprint 5/6).
 - **Sprint 9:** OS-pakning/distribution.

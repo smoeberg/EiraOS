@@ -17,9 +17,11 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 ### Sprint 5 — Multi-Device E2EE State Sync
 - Merkle DAG synkroniseringsmotor med diff og fork resolution: SHA3-256 med domæneseparation,
   kanonisk JSON og konflikt uden automatisk overskrivning af historik.
-- E2EE payload-kryptering (ChaCha20-Poly1305 + HKDF-SHA256, HKDF info `eiraos-fleet-sync-v1`),
+- E2EE payload-kryptering (**leverance åben: PR #68**; forberedende kode på main fra
+  sprint-5/6-commits: ChaCha20-Poly1305 + HKDF-SHA256, HKDF info `eiraos-fleet-sync-v1`),
   plaintext-metadata (`id`, `version`, `hash`) for Merkle-sammenligning, og fail-closed ved
-  fejlet integritetsvalidering (`PayloadIntegrityError`).
+  fejlet integritetsvalidering (`PayloadIntegrityError`). #68 blokerer i øjeblikket #69 og
+  Android-synkroniseringskæden.
 - WebSockets real-time synkronisering i `fleetd`: handshake + rodudveksling,
   `sync.request_blocks`, `sync.push_blocks` og kædevalidering i lokal `StateStore`.
 - Device pairing-registry med engangskode/QR-enrollment, X25519-nøglevalidering, heartbeat
