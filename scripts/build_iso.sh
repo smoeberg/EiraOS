@@ -49,7 +49,7 @@ while (($#)); do
     esac
 done
 
-for tool in lb python3; do
+for tool in lb python3 xorriso mksquashfs; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "Missing required ISO tool: $tool" >&2
         echo "Install live-build, xorriso and squashfs-tools on Ubuntu 24.04." >&2
@@ -95,8 +95,8 @@ trap cleanup EXIT INT TERM
         --architectures amd64 \
         --binary-images iso-hybrid \
         --archive-areas "main universe" \
-        --mirror-bootstrap http://archive.ubuntu.com/ubuntu \
-        --mirror-chroot http://archive.ubuntu.com/ubuntu \
+        --mirror-bootstrap https://archive.ubuntu.com/ubuntu \
+        --mirror-chroot https://archive.ubuntu.com/ubuntu \
         --security true \
         --updates true \
         --iso-application "EiraOS 1.0 RC1" \
@@ -137,12 +137,30 @@ EOF
 #!/bin/sh
 set -eu
 systemctl enable eira.target
-systemctl enable eira-session.service
+systemctl enable greetd.service
 install -d -m 0755 /etc/greetd /etc/labwc
-# Session files are staged by live-build through config/includes.chroot.
-if id ubuntu >/dev/null 2>&1; then
-    adduser ubuntu eira
-fi
+# The live user may be created by casper only at boot. Add it to the
+# supplementary group even when the account does not yet exist in the build
+# chroot, so it can access the group-restricted EiraOS IPC sockets.
+python3 - <<'PYGROUP'
+from pathlib import Path
+
+group_file = Path("/etc/group")
+lines = group_file.read_text(encoding="utf-8").splitlines()
+for index, line in enumerate(lines):
+    fields = line.split(":")
+    if fields[0] != "eira":
+        continue
+    members = [member for member in fields[3].split(",") if member]
+    if "ubuntu" not in members:
+        members.append("ubuntu")
+    fields[3] = ",".join(members)
+    lines[index] = ":".join(fields)
+    group_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    break
+else:
+    raise SystemExit("eira group missing after package installation")
+PYGROUP
 EOF
     chmod 0755 config/hooks/live/050-eira-session.hook.chroot
 
@@ -174,4 +192,76 @@ with path.open("rb") as handle:
         digest.update(chunk)
 print(f"{digest.hexdigest()}  {path.name}")
 PY
+
+SOURCE_COMMIT=${EIRA_SOURCE_COMMIT:-}
+if [[ -z $SOURCE_COMMIT ]] && command -v git >/dev/null 2>&1; then
+    SOURCE_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)
+fi
+SOURCE_COMMIT=${SOURCE_COMMIT:-unknown}
+python3 - "$ISO_OUTPUT" "$DEB_PATH" "$SOURCE_COMMIT" "${ISO_OUTPUT}.build-info.json" <<'PY'
+import hashlib
+import json
+import pathlib
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+iso_path = pathlib.Path(sys.argv[1])
+deb_path = pathlib.Path(sys.argv[2])
+source_commit = sys.argv[3]
+manifest_path = pathlib.Path(sys.argv[4])
+
+
+def sha3(path):
+    digest = hashlib.sha3_256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def tool_version(command):
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"unavailable: {exc}"
+    output = (result.stdout + result.stderr).strip().splitlines()
+    return output[0] if output else f"exit={result.returncode}"
+
+
+package_info_path = deb_path.with_name(deb_path.name + ".build-info.json")
+try:
+    package_info = json.loads(package_info_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    package_info = {}
+package_commit = package_info.get("source_commit", "unknown")
+commit_match = (
+    None
+    if source_commit == "unknown" or package_commit == "unknown"
+    else source_commit == package_commit
+)
+
+manifest = {
+    "format": "eira-iso-build-info-v1",
+    "source_commit": source_commit,
+    "source_commit_verified": source_commit != "unknown",
+    "package_build_info_present": bool(package_info),
+    "package_source_commit": package_commit,
+    "package_commit_matches_iso_source": commit_match,
+    "base_distribution": "Ubuntu 24.04 LTS (noble)",
+    "architecture": "amd64",
+    "built_at_utc": datetime.now(timezone.utc).isoformat(),
+    "inputs": [{"name": deb_path.name, "sha3_256": sha3(deb_path), "size": deb_path.stat().st_size}],
+    "outputs": [{"name": iso_path.name, "sha3_256": sha3(iso_path), "size": iso_path.stat().st_size}],
+    "tools": {
+        "live_build": tool_version(["lb", "--version"]),
+        "xorriso": tool_version(["xorriso", "-version"]),
+        "mksquashfs": tool_version(["mksquashfs", "-version"]),
+    },
+}
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 echo "Built $ISO_OUTPUT"
+echo "Build provenance: ${ISO_OUTPUT}.build-info.json"

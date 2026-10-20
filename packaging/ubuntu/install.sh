@@ -1,43 +1,37 @@
-#!/bin/bash
-# EiraOS — Cognitive Overlay Installer for Ubuntu 24.04 LTS
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "=== EiraOS 2.0 — Installing Cognitive Overlay on Ubuntu 24.04 LTS ==="
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
+OUTPUT_DIR=${EIRA_DEB_OUTPUT_DIR:-${REPO_ROOT}/dist}
+OUTPUT_DIR=$(realpath -m -- "$OUTPUT_DIR")
+DEB_PATH=${EIRA_DEB_PATH:-${OUTPUT_DIR}/eira-os-core.deb}
+DEB_PATH=$(realpath -m -- "$DEB_PATH")
 
-# Check root
-if [ "$EUID" -ne 0 ]; then
-  echo "Fejl: Kør venligst som root (sudo ./install.sh)"
-  exit 1
+usage() {
+    cat >&2 <<'EOF'
+Usage: packaging/ubuntu/install.sh
+
+As an unprivileged user, this script builds the supported eira-os-core .deb.
+Then run it with sudo to install that package, or install the package directly
+with apt. Set EIRA_DEB_PATH to select a previously built package.
+EOF
+}
+
+if [[ ${EUID} -eq 0 ]]; then
+    if [[ ! -f $DEB_PATH || -L $DEB_PATH ]]; then
+        echo "No regular Debian package found at: $DEB_PATH" >&2
+        echo "Build it first as an unprivileged user:" >&2
+        echo "  ${REPO_ROOT}/scripts/build_deb.sh --output-dir ${OUTPUT_DIR}" >&2
+        exit 66
+    fi
+    exec apt-get install -y "$DEB_PATH"
 fi
 
-# Create eira user & system directories
-id -u eira &>/dev/null || useradd -r -m -s /bin/false eira
-mkdir -p /opt/eiraos /run/eira /etc/eiraos
-chown -R eira:eira /opt/eiraos /run/eira /etc/eiraos
+"${REPO_ROOT}/scripts/build_deb.sh" --output-dir "$OUTPUT_DIR"
+cat <<EOF
+Package built: $DEB_PATH
 
-# Copy application files
-cp -r app veritas-shield contracts /opt/eiraos/
-
-# Install systemd service units
-cp packaging/systemd/*.service /etc/systemd/system/
-systemctl daemon-reload
-
-# Sprint 1: Wayland-session (labwc + greetd autologin)
-apt-get install -y --no-install-recommends labwc greetd || true
-install -d -m 0755 /etc/greetd /etc/labwc
-install -m 0644 packaging/session/config/greetd/config.toml /etc/greetd/config.toml
-install -m 0644 packaging/session/config/labwc/rc.xml /etc/labwc/rc.xml
-install -m 0755 packaging/session/config/labwc/autostart /etc/labwc/autostart
-if id ubuntu >/dev/null 2>&1; then
-    adduser ubuntu eira || true
-fi
-systemctl enable eira-session.service || true
-
-# Enable and start all 7 EiraOS Core Daemons
-for daemon in identityd walletd veritasd graphd presenced contextd intentd; do
-    echo "Aktiverer eira-${daemon}.service..."
-    systemctl enable "eira-${daemon}.service"
-    systemctl restart "eira-${daemon}.service" || true
-done
-
-echo "=== EiraOS Cognitive Overlay er nu fuldt installeret på Ubuntu! ==="
+Review the build-info file, then install the package with:
+  sudo EIRA_DEB_PATH="$DEB_PATH" "${SCRIPT_DIR}/install.sh"
+EOF

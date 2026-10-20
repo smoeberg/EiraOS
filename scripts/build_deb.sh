@@ -27,7 +27,7 @@ while (($#)); do
     esac
 done
 
-for tool in dpkg-buildpackage python3; do
+for tool in dpkg-buildpackage dpkg-deb python3; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "Missing required build tool: $tool" >&2
         exit 69
@@ -77,4 +77,59 @@ if ((${#packages[@]} != 1)); then
 fi
 install -m 0644 -- "${packages[0]}" "$OUTPUT_DIR/"
 install -m 0644 -- "${packages[0]}" "$OUTPUT_DIR/eira-os-core.deb"
-echo "Built ${OUTPUT_DIR}/eira-os-core.deb"
+
+SOURCE_COMMIT=${EIRA_SOURCE_COMMIT:-}
+if [[ -z $SOURCE_COMMIT ]] && command -v git >/dev/null 2>&1; then
+    SOURCE_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)
+fi
+SOURCE_COMMIT=${SOURCE_COMMIT:-unknown}
+python3 - "$OUTPUT_DIR/eira-os-core.deb" "$SOURCE_COMMIT" \
+    "$OUTPUT_DIR/eira-os-core.deb.build-info.json" <<'PY'
+import hashlib
+import json
+import pathlib
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+package = pathlib.Path(sys.argv[1])
+source_commit = sys.argv[2]
+manifest_path = pathlib.Path(sys.argv[3])
+
+
+def sha3(path):
+    digest = hashlib.sha3_256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def output(command):
+    result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=10)
+    text = (result.stdout + result.stderr).strip().splitlines()
+    return text[0] if text else f"exit={result.returncode}"
+
+
+manifest = {
+    "format": "eira-deb-build-info-v1",
+    "source_commit": source_commit,
+    "source_commit_verified": source_commit != "unknown",
+    "package": {
+        "name": output(["dpkg-deb", "-f", str(package), "Package"]),
+        "version": output(["dpkg-deb", "-f", str(package), "Version"]),
+        "architecture": output(["dpkg-deb", "-f", str(package), "Architecture"]),
+        "file": package.name,
+        "sha3_256": sha3(package),
+        "size": package.stat().st_size,
+    },
+    "built_at_utc": datetime.now(timezone.utc).isoformat(),
+    "tools": {
+        "dpkg_buildpackage": output(["dpkg-buildpackage", "--version"]),
+        "python": output([sys.executable, "--version"]),
+    },
+}
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+echo "Built $OUTPUT_DIR/eira-os-core.deb"
+echo "Build provenance: $OUTPUT_DIR/eira-os-core.deb.build-info.json"
