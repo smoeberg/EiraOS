@@ -20,7 +20,6 @@
         "minHeight": 640,
         "resizable": true,
         "fullscreen": true,
-        "kiosk": true,
         "decorations": false
       }
     ],
