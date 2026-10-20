@@ -475,7 +475,9 @@ mod tests {
         let mut writer = SharedMemoryWriter::create(&name, 64).unwrap();
         let mut descriptor = writer.publish(b"hi").unwrap();
         descriptor.format_version = SHM_FORMAT_VERSION.wrapping_add(1);
-        let err = SharedMemoryReader::open(&descriptor).err().expect("invalid descriptor must be rejected");
+        let err = SharedMemoryReader::open(&descriptor)
+            .err()
+            .expect("invalid descriptor must be rejected");
         assert!(matches!(err, SharedMemoryError::VersionMismatch { .. }));
     }
 
@@ -510,7 +512,9 @@ mod tests {
         let second = writer.publish(b"second-payload").unwrap();
         assert_ne!(first.generation, second.generation);
         // Stale descriptor must fail closed on generation race.
-        let err = SharedMemoryReader::open(&first).err().expect("stale descriptor must be rejected");
+        let err = SharedMemoryReader::open(&first)
+            .err()
+            .expect("stale descriptor must be rejected");
         assert!(matches!(
             err,
             SharedMemoryError::GenerationRace | SharedMemoryError::DigestMismatch
