@@ -276,6 +276,7 @@ class FleetSyncClient(
         private val completion: CompletableDeferred<Boolean>,
     ) : WebSocketListener() {
         private var uploadHashes: List<String> = emptyList()
+        private var remoteRoot: String? = null
 
         override fun onOpen(webSocket: WebSocket, response: Response) {
             scope.launch {
@@ -310,8 +311,18 @@ class FleetSyncClient(
                     when (message.getString("type")) {
                         "sync.handshake.result" -> {
                             val result = message.getJSONObject("result")
-                            uploadHashes = result.getJSONArray("request_hashes").strings()
-                            val downloadHashes = result.getJSONArray("offer_hashes").strings()
+                            require(result.optBoolean("accepted", false)) { "sync_handshake_rejected" }
+                            val local = store.headers().map { SyncStateHeader.fromJson(it) }
+                            val remote = result.getJSONArray("headers").objects().map { SyncStateHeader.fromJson(it) }
+                            val diff = merkle.diff(local, remote)
+                            require(!merkle.reconcile(local, remote).hasConflict) { "sync_merkle_conflict" }
+                            remoteRoot = result.optString("root")
+                            require(remoteRoot == merkle.snapshot(remote).root) { "sync_remote_root_mismatch" }
+                            val requests = result.getJSONArray("request_hashes").strings()
+                            val offers = result.getJSONArray("offer_hashes").strings()
+                            require(requests.toSet() == diff.missingFromRemote.toSet() && offers.toSet() == diff.missingFromLocal.toSet()) { "sync_diff_mismatch" }
+                            uploadHashes = requests
+                            val downloadHashes = offers
                             if (downloadHashes.isEmpty()) {
                                 sendUploadsOrComplete(webSocket)
                             } else {
@@ -329,7 +340,12 @@ class FleetSyncClient(
                             sendUploadsOrComplete(webSocket)
                         }
 
-                        "sync.push_blocks.result" -> completion.complete(true)
+                        "sync.push_blocks.result" -> {
+                            val result = message.getJSONObject("result")
+                            require(result.optInt("invalid", -1) == 0) { "sync_server_rejected_blocks" }
+                            require(result.optString("root") == merkle.snapshot(store.headers().map { SyncStateHeader.fromJson(it) }).root) { "sync_final_root_mismatch" }
+                            completion.complete(true)
+                        }
                     }
                 } catch (error: Exception) {
                     completion.completeExceptionally(error)
@@ -355,7 +371,8 @@ class FleetSyncClient(
 
         private suspend fun sendUploadsOrComplete(webSocket: WebSocket) {
             if (uploadHashes.isEmpty()) {
-                completion.complete(true)
+                val local = store.headers().map { SyncStateHeader.fromJson(it) }
+                completion.complete(merkle.snapshot(local).root == remoteRoot)
                 return
             }
             val blocks = JSONArray().also { array ->
@@ -382,6 +399,8 @@ class FleetSyncClient(
         }
     }
 }
+
+private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { index -> getJSONObject(index) }
 
 private fun JSONArray.strings(): List<String> =
     (0 until length()).map { index -> getString(index) }
