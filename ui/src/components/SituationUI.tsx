@@ -8,6 +8,7 @@ interface SituationUIProps {
 
 type CardState = "active" | "low-confidence" | "unverified" | "applied";
 
+// Keep template interpolation unescaped: this file is type-checked by tsc.
 const CONFIDENCE_THRESHOLD = 0.6;
 const MISSING_RATIONALE = "Intet rationale angivet";
 
