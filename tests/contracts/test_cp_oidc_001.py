@@ -10,6 +10,12 @@ def test_cp_oidc_session_isolation_after_sso():
     login_a = mock_login({"email": "a@kommune.dk", "name": "A"})
     sid_b = ensure_session(str(uuid.uuid4()), "b@kommune.dk")
 
-    identityd.identity_step_up({"session_id": login_a["session_id"], "step_up_token": "mock_token"})
+    import pytest
+    from app.ipc.jsonrpc import JsonRpcError
+
+    with pytest.raises(JsonRpcError, match="step_up_provider_unavailable"):
+        identityd.identity_step_up({"session_id": login_a["session_id"], "step_up_token": "mock_token"})
+    session_a = get_session(login_a["session_id"])
     session_b = get_session(sid_b)
+    assert session_a["assurance_level"] == "eid_low"
     assert session_b["assurance_level"] == "eid_low"
