@@ -26,6 +26,7 @@ function proposal(metadata: Metadata = {}): ProposalRecord {
   };
 }
 
+// Use a normal template literal so the test file parses under TypeScript.
 function cardFor(state: string) {
   const card = document.querySelector(`[data-state="${state}"]`);
   expect(card).not.toBeNull();
