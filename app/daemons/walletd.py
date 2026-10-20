@@ -1,51 +1,41 @@
+"""Wallet/payment daemon with fail-closed behavior until real providers are configured.
+
+No payment rail or credential status is inferred locally. Production success
+must come from an authenticated provider integration, not a fee estimate.
 """
-walletd — EiraOS Core Wallet & Payment Optimization Daemon
-Handles EUDI Wallet credentials, consents, and cost-optimized payment routing (SEPA Instant, Digital Euro, Open Banking PSD3).
-Bypasses credit card monopolies by selecting the lowest fee payment rail.
-"""
+
+from __future__ import annotations
+
+from typing import Any
+
 
 class WalletDaemon:
-    def __init__(self):
+    def __init__(self) -> None:
         self.name = "walletd"
 
-    def optimize_and_pay(self, amount_dkk: float, merchant: str, supported_rails: list) -> dict:
-        """
-        Automatically selects the cheapest payment rail for the user.
-        """
-        rail_costs = {
-            "sepa_instant": 0.08,
-            "digital_euro": 0.00,
-            "open_banking_psd3": 0.15,
-            "mobilepay": 1.20,
-            "visa_mastercard": round(amount_dkk * 0.015 + 0.50, 2)
-        }
-
-        # Filter available rails
-        available = {r: rail_costs.get(r, 99.0) for r in supported_rails if r in rail_costs}
-        if not available:
-            # Fallback
-            available = {"sepa_instant": 0.08}
-
-        best_rail = min(available, key=available.get)
-        saved_fee = max(rail_costs.values()) - available[best_rail]
-
+    def optimize_and_pay(
+        self, amount_dkk: float, merchant: str, supported_rails: list[str]
+    ) -> dict[str, Any]:
+        """Decline safely until a real payment provider and consent verifier exist."""
         return {
-            "status": "PAID",
+            "status": "NOT_CONFIGURED",
+            "reason": "payment_provider_and_consent_verifier_not_configured",
             "amount_dkk": amount_dkk,
             "merchant": merchant,
-            "selected_rail": best_rail.upper(),
-            "transaction_fee_dkk": available[best_rail],
-            "fee_saved_dkk": round(max(0.0, saved_fee), 2),
-            "eudi_consent_verified": True
+            "selected_rail": None,
+            "transaction_id": None,
+            "eudi_consent_verified": False,
         }
 
-    def list_credentials(self) -> list:
-        return [
-            {"type": "EUDI_IDENTITY", "issuer": "Digitaliseringsstyrelsen", "status": "VALID"},
-            {"type": "DRIVING_LICENSE", "issuer": "Færdselsstyrelsen", "status": "VALID"},
-            {"type": "COMPANY_CVR", "issuer": "Erhvervsstyrelsen", "status": "VALID"}
-        ]
+    def list_credentials(self) -> list[dict[str, Any]]:
+        """No credentials are claimed valid without a live trusted issuer."""
+        return []
+
 
 if __name__ == "__main__":
-    w = WalletDaemon()
-    print(w.optimize_and_pay(150.0, "DSB Billet", ["sepa_instant", "visa_mastercard", "mobilepay"]))
+    import json
+
+    wallet = WalletDaemon()
+    print(json.dumps(wallet.optimize_and_pay(
+        150.0, "DSB Billet", ["sepa_instant", "visa_mastercard", "mobilepay"]
+    )))
