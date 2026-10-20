@@ -323,7 +323,7 @@ class FleetSyncClient(
                             val blocks = message.getJSONObject("result").getJSONArray("blocks")
                             for (index in 0 until blocks.length()) {
                                 store.appendValidated(
-                                    crypto.decrypt(blocks.getJSONObject(index)),
+                                    crypto.decrypt_state(blocks.getJSONObject(index)),
                                 )
                             }
                             sendUploadsOrComplete(webSocket)
@@ -359,7 +359,7 @@ class FleetSyncClient(
                 return
             }
             val blocks = JSONArray().also { array ->
-                store.findByHashes(uploadHashes).forEach { array.put(crypto.encrypt(it)) }
+                store.findByHashes(uploadHashes).forEach { array.put(crypto.encrypt_state(it)) }
             }
             webSocket.send(
                 JSONObject()
