@@ -104,10 +104,13 @@ class IntentDaemonService:
             ) from None
 
         if failed_constraints:
+            # Report the first hard failure; include every failed rule id so
+            # callers can see that the full constraint set was evaluated.
             constraint = failed_constraints[0]
             data: dict[str, Any] = {
                 "rule_id": constraint.id,
                 "rule": constraint.expression,
+                "failed_rule_ids": [item.id for item in failed_constraints],
                 "transformation": proposal.suggested_transformation,
                 "user_message": constraint.error_message,
                 "rationale": "Afvist af en obligatorisk CEL-politikregel.",
