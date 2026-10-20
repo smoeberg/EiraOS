@@ -5,9 +5,9 @@ import { SituationUI } from "../src/components/SituationUI";
 
 type Metadata = Partial<Pick<ProposalRecord, "confidence_score" | "rationale" | "source_model" | "applied">>;
 
-function proposal(metadata: Metadata = {}): ProposalRecord {
+function proposal(metadata: Metadata = {}, proposalId = "proposal-1"): ProposalRecord {
   return {
-    proposal_id: "proposal-1",
+    proposal_id: proposalId,
     suggested_transformation: "approve_document",
     candidate_state: {
       id: "state-1",
@@ -79,9 +79,9 @@ describe("SituationUI action cards", () => {
     render(
       <SituationUI
         proposals={[
-          proposal({ proposal_id: "low", confidence_score: 0.2 }),
-          proposal({ proposal_id: "unverified", rationale: "Intet rationale angivet" }),
-          proposal({ proposal_id: "applied", applied: true }),
+          proposal({ confidence_score: 0.2 }, "low"),
+          proposal({ rationale: "Intet rationale angivet" }, "unverified"),
+          proposal({ applied: true }, "applied"),
         ]}
         onActivate={onActivate}
       />,
