@@ -43,12 +43,16 @@ def test_intent_confirm_fails_closed_when_plan_does_not_allow_execution(
     )
 
     def must_not_execute(_pending):
-        pytest.fail("executor must not be called when the plan does not allow execution")
+        pytest.fail(
+            "executor must not be called when the plan does not allow execution"
+        )
 
     monkeypatch.setattr(intent_engine, "execute_intent", must_not_execute)
 
     with pytest.raises(JsonRpcError) as raised:
-        intent_engine.intent_confirm({"intent_id": "intent-1", "session_id": "session-1"})
+        intent_engine.intent_confirm(
+            {"intent_id": "intent-1", "session_id": "session-1"}
+        )
 
     assert raised.value.code == -32002
     assert raised.value.message == "cannot_execute"
@@ -89,12 +93,16 @@ def test_intent_confirm_rechecks_session_and_assurance(
     monkeypatch.setattr(intent_engine, "get_session", lambda *_: session)
 
     def must_not_execute(_pending):
-        pytest.fail("executor must not run without a valid session and sufficient assurance")
+        pytest.fail(
+            "executor must not run without a valid session and sufficient assurance"
+        )
 
     monkeypatch.setattr(intent_engine, "execute_intent", must_not_execute)
 
     with pytest.raises(JsonRpcError) as raised:
-        intent_engine.intent_confirm({"intent_id": "intent-2", "session_id": "session-2"})
+        intent_engine.intent_confirm(
+            {"intent_id": "intent-2", "session_id": "session-2"}
+        )
 
     assert raised.value.code == expected_code
     assert raised.value.data["user_message"] == expected_message
