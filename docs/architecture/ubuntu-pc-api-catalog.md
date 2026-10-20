@@ -1,8 +1,16 @@
 # Ubuntu PC API Catalog for EiraOS
 
 Status: **initial inventory / research required**  
-Target: Ubuntu Desktop on the specific Ubuntu LTS release selected by EiraOS.  
+Target: **Ubuntu Desktop 26.04 LTS (Resolute Raccoon)**. Use the latest available 26.04.x point release for development and integration testing; at the time this decision was recorded, the current point release is **26.04.1 LTS**.  
 This catalog is a planning artifact, not evidence that EiraOS has implemented these integrations.
+
+## Target platform decision
+
+- **Primary compatibility target:** Ubuntu Desktop 26.04 LTS (Resolute Raccoon).
+- **Development / CI / integration baseline:** latest available Ubuntu 26.04.x point release, currently 26.04.1 LTS; do not pin testing to the original 26.04.0 image if a later point release is available.
+- **Release policy:** validate all supported interfaces against the actual 26.04 package versions, D-Bus introspection data, permissions/Polkit policy, and desktop session. Do not assume an interface is available just because it exists in another Ubuntu release.
+- **Compatibility policy:** Ubuntu 24.04 LTS may be added as a secondary compatibility target only through an explicit decision and separate CI/integration coverage. Ubuntu 26.10 is not the primary target because it is an interim release with a shorter support window.
+- **Support lifecycle:** Ubuntu 26.04 LTS standard security maintenance is currently listed through May 2031; re-check official lifecycle dates as part of release planning.
 
 ## Design decisions
 
