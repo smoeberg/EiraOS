@@ -19,8 +19,10 @@ override_dh_auto_install:
 	install -d debian/eira-os-core/usr/lib/eira-os
 	cp -a app debian/eira-os-core/usr/lib/eira-os/
 	install -m 0644 requirements.txt debian/eira-os-core/usr/lib/eira-os/
+	install -d debian/eira-os-core/usr/share/eira-os
+	install -m 0644 packaging/daemon-policy.json debian/eira-os-core/usr/share/eira-os/daemon-policy.json
 	install -d debian/eira-os-core/usr/bin
-	for daemon in stated identityd fleetd veritasd intentd graphd; do \
+	for daemon in $$(python3 -c 'import json; from pathlib import Path; print(" ".join(json.loads(Path("packaging/daemon-policy.json").read_text())["production_daemons"]))'); do \
 		install -m 0755 packaging/bin/eira-daemon \
 			debian/eira-os-core/usr/bin/eira-$$daemon; \
 	done
