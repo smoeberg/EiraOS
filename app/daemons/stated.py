@@ -18,10 +18,10 @@ def _create_store() -> Any:
         raise RuntimeError("EIRA_STATE_BACKEND must be auto, python, or rust")
     if backend != "python":
         try:
-            from app.core_rust import RustStateStore
+            from app.core_rust import RustBackendUnavailable, RustStateStore
 
             return RustStateStore(db_path)
-        except Exception:
+        except RustBackendUnavailable:
             if backend == "rust":
                 raise
     return StateStore(db_path)
