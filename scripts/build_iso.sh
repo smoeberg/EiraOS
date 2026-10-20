@@ -231,10 +231,25 @@ def tool_version(command):
     return output[0] if output else f"exit={result.returncode}"
 
 
+package_info_path = deb_path.with_name(deb_path.name + ".build-info.json")
+try:
+    package_info = json.loads(package_info_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    package_info = {}
+package_commit = package_info.get("source_commit", "unknown")
+commit_match = (
+    None
+    if source_commit == "unknown" or package_commit == "unknown"
+    else source_commit == package_commit
+)
+
 manifest = {
     "format": "eira-iso-build-info-v1",
     "source_commit": source_commit,
     "source_commit_verified": source_commit != "unknown",
+    "package_build_info_present": bool(package_info),
+    "package_source_commit": package_commit,
+    "package_commit_matches_iso_source": commit_match,
     "base_distribution": "Ubuntu 24.04 LTS (noble)",
     "architecture": "amd64",
     "built_at_utc": datetime.now(timezone.utc).isoformat(),
