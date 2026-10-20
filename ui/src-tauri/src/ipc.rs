@@ -445,12 +445,15 @@ mod tests {
             let dir = short_temp_dir();
             let sock = dir.join("missing.sock");
             let request = b"{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"health\",\"params\":{}}\n";
+            let started = std::time::Instant::now();
             let err = exchange_with_retry(
                 &sock, "intentd", "health", 12, request, Duration::from_secs(1),
             ).await.expect_err("missing socket exhausts retries");
+            let elapsed = started.elapsed();
             let parsed: Value = serde_json::from_str(&err).expect("structured error");
             assert_eq!(parsed["kind"], "socket_unavailable");
             assert_eq!(IPC_MAX_ATTEMPTS, 4);
+            assert!(elapsed >= Duration::from_millis(650), "all backoffs should run: {elapsed:?}");
             let _ = std::fs::remove_dir_all(&dir);
         }
 
@@ -480,6 +483,36 @@ mod tests {
             let parsed: Value = serde_json::from_str(&err).expect("structured error");
             assert_eq!(parsed["kind"], "invalid_response");
             server.await.expect("server task");
+            assert_eq!(accepted.load(Ordering::SeqCst), 1);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[tokio::test]
+        async fn exchange_does_not_retry_timeout_with_unknown_delivery() {
+            use super::super::exchange_with_retry;
+            use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
+            let dir = short_temp_dir();
+            let sock = dir.join("intentd.sock");
+            let listener = UnixListener::bind(&sock).expect("bind");
+            let accepted = Arc::new(AtomicUsize::new(0));
+            let accepted_server = Arc::clone(&accepted);
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.expect("accept");
+                accepted_server.fetch_add(1, Ordering::SeqCst);
+                let mut reader = BufReader::new(&mut stream);
+                let mut request = String::new();
+                reader.read_line(&mut request).await.expect("read request");
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            });
+
+            let request = b"{\\"jsonrpc\\":\\"2.0\\",\\"id\\":14,\\"method\\":\\"health\\",\\"params\\":{}}\\n";
+            let err = exchange_with_retry(
+                &sock, "intentd", "health", 14, request, Duration::from_millis(60),
+            ).await.expect_err("ambiguous timeout is not retried");
+            let parsed: Value = serde_json::from_str(&err).expect("structured error");
+            assert_eq!(parsed["kind"], "timeout");
+            server.abort();
             assert_eq!(accepted.load(Ordering::SeqCst), 1);
             let _ = std::fs::remove_dir_all(&dir);
         }
