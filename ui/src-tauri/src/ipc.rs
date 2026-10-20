@@ -268,6 +268,10 @@ mod tests {
     };
     use serde_json::{json, Value};
 
+    // These tests mutate process-global EIRA_* env vars; serialize them so
+    // parallel test threads cannot observe each other's env changes.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn daemon_names_are_allowlisted() {
         assert_eq!(canonical_daemon("graph"), Some("graphd"));
@@ -300,6 +304,7 @@ mod tests {
 
     #[test]
     fn socket_root_prefers_eira_socket_dir() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sock-test"); }
         unsafe { std::env::remove_var("EIRA_RUN_DIR"); }
         assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-sock-test"));
@@ -312,6 +317,7 @@ mod tests {
 
     #[test]
     fn socket_path_joins_daemon_sock() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sp"); }
         assert_eq!(
             socket_path("intentd"),
@@ -332,7 +338,8 @@ mod tests {
         use std::path::PathBuf;
         use std::time::Duration;
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        use tokio::net::UnixListener;
+        use std::sync::Mutex;
+    use tokio::net::UnixListener;
 
         /// AF_UNIX sun_path is ~108 bytes; keep paths short under /tmp.
         fn short_temp_dir() -> PathBuf {
