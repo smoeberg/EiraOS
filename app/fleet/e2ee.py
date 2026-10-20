@@ -195,7 +195,7 @@ class StatePayloadEncryptor:
                 raise PayloadIntegrityError("decrypted body must be an object")
 
             payload = protected.get("payload")
-            if payload is None or not isinstance(payload, dict) or not payload:
+            if payload is None or not isinstance(payload, dict):
                 raise PayloadIntegrityError("decrypted payload is missing or empty")
 
             metadata = protected_header["metadata"]
