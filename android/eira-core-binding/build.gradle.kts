@@ -35,6 +35,9 @@ android {
 }
 
 dependencies {
+    implementation("net.java.dev.jna:jna:5.17.0@aar")
+    testImplementation("net.java.dev.jna:jna:5.17.0")
+    testImplementation(kotlin("test"))
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
