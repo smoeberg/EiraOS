@@ -1,6 +1,12 @@
 package app.eira.sync
 
 import android.content.Context
+import android.app.Service
+import android.content.Intent
+import android.os.IBinder
+import androidx.work.Data
+import java.security.MessageDigest
+import java.util.Locale
 import android.util.Base64
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -38,6 +44,21 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 
+data class SyncStateHeader(val id: String, val version: Int, val hash: String, val previousStateId: String?, val timestampNs: Long = 0) {
+    fun asJson() = JSONObject().put("id", id).put("version", version).put("hash", hash).put("previous_state_id", previousStateId ?: JSONObject.NULL).put("timestamp_ns", timestampNs)
+    companion object { fun fromJson(v: JSONObject) = SyncStateHeader(v.getString("id"), v.getInt("version"), v.getString("hash"), if (v.isNull("previous_state_id")) null else v.getString("previous_state_id"), v.optLong("timestamp_ns", 0)) }
+}
+data class SyncMerkleSnapshot(val root: String, val headers: List<SyncStateHeader>, val heads: List<String>) {
+    fun asDict() = JSONObject().put("root", root).put("heads", JSONArray(heads)).put("headers", JSONArray().also { a -> headers.forEach { a.put(it.asJson()) } })
+}
+data class SyncDiff(val localRoot: String, val remoteRoot: String, val missingFromLocal: List<String>, val missingFromRemote: List<String>) { val inSync: Boolean get() = localRoot == remoteRoot }
+data class SyncForkResolution(val snapshot: SyncMerkleSnapshot, val canonicalHead: String?, val conflictingIds: List<String>) { val hasConflict: Boolean get() = conflictingIds.isNotEmpty() }
+interface MerkleSyncEngine {
+    fun snapshot(values: List<SyncStateHeader>): SyncMerkleSnapshot
+    fun diff(local: List<SyncStateHeader>, remote: List<SyncStateHeader>): SyncDiff
+    fun reconcile(local: List<SyncStateHeader>, remote: List<SyncStateHeader>): SyncForkResolution
+}
+interface StatePayloadEncryptor { fun encrypt_state(state: StateEntity): JSONObject; fun decrypt_state(envelope: JSONObject): StateEntity }
 data class SyncConfiguration(
     val serverUrl: String,
     val deviceId: String,
@@ -103,7 +124,7 @@ object SyncSecrets {
     }
 }
 
-class FleetCrypto(masterKey: ByteArray, fleetSalt: ByteArray) {
+class FleetCrypto(masterKey: ByteArray, fleetSalt: ByteArray) : StatePayloadEncryptor {
     private val key = hkdfSha256(
         inputKey = masterKey,
         salt = fleetSalt,
@@ -134,7 +155,7 @@ class FleetCrypto(masterKey: ByteArray, fleetSalt: ByteArray) {
         return canonical.toByteArray(StandardCharsets.UTF_8)
     }
 
-    fun encrypt(state: StateEntity): JSONObject {
+    override fun encrypt_state(state: StateEntity): JSONObject {
         val metadata = metadata(state)
         val plaintext = JSONObject()
             .put("payload", JSONObject(state.payload))
@@ -159,7 +180,7 @@ class FleetCrypto(masterKey: ByteArray, fleetSalt: ByteArray) {
             .put("ciphertext", Base64.encodeToString(ciphertext, Base64.NO_WRAP))
     }
 
-    fun decrypt(envelope: JSONObject): StateEntity {
+    override fun decrypt_state(envelope: JSONObject): StateEntity {
         require(envelope.getString("algorithm") == "ChaCha20-Poly1305+HKDF-SHA256")
         require(envelope.getInt("envelope_version") == 1)
         val metadata = envelope.getJSONObject("metadata")
@@ -229,10 +250,12 @@ class FleetSyncClient(
     private val configuration: SyncConfiguration,
     private val authToken: String,
     private val store: RoomStateStore,
-    private val crypto: FleetCrypto,
+    private val crypto: StatePayloadEncryptor,
+    private val merkle: MerkleSyncEngine? = null,
     private val client: OkHttpClient = OkHttpClient(),
 ) {
     suspend fun syncOnce(): Boolean {
+        require(SyncConstraints.isTrustedEndpoint(configuration.serverUrl)) { "untrusted_sync_endpoint" }
         val completion = CompletableDeferred<Boolean>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val listener = SessionListener(scope, completion)
@@ -369,8 +392,10 @@ class SyncWorker(
 ) : CoroutineWorker(appContext, workerParameters) {
     override suspend fun doWork(): Result {
         val configuration = SyncConfigurationStore.load(applicationContext)
-            ?: return Result.failure()
-        val secrets = SyncSecrets.load(applicationContext) ?: return Result.failure()
+            ?: return Result.failure(Data.Builder().putString("sync_error", "missing_sync_configuration").build())
+        if (!SyncConstraints.isTrustedEndpoint(configuration.serverUrl)) return Result.failure(Data.Builder().putString("sync_error", "untrusted_sync_endpoint").build())
+        if (!SyncConstraints.constraintsSatisfied(applicationContext)) return Result.retry()
+        val secrets = SyncSecrets.load(applicationContext) ?: return Result.failure(Data.Builder().putString("sync_error", "missing_sync_secrets").build())
         val store = RoomStateStore.open(applicationContext)
         return try {
             store.replay()
@@ -392,9 +417,7 @@ class SyncWorker(
 }
 
 object SyncScheduler {
-    private val networkConstraints = Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .build()
+    private val networkConstraints = SyncConstraints.workConstraints
 
     fun schedulePeriodic(context: Context, configuration: SyncConfiguration) {
         SyncConfigurationStore.save(context, configuration)
@@ -419,5 +442,14 @@ object SyncScheduler {
             ExistingWorkPolicy.REPLACE,
             request,
         )
+    }
+}
+
+class SyncService : Service() {
+    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        SyncScheduler.onStateAdded(applicationContext)
+        stopSelf(startId)
+        return START_NOT_STICKY
     }
 }
