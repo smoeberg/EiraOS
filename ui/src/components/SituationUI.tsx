@@ -6,23 +6,10 @@ interface SituationUIProps {
   onActivate?: (proposal: ProposalRecord) => void;
 }
 
-type ProposalWithActionMetadata = ProposalRecord & {
-  source?: string | null;
-  sourceLabel?: string | null;
-  source_label?: string | null;
-  origin?: string | null;
-  expiresAt?: string | number | null;
-  expires_at?: string | number | null;
-  policyLabel?: string | null;
-  policy_label?: string | null;
-  policyLocked?: boolean;
-  policy_locked?: boolean;
-  applied?: boolean;
-  used?: boolean;
-  status?: string | null;
-};
+type CardState = "active" | "low-confidence" | "unverified" | "applied";
 
-type CardState = "active" | "locked" | "expired" | "applied";
+const CONFIDENCE_THRESHOLD = 0.6;
+const MISSING_RATIONALE = "Intet rationale angivet";
 
 const STATE_PRESENTATION: Record<
   CardState,
@@ -34,21 +21,21 @@ const STATE_PRESENTATION: Record<
     color: "var(--green, #72d6a0)",
     background: "rgba(114, 214, 160, 0.07)",
   },
-  locked: {
-    label: "Låst af policy",
-    description: "Kan ikke aktiveres under gældende policy",
+  "low-confidence": {
+    label: "Lav konfidens",
+    description: "Skøn/provisorisk forslag — konfidensen er under 60 %",
     color: "var(--amber, #e9b767)",
     background: "rgba(233, 183, 103, 0.07)",
   },
-  expired: {
-    label: "Udløbet",
-    description: "Forslagets gyldighed er udløbet",
-    color: "var(--red, #f28585)",
-    background: "rgba(242, 133, 133, 0.06)",
+  unverified: {
+    label: "Ikke-verificeret",
+    description: "Forslaget mangler en begrundelse og kræver manuel vurdering",
+    color: "var(--amber, #e9b767)",
+    background: "rgba(233, 183, 103, 0.05)",
   },
   applied: {
     label: "Allerede anvendt",
-    description: "Dette forslag er allerede anvendt",
+    description: "Kandidatens tilstand findes allerede i grafen",
     color: "var(--text-muted, #8f9aaa)",
     background: "rgba(255, 255, 255, 0.02)",
   },
@@ -58,48 +45,16 @@ function actionLabel(value: string): string {
   return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function nonEmptyString(...values: unknown[]): string | undefined {
-  return values.find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
-  );
-}
-
-function expiryTimestamp(value: string | number | null | undefined): number | undefined {
-  if (typeof value !== "string" && typeof value !== "number") return undefined;
-  if (typeof value === "string" && value.trim() === "") return undefined;
-  const timestamp = typeof value === "number" ? value : Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : undefined;
-}
-
-function expiryLabel(timestamp: number): string {
-  return new Intl.DateTimeFormat("da-DK", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(timestamp);
-}
-
-function getCardState(proposal: ProposalWithActionMetadata, now: number): CardState {
-  const status = proposal.status?.toLowerCase().replaceAll("-", "_");
-  if (proposal.applied === true || proposal.used === true || status === "applied" || status === "used") {
-    return "applied";
+function getCardState(proposal: ProposalRecord): CardState {
+  if (proposal.applied === true) return "applied";
+  if (!proposal.rationale?.trim() || proposal.rationale.trim() === MISSING_RATIONALE) {
+    return "unverified";
   }
-  if (
-    proposal.policyLocked === true ||
-    proposal.policy_locked === true ||
-    status === "locked" ||
-    status === "policy_locked"
-  ) {
-    return "locked";
-  }
-  const expiresAt = expiryTimestamp(proposal.expiresAt ?? proposal.expires_at);
-  if (expiresAt !== undefined && expiresAt <= now) return "expired";
+  if (proposal.confidence_score < CONFIDENCE_THRESHOLD) return "low-confidence";
   return "active";
 }
 
 export function SituationUI({ proposals, onActivate }: SituationUIProps) {
-  // Expiry is intentionally evaluated during render; no timer or background task is needed.
-  const now = Date.now();
-
   return (
     <section className="situation-panel" aria-labelledby="situation-heading">
       <div className="panel-heading">
@@ -114,18 +69,9 @@ export function SituationUI({ proposals, onActivate }: SituationUIProps) {
       ) : (
         <div className="action-grid">
           {proposals.map((proposal) => {
-            const enriched = proposal as ProposalWithActionMetadata;
-            const state = getCardState(enriched, now);
+            const state = getCardState(proposal);
             const presentation = STATE_PRESENTATION[state];
             const canActivate = state === "active";
-            const expiresAt = expiryTimestamp(enriched.expiresAt ?? enriched.expires_at);
-            const source = nonEmptyString(
-              enriched.sourceLabel,
-              enriched.source_label,
-              enriched.source,
-              enriched.origin,
-            );
-            const policyLabel = nonEmptyString(enriched.policyLabel, enriched.policy_label);
             const cardStyle: CSSProperties = {
               borderColor: presentation.color,
               background: presentation.background,
@@ -134,7 +80,7 @@ export function SituationUI({ proposals, onActivate }: SituationUIProps) {
 
             return (
               <article
-                className={`action-card action-card--${state}`}
+                className={\`action-card action-card--\${state}\`}
                 key={proposal.proposal_id}
                 data-state={state}
                 style={cardStyle}
@@ -166,7 +112,7 @@ export function SituationUI({ proposals, onActivate }: SituationUIProps) {
                       proposal.candidate_state.type,
                   )}
                 </h3>
-                <p>{proposal.rationale}</p>
+                <p>{proposal.rationale?.trim() || MISSING_RATIONALE}</p>
                 <dl
                   className="action-card-metadata"
                   style={{
@@ -178,20 +124,10 @@ export function SituationUI({ proposals, onActivate }: SituationUIProps) {
                     fontSize: "0.66rem",
                   }}
                 >
-                  <dt>Kilde</dt>
-                  <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{source ?? "Ukendt kilde"}</dd>
-                  {expiresAt !== undefined && (
-                    <>
-                      <dt>Udløber</dt>
-                      <dd style={{ margin: 0 }}>{expiryLabel(expiresAt)}</dd>
-                    </>
-                  )}
-                  {policyLabel && (
-                    <>
-                      <dt>Policy</dt>
-                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{policyLabel}</dd>
-                    </>
-                  )}
+                  <dt>Kildemodel</dt>
+                  <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                    {proposal.source_model?.trim() || "Ukendt model"}
+                  </dd>
                   {!canActivate && (
                     <>
                       <dt>Tilstand</dt>
