@@ -450,7 +450,7 @@ class SyncWorker(
         val configuration = SyncConfigurationStore.load(applicationContext)
             ?: return Result.failure(Data.Builder().putString("sync_error", "missing_sync_configuration").build())
         if (!SyncConstraints.isTrustedEndpoint(configuration.serverUrl)) return Result.failure(Data.Builder().putString("sync_error", "untrusted_sync_endpoint").build())
-        if (!SyncConstraints.constraintsSatisfied(applicationContext)) return Result.retry()
+        if (!SyncConstraints.constraintsSatisfied(applicationContext)) return Result.failure(Data.Builder().putString("sync_error", "untrusted_network_or_low_battery").build())
         val secrets = SyncSecrets.load(applicationContext) ?: return Result.failure(Data.Builder().putString("sync_error", "missing_sync_secrets").build())
         val store = RoomStateStore.open(applicationContext)
         return try {
