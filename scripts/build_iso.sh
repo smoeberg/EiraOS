@@ -49,7 +49,7 @@ while (($#)); do
     esac
 done
 
-for tool in lb python3; do
+for tool in lb python3 xorriso mksquashfs; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "Missing required ISO tool: $tool" >&2
         echo "Install live-build, xorriso and squashfs-tools on Ubuntu 24.04." >&2
@@ -95,8 +95,8 @@ trap cleanup EXIT INT TERM
         --architectures amd64 \
         --binary-images iso-hybrid \
         --archive-areas "main universe" \
-        --mirror-bootstrap http://archive.ubuntu.com/ubuntu \
-        --mirror-chroot http://archive.ubuntu.com/ubuntu \
+        --mirror-bootstrap https://archive.ubuntu.com/ubuntu \
+        --mirror-chroot https://archive.ubuntu.com/ubuntu \
         --security true \
         --updates true \
         --iso-application "EiraOS 1.0 RC1" \
@@ -174,4 +174,61 @@ with path.open("rb") as handle:
         digest.update(chunk)
 print(f"{digest.hexdigest()}  {path.name}")
 PY
+
+SOURCE_COMMIT=${EIRA_SOURCE_COMMIT:-}
+if [[ -z $SOURCE_COMMIT ]] && command -v git >/dev/null 2>&1; then
+    SOURCE_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)
+fi
+SOURCE_COMMIT=${SOURCE_COMMIT:-unknown}
+python3 - "$ISO_OUTPUT" "$DEB_PATH" "$SOURCE_COMMIT" "${ISO_OUTPUT}.build-info.json" <<'PY'
+import hashlib
+import json
+import pathlib
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+iso_path = pathlib.Path(sys.argv[1])
+deb_path = pathlib.Path(sys.argv[2])
+source_commit = sys.argv[3]
+manifest_path = pathlib.Path(sys.argv[4])
+
+
+def sha3(path):
+    digest = hashlib.sha3_256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def tool_version(command):
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"unavailable: {exc}"
+    output = (result.stdout + result.stderr).strip().splitlines()
+    return output[0] if output else f"exit={result.returncode}"
+
+
+manifest = {
+    "format": "eira-iso-build-info-v1",
+    "source_commit": source_commit,
+    "source_commit_verified": source_commit != "unknown",
+    "base_distribution": "Ubuntu 24.04 LTS (noble)",
+    "architecture": "amd64",
+    "built_at_utc": datetime.now(timezone.utc).isoformat(),
+    "inputs": [{"name": deb_path.name, "sha3_256": sha3(deb_path), "size": deb_path.stat().st_size}],
+    "outputs": [{"name": iso_path.name, "sha3_256": sha3(iso_path), "size": iso_path.stat().st_size}],
+    "tools": {
+        "live_build": tool_version(["lb", "--version"]),
+        "xorriso": tool_version(["xorriso", "-version"]),
+        "mksquashfs": tool_version(["mksquashfs", "-version"]),
+    },
+}
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 echo "Built $ISO_OUTPUT"
+echo "Build provenance: ${ISO_OUTPUT}.build-info.json"
