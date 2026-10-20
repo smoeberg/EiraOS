@@ -106,3 +106,36 @@ def test_tampered_chain_detected_by_ffi(ffi_engine: NativeStateEngine) -> None:
     tampered = copy.deepcopy(values)
     tampered[1]["payload"]["text"] = "tampered"
     assert not ffi_engine.validate_chain(tampered)
+
+def test_ffi_rejects_null_pointers_and_invalid_json(ffi_engine: NativeStateEngine) -> None:
+    compute_hash = ffi_engine.library.eira_state_compute_hash
+    validate_chain = ffi_engine.library.eira_state_validate_chain
+
+    assert not compute_hash(None)
+    assert not compute_hash(b"{invalid json")
+    assert validate_chain(None) == -1
+    assert validate_chain(b"{invalid json") == -1
+
+
+def test_ffi_handles_deeply_nested_invalid_state_without_crashing(
+    ffi_engine: NativeStateEngine,
+) -> None:
+    deeply_nested = b'{"id":"state","version":1,"timestamp_ns":1,"type":"DocumentState","payload":' + (
+        b"[" * 300 + b"0" + b"]" * 300
+    ) + b',"previous_state_id":null}'
+    assert not ffi_engine.library.eira_state_compute_hash(deeply_nested)
+    assert ffi_engine.library.eira_state_validate_chain(b"[" + deeply_nested + b"]") == -1
+
+
+def test_hash_matches_python_for_large_timestamp_and_unicode_payload(
+    ffi_engine: NativeStateEngine,
+) -> None:
+    state = State(
+        id="00000000-0000-0000-0000-000000000042",
+        version=7,
+        timestamp_ns=1_700_000_000_123_456_789,
+        type="DocumentState",
+        payload={"text": "Grønland — æøå 🌍", "count": 42, "enabled": True},
+    )
+    assert ffi_engine.compute_hash(state.model_dump(mode="json")) == state.hash
+
