@@ -546,6 +546,7 @@ mod tests {
         unlink_segment(&name).unwrap();
         unlink_segment(&name).unwrap();
     }
+
     #[test]
     fn create_does_not_unlink_an_existing_live_segment() {
         let name = unique_name("live");
@@ -562,5 +563,4 @@ mod tests {
         let reader = SharedMemoryReader::open(&descriptor).unwrap();
         assert_eq!(reader.payload(), b"still owned by first writer");
     }
-
 }
