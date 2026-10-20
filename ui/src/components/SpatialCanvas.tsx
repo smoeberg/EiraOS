@@ -432,19 +432,9 @@ export function SpatialCanvas({
           <span className="eyebrow">Levende tilstandsgraf</span>
           <h2>Spatial Canvas</h2>
         </div>
-<<<<<<< HEAD
         <div className="canvas-tools" aria-label="Canvasvrktojer">
           <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value - 0.15))}>
             
-=======
-        <div className="canvas-tools" aria-label="Canvasværktøjer">
-          <button
-            type="button"
-            onClick={() => setZoom((value) => Math.max(0.45, value - 0.15))}
-            style={{ color: "#f4f6f8" }}
-          >
-            −
->>>>>>> main
           </button>
           <output
             aria-label="Zoomniveau"
@@ -505,7 +495,6 @@ export function SpatialCanvas({
             transition: reducedMotion ? "none" : undefined,
           }}
         >
-<<<<<<< HEAD
           <CanvasEdgesContainer edges={snapshot.edges} nodeById={nodeById} />
           
           <CanvasNodesContainer
@@ -519,73 +508,6 @@ export function SpatialCanvas({
         {loading && <p className="canvas-status">Indlser tilstande</p>}
         {!loading && snapshot.nodes.length === 0 && !error && (
           <p className="canvas-status">Ingen tilstande endnu.</p>
-=======
-          <svg className="canvas-edges" width="1600" height="1000" aria-hidden="true">
-            {snapshot.edges.map((edge) => {
-              const source = nodeById.get(edge.source);
-              const target = nodeById.get(edge.target);
-              if (!source || !target) return null;
-              return (
-                <g key={edge.id}>
-                  <line
-                    x1={source.x + 92}
-                    y1={source.y + 42}
-                    x2={target.x + 92}
-                    y2={target.y + 42}
-                  />
-                  <text
-                    x={(source.x + target.x) / 2 + 92}
-                    y={(source.y + target.y) / 2 + 34}
-                    fill="#b8c7d9"
-                  >
-                    {edge.relation}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-          {snapshot.nodes.map((node) => (
-            <button
-              type="button"
-              key={node.id}
-              className={`canvas-node${selectedId === node.id ? " canvas-node--selected" : ""}`}
-              style={{
-                left: node.x,
-                top: node.y,
-                transition: reducedMotion ? "none" : undefined,
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => select(node)}
-              aria-pressed={selectedId === node.id}
-              data-testid={`canvas-node-${node.id}`}
-            >
-              <span className="node-type" style={{ color: "#9fc5ff" }}>
-                {node.type}
-              </span>
-              <strong style={{ color: "#f4f6f8" }}>{node.label}</strong>
-              <span className="node-meta" style={{ color: "#b8c7d9" }}>
-                {node.state
-                  ? `v${node.state.version} · ${node.state.hash.slice(0, 8)}`
-                  : "Grafobjekt"}
-              </span>
-            </button>
-          ))}
-        </div>
-        {loading && (
-          <p className="canvas-status" style={{ color: "#dbe7f5" }}>
-            Indlæser tilstande…
-          </p>
-        )}
-        {!loading && snapshot.nodes.length === 0 && !error && (
-          <p className="canvas-status" style={{ color: "#dbe7f5" }}>
-            Ingen tilstande endnu.
-          </p>
-        )}
-        {error && (
-          <p className="canvas-status canvas-status--error" style={{ color: "#ffb4ab" }}>
-            {error}
-          </p>
->>>>>>> main
         )}
       </div>
     </section>
