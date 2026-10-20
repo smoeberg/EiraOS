@@ -94,6 +94,11 @@ def test_iso_builder_targets_noble_and_embeds_local_deb() -> None:
     assert "--distribution noble" in script
     assert "--mode ubuntu" in script
     assert "config/packages.chroot/eira-os-core.deb" in script
+    assert "config/includes.chroot/etc/greetd/config.toml" in script
+    assert "config/includes.chroot/etc/labwc/rc.xml" in script
+    assert "config/includes.chroot/etc/labwc/autostart" in script
+    assert '"${REPO_ROOT}/packaging/session/config/greetd/config.toml"' in script
+    assert "install -m 0644 packaging/session/config/greetd/config.toml" not in script
     assert "ubuntu-desktop-minimal" in script
     assert "systemctl enable eira.target" in script
     assert "adduser ubuntu eira" in script
