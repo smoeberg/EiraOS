@@ -156,7 +156,7 @@ for index, line in enumerate(lines):
         members.append("ubuntu")
     fields[3] = ",".join(members)
     lines[index] = ":".join(fields)
-    group_file.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    group_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     break
 else:
     raise SystemExit("eira group missing after package installation")
