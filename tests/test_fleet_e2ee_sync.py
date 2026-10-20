@@ -395,14 +395,11 @@ def test_chain_validation_with_previous_state(encryptor):
 # =============================================================================
 
 
-def test_empty_payload_encryption(encryptor):
-    """Test encryption of state with empty payload."""
+def test_empty_payload_encryption_fails_closed(encryptor):
+    """Empty payloads violate the E2EE contract and must be rejected."""
     state = State(type="EmptyState", payload={})
-    envelope = encryptor.encrypt_state(state)
-    decrypted = encryptor.decrypt_state(envelope)
-
-    assert decrypted.id == state.id
-    assert decrypted.payload == {}
+    with pytest.raises(PayloadIntegrityError, match="non-empty"):
+        encryptor.encrypt_state(state)
 
 
 # =============================================================================
