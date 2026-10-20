@@ -33,5 +33,5 @@ cat <<EOF
 Package built: $DEB_PATH
 
 Review the build-info file, then install the package with:
-  sudo ${SCRIPT_DIR}/install.sh
+  sudo EIRA_DEB_PATH="$DEB_PATH" "${SCRIPT_DIR}/install.sh"
 EOF
