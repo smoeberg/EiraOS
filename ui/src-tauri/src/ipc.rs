@@ -435,6 +435,7 @@ mod tests {
 
         #[tokio::test]
         async fn send_ipc_request_roundtrip_via_env_socket_dir() {
+            let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
             let sock_path = dir.join("walletd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind walletd");
@@ -494,6 +495,7 @@ mod tests {
 
         #[tokio::test]
         async fn send_ipc_request_timeout_is_fail_closed() {
+            let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
             let sock_path = dir.join("fleetd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind");
