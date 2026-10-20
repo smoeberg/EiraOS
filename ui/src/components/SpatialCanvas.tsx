@@ -511,6 +511,11 @@ export function SpatialCanvas({
           />
         </div>
         {loading && <p className="canvas-status">Indlser tilstande</p>}
+        {!loading && error && (
+          <p role="alert" className="canvas-status canvas-status--error">
+            {error}
+          </p>
+        )}
         {!loading && snapshot.nodes.length === 0 && !error && (
           <p className="canvas-status">Ingen tilstande endnu.</p>
         )}
