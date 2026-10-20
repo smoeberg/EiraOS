@@ -74,7 +74,7 @@ class _NativeLibrary:
         try:
             return ctypes.string_at(pointer).decode("utf-8")
         finally:
-            self.value.eira_stated_free_string(pointer)
+            self.value.eira_stated_free_string(ctypes.c_void_p(pointer))
 
     def last_error(self) -> str:
         pointer = self.value.eira_stated_last_error()
@@ -83,7 +83,7 @@ class _NativeLibrary:
         try:
             return ctypes.string_at(pointer).decode("utf-8", errors="replace")
         finally:
-            self.value.eira_stated_free_string(pointer)
+            self.value.eira_stated_free_string(ctypes.c_void_p(pointer))
 
 
 class RustStateStore:
@@ -171,11 +171,13 @@ class RustStateStore:
 
     def close(self) -> None:
         with self._lock:
-            if self._handle:
-                self._native.value.eira_stated_close(self._handle)
+            handle = self._handle
+            if handle:
                 self._handle = None
+                self._native.value.eira_stated_close(ctypes.c_void_p(handle))
 
     def __enter__(self) -> RustStateStore:
+        self._ensure_open()
         return self
 
     def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
