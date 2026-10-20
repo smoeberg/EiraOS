@@ -63,12 +63,12 @@ def test_production_daemon_policy_matches_runtime_and_package() -> None:
     assert set(production).isdisjoint(prototypes)
     assert set(production) | set(prototypes) == _runtime_daemon_names()
 
-    installed_wrappers = {
-        path.name.removeprefix("eira-")
-        for path in (REPO_ROOT / "packaging" / "bin").glob("eira-*")
-        if path.name != "eira-daemon"
-    }
-    assert installed_wrappers == set(production)
+    launcher = (REPO_ROOT / "packaging" / "bin" / "eira-daemon").read_text(
+        encoding="utf-8"
+    )
+    allowed_line = next(line for line in launcher.splitlines() if "stated|" in line)
+    allowed_daemons = set(allowed_line.strip().split(")")[0].split("|"))
+    assert allowed_daemons == set(production)
 
     service_files = {
         path.name.removeprefix("eira-").removesuffix(".service")
