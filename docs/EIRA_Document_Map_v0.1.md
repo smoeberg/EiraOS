@@ -81,6 +81,21 @@ Hvert strategidokument har **drift-, test- og roadmap-følgesvend**. Læs dem sa
 
 ---
 
+## Implementeringssummater (Sprint 5–7)
+
+Sprint-summater, der dokumenterer, hvad der konkret er bygget på main:
+
+| Sprint | Dokument |
+|--------|----------|
+| Sprint 5 — E2EE State Sync | [EIRA_Sprint5_Summary.md](EIRA_Sprint5_Summary.md) |
+| Sprint 6 — Android bindings + FFI/WASM | [EIRA_Sprint6_Summary.md](EIRA_Sprint6_Summary.md) |
+| Sprint 7 — Spatial UI + Tauri App Shell | [EIRA_Sprint7_Summary.md](EIRA_Sprint7_Summary.md) |
+
+Hver summary beskriver leverancer, filer, tests og udestående arbejde; CHANGELOG.md holder
+release-status pr. version.
+
+---
+
 ## Vedligeholdelse
 
 - Opdater denne fil når et **nyt normativt** dokument tilføjes — ikke for hver draft.

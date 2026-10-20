@@ -25,15 +25,46 @@ interface VeritasHUDProps {
 }
 
 const LAYERS: Array<[keyof VeritasResult["layers"], string]> = [
-  ["layer1", "Lag 1 · Kilde"],
-  ["layer2", "Lag 2 · QEAA"],
-  ["layer3", "Lag 3 · Proveniens"],
-  ["c2pa", "C2PA · Medie"],
+  ["layer1", "Lag 1 \u00b7 Kilde"],
+  ["layer2", "Lag 2 \u00b7 QEAA"],
+  ["layer3", "Lag 3 \u00b7 Proveniens"],
+  ["c2pa", "C2PA \u00b7 Medie"],
 ];
+
+const UNKNOWN_SCORE = -1;
+const UNKNOWN_LABEL = "Ukendt";
+
+function clampScore(score: number | undefined): number {
+  if (score === undefined || isNaN(score)) {
+    return UNKNOWN_SCORE;
+  }
+  return Math.max(0, Math.min(100, score));
+}
+
+function clampLayerScore(score: number | undefined): number {
+  if (score === undefined || isNaN(score)) {
+    return UNKNOWN_SCORE;
+  }
+  return Math.max(0, Math.min(1, score));
+}
+
+function formatScore(score: number): string {
+  if (score === UNKNOWN_SCORE) {
+    return UNKNOWN_LABEL;
+  }
+  return `${Math.round(score)}%`;
+}
+
+function formatLayerScore(score: number): string {
+  if (score === UNKNOWN_SCORE) {
+    return UNKNOWN_LABEL;
+  }
+  return `${Math.round(score * 100)}%`;
+}
 
 export function VeritasHUD({ result, subject, loading = false, error }: VeritasHUDProps) {
   if (loading) {
-    return <aside className="veritas-hud hud-placeholder">Veritas analyserer…</aside>;
+    return <aside className="veritas-hud hud-placeholder">Veritas analyserer\u2026</aside>;
   }
   if (error) {
     return <aside className="veritas-hud hud-placeholder hud-error">{error}</aside>;
@@ -41,12 +72,15 @@ export function VeritasHUD({ result, subject, loading = false, error }: VeritasH
   if (!result) {
     return (
       <aside className="veritas-hud hud-placeholder">
-        Vælg et objekt på canvas for at se Veritas-certifikatet.
+        V\u00e6lg et objekt p\u00e5 canvas for at se Veritas-certifikatet.
       </aside>
     );
   }
 
-  const score = Math.max(0, Math.min(100, result.trust_score));
+  const score = clampScore(result.trust_score);
+  const displayScore = formatScore(score);
+  const meterValue = score === UNKNOWN_SCORE ? 0 : score;
+
   return (
     <aside className="veritas-hud" aria-label="Veritas HUD" data-testid="veritas-hud">
       <div className="hud-title-row">
@@ -56,37 +90,42 @@ export function VeritasHUD({ result, subject, loading = false, error }: VeritasH
         </div>
         <div
           className="trust-ring"
-          style={{ "--trust-score": `${score * 3.6}deg` } as React.CSSProperties}
+          style={{ "--trust-score": `${meterValue * 3.6}deg` } as React.CSSProperties}
           role="meter"
           aria-label="Samlet Trust Score"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={score}
+          aria-valuenow={meterValue}
         >
-          <strong>{Math.round(score)}</strong>
+          <strong>{displayScore}</strong>
           <span>%</span>
         </div>
       </div>
       <div className="layer-list">
         {LAYERS.map(([key, label]) => {
           const layer = result.layers[key];
-          const layerScore = Math.round(Math.max(0, Math.min(1, layer.score)) * 100);
+          const layerScore = clampLayerScore(layer?.score);
+          const displayLayerScore = formatLayerScore(layerScore);
+          const barWidth = layerScore === UNKNOWN_SCORE ? 0 : layerScore * 100;
+
           return (
             <div className="layer-row" key={key}>
               <div className="layer-label">
                 <span>{label}</span>
-                <output>{layerScore}%</output>
+                <output>{displayLayerScore}</output>
               </div>
               <div className="layer-track" aria-hidden="true">
-                <span style={{ width: `${layerScore}%` }} />
+                <span style={{ width: `${barWidth}%` }} />
               </div>
               {key === "c2pa" && (
                 <small>
-                  {layer.manifest
+                  {layer?.manifest
                     ? "Manifest fundet"
-                    : layer.verified
+                    : layer?.verified
                       ? "Mediesignatur verificeret"
-                      : "Intet verificeret manifest"}
+                      : layer
+                        ? "Intet verificeret manifest"
+                        : UNKNOWN_LABEL}
                 </small>
               )}
             </div>

@@ -4,6 +4,19 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [0.6.0] — WIP, ikke tagget endnu
 
+### Sprint 7 — Spatial Canvas UI, Situation UI og Tauri v2 Desktop App Shell
+- Tauri v2 Unix-socket IPC-bridge i `ui/src-tauri/src/ipc.rs`: protokolkerne på tværs af
+  daemonernes Unix Domain Sockets, fail-closed fejlhåndtering og timeout-semantik, så React-
+  grænsefladen taler direkte med `stated`/`graphd`/`veritasd` over Tauri IPC (Task 7.1).
+- Spatial Canvas UI i `ui/src/components/SpatialCanvas.tsx`: kanvas-baseret navigation i
+  tilstandsrummet med zoom/niveau-inddeling bundet til tilstandshash-kæden.
+- Situation UI i `ui/src/components/SituationUI.tsx` og Veritas HUD i
+  `ui/src/components/VeritasHUD.tsx`: kontekstafhængig situationsoversigt og synlig
+  evalueringsstatus fra Veritas Shield.
+- End-to-end UI-test i `ui/tests/e2e_canvas.test.ts` (vitest + testing-library): rendering af
+  tilstandsgraf, forslagsflow og IPC-interaktion mod mockede daemon-svar.
+- Dokumentation: [EIRA_Sprint7_Summary.md](docs/EIRA_Sprint7_Summary.md).
+
 ### Sprint 6 — Android bindings + FFI/WASM state export
 - FFI-grænseflade i `crates/eira-core/src/ffi.rs` med fail-closed pointerhåndtering og
   `catch_unwind`-containment, så panik aldrig krydser FFI-grænsen.
