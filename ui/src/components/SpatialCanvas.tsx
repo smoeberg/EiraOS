@@ -367,12 +367,11 @@ export function SpatialCanvas({
               type="button"
               key={node.id}
               className={`canvas-node${selectedId === node.id ? " canvas-node--selected" : ""}`}
-              style={{ left: node.x, top: node.y }}
+              style={{ left: node.x, top: node.y, transition: reducedMotion ? "none" : undefined }}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => select(node)}
               aria-pressed={selectedId === node.id}
               data-testid={`canvas-node-${node.id}`}
-              style={{ left: node.x, top: node.y, transition: reducedMotion ? "none" : undefined }}
             >
               <span className="node-type" style={{ color: "#9fc5ff" }}>{node.type}</span>
               <strong style={{ color: "#f4f6f8" }}>{node.label}</strong>
