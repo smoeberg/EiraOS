@@ -484,7 +484,9 @@ mod tests {
         let mut writer = SharedMemoryWriter::create(&name, 64).unwrap();
         let mut descriptor = writer.publish(b"hi").unwrap();
         descriptor.sha3_256 = "00".repeat(32);
-        let err = SharedMemoryReader::open(&descriptor).unwrap_err();
+        let err = SharedMemoryReader::open(&descriptor)
+            .err()
+            .expect("invalid descriptor must be rejected");
         assert!(matches!(err, SharedMemoryError::DigestMismatch));
     }
 
@@ -532,7 +534,9 @@ mod tests {
             format_version: SHM_FORMAT_VERSION,
             generation: 0,
         };
-        let err = SharedMemoryReader::open(&descriptor).unwrap_err();
+        let err = SharedMemoryReader::open(&descriptor)
+            .err()
+            .expect("invalid descriptor must be rejected");
         assert!(matches!(err, SharedMemoryError::NotReady));
     }
 
