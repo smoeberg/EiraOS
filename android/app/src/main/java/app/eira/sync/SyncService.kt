@@ -350,6 +350,7 @@ class FleetSyncClient(
                             val remote = result.getJSONArray("headers").objects().map { SyncStateHeader.fromJson(it) }
                             val diff = merkle.diff(local, remote)
                             require(!merkle.reconcile(local, remote).hasConflict) { "sync_merkle_conflict" }
+                            if (diff.inSync) require(diff.localRoot == diff.remoteRoot) { "sync_root_disagreement" }
                             remoteRoot = result.optString("root")
                             require(remoteRoot == merkle.snapshot(remote).root) { "sync_remote_root_mismatch" }
                             val requests = result.getJSONArray("request_hashes").strings()
@@ -367,9 +368,9 @@ class FleetSyncClient(
                         "sync.request_blocks.result" -> {
                             val blocks = message.getJSONObject("result").getJSONArray("blocks")
                             for (index in 0 until blocks.length()) {
-                                store.appendValidated(
+                                require(store.appendValidated(
                                     crypto.decrypt_state(blocks.getJSONObject(index)),
-                                )
+                                )) { "sync_download_block_rejected" }
                             }
                             sendUploadsOrComplete(webSocket)
                         }
