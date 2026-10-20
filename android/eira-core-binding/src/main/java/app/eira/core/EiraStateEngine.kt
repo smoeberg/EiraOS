@@ -33,8 +33,8 @@ class EiraStateEngine(
             nativeApi.validateChain(chainJson.toByteArray(Charsets.UTF_8))
         }
 
-        if (result < 0) {
-            throw StateValidationException("Native state-chain validation failed")
+        if (result !in 0..1) {
+            throw StateValidationException("Native state-chain validation returned an invalid result")
         }
         return result
     }
