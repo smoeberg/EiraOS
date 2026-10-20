@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 import secrets
 import sqlite3
 import threading
@@ -44,8 +43,13 @@ class DeviceEnrollment:
 
 
 class DeviceRegistry:
-    def __init__(self, db_path: str = ":memory:") -> None:
+    def __init__(
+        self, db_path: str = ":memory:", heartbeat_ttl_seconds: int = 300
+    ) -> None:
+        if heartbeat_ttl_seconds <= 0:
+            raise ValueError("heartbeat_ttl_seconds must be positive")
         self.db_path = db_path
+        self.heartbeat_ttl_seconds = heartbeat_ttl_seconds
         self._lock = threading.RLock()
         self._shared: sqlite3.Connection | None = None
         if db_path == ":memory:":
@@ -57,7 +61,11 @@ class DeviceRegistry:
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        # SQLite's strftime() cannot parse ISO 8601 with "T" and a UTC
+        # offset suffix; it returns NULL and expiry comparisons silently
+        # never match (fail-open). Store timestamps in SQLite's native
+        # format instead: "YYYY-MM-DD HH:MM:SS" (UTC).
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     def _connect(self) -> sqlite3.Connection:
         if self._shared is not None:
@@ -120,10 +128,7 @@ class DeviceRegistry:
             connection.commit()
             if self._shared is None:
                 connection.close()
-        qr_payload = json.dumps(
-            {"protocol": "eira-pair-v1", "code": code, "expires_at": expires_at},
-            separators=(",", ":"),
-        )
+        qr_payload = code
         return {"code": code, "expires_at": expires_at, "qr_payload": qr_payload}
 
     @staticmethod
@@ -145,8 +150,9 @@ class DeviceRegistry:
     ) -> DeviceEnrollment:
         if not device_id or not name:
             raise ValueError("device_id and name are required")
-        if os_type not in {"Ubuntu", "Android"}:
-            raise ValueError("os_type must be Ubuntu or Android")
+        if os_type.casefold() not in {"ubuntu", "android"}:
+            raise ValueError("os_type must be ubuntu or android")
+        os_type = os_type.casefold()
         self._validate_public_key(public_key)
         digest = hashlib.sha256(pairing_code.encode("ascii")).hexdigest()
         auth_token = secrets.token_urlsafe(32)
@@ -214,6 +220,7 @@ class DeviceRegistry:
         auth_token: str | None = None,
         require_token: bool = False,
     ) -> PairedDevice:
+        self._expire_stale_devices()
         device = self.get(device_id)
         if device.status != "active":
             raise DeviceAuthorizationError(f"Device is {device.status}")
@@ -262,7 +269,22 @@ class DeviceRegistry:
             raise DeviceAuthorizationError("Device is not paired")
         return self.get(device_id)
 
+    def _expire_stale_devices(self) -> None:
+        cutoff = time.time() - self.heartbeat_ttl_seconds
+        with self._lock:
+            connection = self._connect()
+            connection.execute(
+                "UPDATE fleet_devices SET status = 'expired' "
+                "WHERE status = 'active' "
+                "AND CAST(strftime('%s', COALESCE(last_heartbeat, paired_at)) AS INTEGER) < ?",
+                (cutoff,),
+            )
+            connection.commit()
+            if self._shared is None:
+                connection.close()
+
     def list_active(self) -> list[PairedDevice]:
+        self._expire_stale_devices()
         with self._lock:
             connection = self._connect()
             rows = connection.execute(
