@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "production_daemons": [
+    "stated",
+    "identityd",
+    "fleetd",
+    "veritasd",
+    "intentd",
+    "graphd"
+  ],
+  "prototype_daemons": [
+    "walletd",
+    "presenced",
+    "contextd"
+  ],
+  "policy": "Only production_daemons are installed and enabled by the Ubuntu package. Prototype daemons remain available to development/test tooling and must not be represented as production services."
+}
