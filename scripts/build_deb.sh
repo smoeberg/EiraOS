@@ -54,7 +54,19 @@ cp -a -- "${SOURCE_ROOT}/packaging/debian" "${SOURCE_ROOT}/debian"
 
 (
     cd -- "$SOURCE_ROOT"
-    dpkg-buildpackage --build=binary --no-sign
+    DPKG_BUILD_ARGS=(--build=binary --no-sign)
+    case "${EIRA_DPKG_SKIP_BUILD_DEPS_CHECK:-0}" in
+        0) ;;
+        1)
+            echo "WARNING: skipping dpkg build-dependency version checks; caller must verify toolchain and dependencies" >&2
+            DPKG_BUILD_ARGS+=(-d)
+            ;;
+        *)
+            echo "EIRA_DPKG_SKIP_BUILD_DEPS_CHECK must be 0 or 1" >&2
+            exit 64
+            ;;
+    esac
+    dpkg-buildpackage "${DPKG_BUILD_ARGS[@]}"
 )
 
 shopt -s nullglob
