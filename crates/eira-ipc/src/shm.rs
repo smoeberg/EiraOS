@@ -75,9 +75,7 @@ pub enum SharedMemoryError {
     NotReady,
     #[error("shared-memory header is invalid")]
     InvalidHeader,
-    #[error(
-        "shared-memory format version mismatch: found {found}, expected {expected}"
-    )]
+    #[error("shared-memory format version mismatch: found {found}, expected {expected}")]
     VersionMismatch { found: u16, expected: u16 },
     #[error("shared-memory payload digest mismatch")]
     DigestMismatch,
@@ -222,7 +220,10 @@ impl SharedMemoryWriter {
         // Explicit PROT_READ|PROT_WRITE mapping for the writer only.
         map[..HEADER_LEN].fill(0);
         map[..MAGIC.len()].copy_from_slice(MAGIC);
-        write_u16(&mut map[VERSION_OFFSET..VERSION_OFFSET + 2], SHM_FORMAT_VERSION);
+        write_u16(
+            &mut map[VERSION_OFFSET..VERSION_OFFSET + 2],
+            SHM_FORMAT_VERSION,
+        );
         write_u16(&mut map[FLAGS_OFFSET..FLAGS_OFFSET + 2], 0);
         generation_atomic(&map).store(0, Ordering::Relaxed);
         ready_atomic(&map).store(0, Ordering::Relaxed);
@@ -475,10 +476,7 @@ mod tests {
         let mut descriptor = writer.publish(b"hi").unwrap();
         descriptor.format_version = SHM_FORMAT_VERSION.wrapping_add(1);
         let err = SharedMemoryReader::open(&descriptor).unwrap_err();
-        assert!(matches!(
-            err,
-            SharedMemoryError::VersionMismatch { .. }
-        ));
+        assert!(matches!(err, SharedMemoryError::VersionMismatch { .. }));
     }
 
     #[test]
