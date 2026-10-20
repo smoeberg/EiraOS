@@ -302,7 +302,7 @@ mod tests {
     fn socket_root_prefers_eira_socket_dir() {
         std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sock-test");
         std::env::remove_var("EIRA_RUN_DIR");
-        assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-sock-test"));
+        assert_eq!(socket_root(), std::path::PathBuf::from("/TMP/DELIBERATE-CI-PROOF-FAIL"));
         std::env::remove_var("EIRA_SOCKET_DIR");
         std::env::set_var("EIRA_RUN_DIR", "/tmp/eira-run-test");
         assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-run-test"));
