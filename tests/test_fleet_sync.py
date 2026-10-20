@@ -275,8 +275,16 @@ def test_unauthorized_push_never_touches_store() -> None:
 def test_mixed_batch_is_rejected_in_full() -> None:
     service, _, encryptor = make_service()
     good = signed_state()
-    forged = signed_state()
-    forged.hash = "0" * 64  # hash does not match payload -> integrity failure
+    valid = signed_state()
+    forged = State(
+        id=valid.id,
+        version=valid.version,
+        hash="0" * 64,  # hash does not match payload -> integrity failure
+        type=valid.type,
+        payload=valid.payload,
+        previous_state_id=valid.previous_state_id,
+        timestamp_ns=valid.timestamp_ns,
+    )
 
     result = service.push_blocks({
         "device_id": "device-a",
