@@ -67,10 +67,14 @@ pub unsafe extern "C" fn eira_stated_open(db_path: *const c_char) -> *mut StateS
 /// `handle` must be null or a live handle that has not already been closed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_close(handle: *mut StateStore) {
-    if !handle.is_null() {
-        // SAFETY: this function's caller upholds the allocation contract.
-        drop(unsafe { Box::from_raw(handle) });
-    }
+    // Never allow a Rust panic to unwind across the C ABI, including drop.
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        if !handle.is_null() {
+            // SAFETY: the caller must pass a live, not-yet-closed handle returned
+            // by eira_stated_open. Null is explicitly accepted.
+            drop(unsafe { Box::from_raw(handle) });
+        }
+    }));
 }
 
 /// Appends one canonical Eira state encoded as UTF-8 JSON.
@@ -209,7 +213,12 @@ pub unsafe extern "C" fn eira_stated_count(handle: *mut StateStore) -> i64 {
 /// Returns an allocated copy of the calling thread's last FFI error.
 #[unsafe(no_mangle)]
 pub extern "C" fn eira_stated_last_error() -> *mut c_char {
-    LAST_ERROR.with(|slot| owned_string(slot.borrow().clone()))
+    match catch_unwind(AssertUnwindSafe(|| {
+        LAST_ERROR.with(|slot| owned_string(slot.borrow().clone()))
+    })) {
+        Ok(pointer) => pointer,
+        Err(_) => ptr::null_mut(),
+    }
 }
 
 /// Releases a string returned by an eira-stated FFI function.
@@ -218,10 +227,14 @@ pub extern "C" fn eira_stated_last_error() -> *mut c_char {
 /// `pointer` must be null or a pointer returned exactly once by this library.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eira_stated_free_string(pointer: *mut c_char) {
-    if !pointer.is_null() {
-        // SAFETY: this function's caller upholds the allocation contract.
-        drop(unsafe { CString::from_raw(pointer) });
-    }
+    // The pointer must still be null or allocated by this library; catch_unwind
+    // cannot make an arbitrary or already-freed pointer safe to dereference.
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        if !pointer.is_null() {
+            // SAFETY: this function's caller upholds the allocation contract.
+            drop(unsafe { CString::from_raw(pointer) });
+        }
+    }));
 }
 
 #[unsafe(no_mangle)]
