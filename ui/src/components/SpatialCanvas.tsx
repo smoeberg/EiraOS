@@ -25,6 +25,9 @@ export interface ProposalRecord {
   candidate_state: StateRecord;
   confidence_score: number;
   rationale: string;
+  source_model: string;
+  /** Derived from the current graph, not persisted in ProposalState. */
+  applied?: boolean;
 }
 
 export interface CanvasNode {
@@ -90,6 +93,9 @@ function fallbackSnapshot(states: StateRecord[]): GraphSnapshot {
 }
 
 function proposalsFrom(states: StateRecord[]): ProposalRecord[] {
+  const existingStateIds = new Set(
+    states.filter((state) => state.type !== "ProposalState").map((state) => state.id),
+  );
   return states.flatMap((state) => {
     if (state.type !== "ProposalState") return [];
     const payload = state.payload as Partial<ProposalRecord>;
@@ -101,6 +107,8 @@ function proposalsFrom(states: StateRecord[]): ProposalRecord[] {
         candidate_state: payload.candidate_state,
         confidence_score: Number(payload.confidence_score ?? 0),
         rationale: payload.rationale ?? "Intet rationale angivet",
+        source_model: payload.source_model ?? "Ukendt model",
+        applied: existingStateIds.has(payload.candidate_state.id),
       },
     ];
   });
