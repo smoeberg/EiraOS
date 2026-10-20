@@ -183,3 +183,50 @@ def test_policy_store_detects_rule_hash_tampering():
 
     with pytest.raises(ValueError, match="policy_rule_integrity_check_failed"):
         policies.get_constraints("approve_payment")
+
+
+def test_intent_execute_evaluates_all_constraints_before_rejecting(monkeypatch):
+    """Every policy constraint is evaluated even when an early rule fails."""
+    import app.daemons.intentd as intentd_mod
+
+    policies = PolicyStore(seed_defaults=False)
+    policies.add_rule(
+        "approve_payment",
+        "always_reject_a",
+        "false",
+        "Første regel afviser.",
+    )
+    policies.add_rule(
+        "approve_payment",
+        "always_reject_b",
+        "false",
+        "Anden regel afviser også.",
+    )
+    appender = RecordingAppender()
+    call_count = {"n": 0}
+
+    class CountingEvaluator(CELEvaluator):
+        def evaluate(self, expression, *, candidate=None, world=None, **kwargs):  # type: ignore[no-untyped-def, override]
+            call_count["n"] += 1
+            return False
+
+    monkeypatch.setattr(intentd_mod, "CELEvaluator", CountingEvaluator)
+
+    with pytest.raises(JsonRpcError) as raised:
+        _service(policies, appender).execute(_params())
+
+    assert raised.value.code == CONSTRAINT_VIOLATION
+    assert raised.value.data["failed_rule_ids"] == [
+        "always_reject_a",
+        "always_reject_b",
+    ]
+    assert call_count["n"] == 2
+    assert len(appender.states) == 0
+
+
+def test_intent_execute_missing_intent_is_invalid_params_not_fail_closed():
+    appender = RecordingAppender()
+    with pytest.raises(JsonRpcError) as raised:
+        _service(PolicyStore(seed_defaults=False), appender).execute({})
+    assert raised.value.code == -32602
+    assert len(appender.states) == 0
