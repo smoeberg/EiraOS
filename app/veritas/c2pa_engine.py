@@ -247,7 +247,7 @@ class C2PAEngine:
         valid, trusted, status_codes = self._manifest_state(manifest)
         hardware_claimed, ai_declared = self._provenance_markers(manifest)
         hardware_signed = False
-        if hardware_claimed and self.hardware_signature_verifier is not None:
+        if hardware_claimed and valid and trusted and self.hardware_signature_verifier is not None:
             try:
                 hardware_signed = bool(self.hardware_signature_verifier(manifest))
             except (OSError, RuntimeError, TypeError, ValueError):
