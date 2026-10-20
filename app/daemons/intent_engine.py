@@ -88,14 +88,17 @@ def intent_confirm(params: dict) -> dict:
             },
         )
 
-    if pending.get("can_execute") is False:
-        assurance_ok = not required or session.get("assurance_level") == required
-        if not (assurance_ok and pending.get("capability_match")):
-            raise JsonRpcError(
-                -32002,
-                "cannot_execute",
-                {"user_message": pending.get("block_reason", "Handling kan ikke udføres")},
-            )
+    # The plan is the authorization decision. Never let assurance or a
+    # capability match override an explicit block (or a missing plan decision).
+    if pending.get("can_execute") is not True:
+        raise JsonRpcError(
+            -32002,
+            "cannot_execute",
+            {
+                "user_message": pending.get("block_reason")
+                or "Planen tillader ikke, at handlingen udføres",
+            },
+        )
 
     execution = execute_intent(pending)
     mark_executed(intent_id)
