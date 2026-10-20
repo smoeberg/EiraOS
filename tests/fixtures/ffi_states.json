@@ -1,0 +1,57 @@
+{
+  "canonical_state": {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "version": 1,
+    "timestamp_ns": 1,
+    "type": "DocumentState",
+    "payload": {
+      "æ": "ø",
+      "a": 1
+    },
+    "previous_state_id": null,
+    "hash": "b171d45f3bd8ffba4cfcbcbdf8275da4512db8ea934dd3c31fe5d0030c6fbf43"
+  },
+  "canonical_hash": "b171d45f3bd8ffba4cfcbcbdf8275da4512db8ea934dd3c31fe5d0030c6fbf43",
+  "valid_chain": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "version": 1,
+      "timestamp_ns": 1000000000,
+      "type": "DocumentState",
+      "payload": {
+        "version": 1,
+        "text": "ærlig øvelse",
+        "n": 1
+      },
+      "previous_state_id": null,
+      "hash": "325cd10e3c491f4f2355cb8c365ce6c405d3b94a766ac7db1b79d0d3708406f6"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "version": 2,
+      "timestamp_ns": 2000000000,
+      "type": "DocumentState",
+      "payload": {
+        "version": 2,
+        "text": "ærlig øvelse",
+        "n": 2
+      },
+      "previous_state_id": "00000000-0000-0000-0000-000000000001",
+      "hash": "4845bf6386b922c40450ee45090bcf647a80852bf9d5d2545bf231090168143b"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "version": 3,
+      "timestamp_ns": 3000000000,
+      "type": "DocumentState",
+      "payload": {
+        "version": 3,
+        "text": "ærlig øvelse",
+        "n": 3
+      },
+      "previous_state_id": "00000000-0000-0000-0000-000000000002",
+      "hash": "b83846f647aa8ee1dce4691e3c3fa2c38627208da4a0426350afb9c8a92ae091"
+    }
+  ],
+  "description": "Deterministic FFI cross-platform state fixtures for Sprint 6 Agent 7"
+}
