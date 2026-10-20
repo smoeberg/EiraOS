@@ -142,11 +142,6 @@ class StatePayloadEncryptor:
         ``nonce`` is only for tests that assert reuse is rejected. Production
         callers must omit it so a fresh random nonce is allocated.
         """
-        if state.payload is None or not isinstance(state.payload, dict):
-            raise PayloadIntegrityError("payload is required for encryption")
-        if not state.payload:
-            raise PayloadIntegrityError("payload must not be empty")
-
         metadata = self._metadata(state)
         protected_header = {
             "algorithm": self.ALGORITHM,
