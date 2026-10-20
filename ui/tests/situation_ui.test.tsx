@@ -3,13 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ProposalRecord } from "../src/components/SpatialCanvas";
 import { SituationUI } from "../src/components/SituationUI";
 
-type Metadata = {
-  source?: string;
-  expiresAt?: string | number;
-  policyLabel?: string;
-  policyLocked?: boolean;
-  applied?: boolean;
-};
+type Metadata = Partial<Pick<ProposalRecord, "confidence_score" | "rationale" | "source_model" | "applied">>;
 
 function proposal(metadata: Metadata = {}): ProposalRecord {
   return {
@@ -26,26 +20,27 @@ function proposal(metadata: Metadata = {}): ProposalRecord {
     },
     confidence_score: 0.92,
     rationale: "Dokumentet opfylder de angivne krav.",
+    source_model: "intentd",
+    applied: false,
     ...metadata,
-  } as ProposalRecord;
+  };
 }
 
 function cardFor(state: string) {
-  const card = document.querySelector(`[data-state="${state}"]`);
+  const card = document.querySelector(\`[data-state="\${state}"]\`);
   expect(card).not.toBeNull();
   return card as HTMLElement;
 }
 
 describe("SituationUI action cards", () => {
-  it("viser aktiv tilstand og lader aktive forslag blive aktiveret", () => {
-    const item = proposal({ source: "intentd", expiresAt: Date.now() + 60_000 });
+  it("viser aktiv tilstand og tillader aktivering", () => {
+    const item = proposal();
     const onActivate = vi.fn();
     render(<SituationUI proposals={[item]} onActivate={onActivate} />);
 
     const card = cardFor("active");
     expect(within(card).getByRole("status")).toHaveTextContent("Aktiv");
     expect(within(card).getByText("intentd")).toBeVisible();
-    expect(within(card).getByText("Udløber")).toBeVisible();
     const button = within(card).getByRole("button", { name: "Gennemgå forslag" });
     expect(button).toHaveAttribute("aria-disabled", "false");
     fireEvent.click(button);
@@ -53,24 +48,20 @@ describe("SituationUI action cards", () => {
     expect(onActivate).toHaveBeenCalledWith(item);
   });
 
-  it("viser policy-låst tilstand og deaktiverer handlingen", () => {
-    render(
-      <SituationUI
-        proposals={[proposal({ policyLocked: true, policyLabel: "Kræver godkendelse" })]}
-      />,
-    );
-    const card = cardFor("locked");
-    expect(within(card).getByRole("status")).toHaveTextContent("Låst af policy");
-    expect(within(card).getByText("Kræver godkendelse")).toBeVisible();
+  it("viser lav konfidens under tærsklen og deaktiverer handlingen", () => {
+    render(<SituationUI proposals={[proposal({ confidence_score: 0.59 })]} />);
+    const card = cardFor("low-confidence");
+    expect(within(card).getByRole("status")).toHaveTextContent("Lav konfidens");
+    expect(within(card).getByText(/under 60 %/)).toBeVisible();
     expect(within(card).getByRole("button")).toHaveAttribute("aria-disabled", "true");
     expect(within(card).getByRole("button")).toBeDisabled();
   });
 
-  it("viser udløbet tilstand, når expiresAt er passeret", () => {
-    render(<SituationUI proposals={[proposal({ expiresAt: Date.now() - 1_000 })]} />);
-    const card = cardFor("expired");
-    expect(within(card).getByRole("status")).toHaveTextContent("Udløbet");
-    expect(within(card).getByRole("button")).toHaveAttribute("aria-disabled", "true");
+  it("viser manglende rationale som ikke-verificeret", () => {
+    render(<SituationUI proposals={[proposal({ rationale: "Intet rationale angivet" })]} />);
+    const card = cardFor("unverified");
+    expect(within(card).getByRole("status")).toHaveTextContent("Ikke-verificeret");
+    expect(within(card).getByText("Intet rationale angivet")).toBeVisible();
     expect(within(card).getByRole("button")).toBeDisabled();
   });
 
@@ -82,28 +73,28 @@ describe("SituationUI action cards", () => {
     expect(within(card).getByRole("button")).toBeDisabled();
   });
 
-  it("kalder ikke onActivate ved klik på et deaktiveret kort", () => {
+  it("kalder ikke onActivate ved klik på deaktiverede kort", () => {
     const onActivate = vi.fn();
     render(
       <SituationUI
         proposals={[
-          proposal({ policyLocked: true }),
-          proposal({ proposal_id: "expired", expiresAt: Date.now() - 10 }),
+          proposal({ proposal_id: "low", confidence_score: 0.2 }),
+          proposal({ proposal_id: "unverified", rationale: "Intet rationale angivet" }),
           proposal({ proposal_id: "applied", applied: true }),
         ]}
         onActivate={onActivate}
       />,
     );
 
-    for (const state of ["locked", "expired", "applied"]) {
+    for (const state of ["low-confidence", "unverified", "applied"]) {
       fireEvent.click(within(cardFor(state)).getByRole("button"));
     }
     expect(onActivate).not.toHaveBeenCalled();
   });
 
-  it("behandler udløbstidspunktet som udløbet ved præcis grænse", () => {
-    const now = Date.now();
-    render(<SituationUI proposals={[proposal({ expiresAt: now })]} />);
-    expect(cardFor("expired")).toBeVisible();
+  it("behandler konfidens på præcis 0.6 som aktiv", () => {
+    render(<SituationUI proposals={[proposal({ confidence_score: 0.6 })]} />);
+    expect(cardFor("active")).toBeVisible();
+    expect(within(cardFor("active")).getByRole("button")).toBeEnabled();
   });
 });
