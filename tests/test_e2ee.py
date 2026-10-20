@@ -83,11 +83,13 @@ def test_tampered_cleartext_metadata_fails_integrity():
         enc.decrypt_state(envelope)
 
 
-def test_empty_payload_fail_closed_on_encrypt():
+def test_empty_payload_round_trip():
+    """Empty payloads are allowed: they encrypt and decrypt unchanged."""
     enc = _encryptor()
     empty = State(type="empty", payload={})
-    with pytest.raises(PayloadIntegrityError, match="empty"):
-        enc.encrypt_state(empty)
+    envelope = enc.encrypt_state(empty)
+    decrypted = enc.decrypt_state(envelope)
+    assert decrypted.payload == {}
 
 
 def test_missing_ciphertext_fail_closed_on_decrypt():
