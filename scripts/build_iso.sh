@@ -103,8 +103,24 @@ trap cleanup EXIT INT TERM
         --iso-publisher "EiraOS" \
         --bootappend-live "boot=live components quiet splash"
 
-    mkdir -p config/package-lists config/packages.chroot config/hooks/live
+    mkdir -p \
+        config/package-lists \
+        config/packages.chroot \
+        config/hooks/live \
+        config/includes.chroot/etc/greetd \
+        config/includes.chroot/etc/labwc
     install -m 0644 -- "$DEB_PATH" config/packages.chroot/eira-os-core.deb
+    # live-build hooks execute inside the chroot, where repository source files
+    # are not present. Stage session configuration as chroot includes instead.
+    install -m 0644 -- \
+        "${REPO_ROOT}/packaging/session/config/greetd/config.toml" \
+        config/includes.chroot/etc/greetd/config.toml
+    install -m 0644 -- \
+        "${REPO_ROOT}/packaging/session/config/labwc/rc.xml" \
+        config/includes.chroot/etc/labwc/rc.xml
+    install -m 0755 -- \
+        "${REPO_ROOT}/packaging/session/config/labwc/autostart" \
+        config/includes.chroot/etc/labwc/autostart
 
     cat > config/package-lists/eira-os.list.chroot <<'EOF'
 ubuntu-desktop-minimal
@@ -123,9 +139,7 @@ set -eu
 systemctl enable eira.target
 systemctl enable eira-session.service
 install -d -m 0755 /etc/greetd /etc/labwc
-install -m 0644 packaging/session/config/greetd/config.toml /etc/greetd/config.toml
-install -m 0644 packaging/session/config/labwc/rc.xml /etc/labwc/rc.xml
-install -m 0755 packaging/session/config/labwc/autostart /etc/labwc/autostart
+# Session files are staged by live-build through config/includes.chroot.
 if id ubuntu >/dev/null 2>&1; then
     adduser ubuntu eira
 fi
