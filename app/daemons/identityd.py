@@ -18,7 +18,7 @@ from app.auth.production_cert_verifier import (
 )
 from app.ipc.client import IpcClient
 from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
-from app.session_store import ensure_session, get_session, update_assurance
+from app.session_store import ensure_session, get_session
 
 IDENTITY_VALIDATION_FAILED = -32020
 
@@ -38,11 +38,14 @@ def identity_session(params: dict) -> dict:
 
 
 def identity_step_up(params: dict) -> dict:
-    sid = _session_id_from(params)
-    required = params.get("required_assurance", "org_acting")
-    method = params.get("method", "mitid_erhverv")
-    step_up_token = params.get("step_up_token") or params.get("challenge_response")
+    """Fail closed until a trusted, session-bound provider verifier is wired in.
 
+    A client-supplied token/challenge string is not proof of authentication.
+    In particular, do not call update_assurance() here: the current daemon has
+    no verifier that validates provider signature, subject, audience, nonce,
+    expiry, replay, and binding to the authenticated session.
+    """
+    method = params.get("method", "mitid_erhverv")
     if method != "mitid_erhverv":
         raise JsonRpcError(
             ASSURANCE_REQUIRED,
@@ -50,19 +53,16 @@ def identity_step_up(params: dict) -> dict:
             {"user_message": f"Step-up metode '{method}' understøttes ikke"},
         )
 
-    if not step_up_token:
-        raise JsonRpcError(
-            ASSURANCE_REQUIRED,
-            "step_up_unverified",
-            {"user_message": "MitID Erhverv verifikation påkrævet (ugyldig eller manglende step-up token)"},
-        )
-
-    session = update_assurance(sid, required)
-    return {
-        "session_id": sid,
-        "assurance_level": session["assurance_level"],
-        "user_message": "MitID Erhverv verifikation gennemført",
-    }
+    raise JsonRpcError(
+        ASSURANCE_REQUIRED,
+        "step_up_provider_unavailable",
+        {
+            "user_message": (
+                "MitID Erhverv step-up er deaktiveret, indtil en betroet "
+                "provider-verifikation er konfigureret"
+            )
+        },
+    )
 
 
 def _load_certificates(paths: Iterable[Path]) -> tuple[x509.Certificate, ...]:

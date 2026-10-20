@@ -272,17 +272,19 @@ def test_unauthorized_push_never_touches_store() -> None:
     assert service.store.count() == 0
 
 
-# Audit finding 1 (Major): a batch containing any invalid block must be
-# rejected in its entirety — no partial inserts, and the response must
-# report the number of invalid blocks. The current implementation applies
-# the valid subset, so this contract test is expected to fail until
-# Agent 9 lands the fix in app/daemons/fleetd.py (see fix plan).
-@pytest.mark.xfail(reason="push_blocks applies partial inserts; reject-all fix is Agent 9's task")
 def test_mixed_batch_is_rejected_in_full() -> None:
     service, _, encryptor = make_service()
     good = signed_state()
-    forged = signed_state()
-    forged.hash = "0" * 64  # hash does not match payload -> integrity failure
+    valid = signed_state()
+    forged = State(
+        id=valid.id,
+        version=valid.version,
+        hash="0" * 64,  # hash does not match payload -> integrity failure
+        type=valid.type,
+        payload=valid.payload,
+        previous_state_id=valid.previous_state_id,
+        timestamp_ns=valid.timestamp_ns,
+    )
 
     result = service.push_blocks({
         "device_id": "device-a",
