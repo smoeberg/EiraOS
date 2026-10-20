@@ -39,6 +39,11 @@ jobs:
       run: |
         ruff check .
 
+    - name: Install AppArmor parser for packaging validation
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y apparmor-utils
+
     - name: Run database migrations (Alembic)
       run: |
         alembic upgrade head
