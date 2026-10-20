@@ -26,6 +26,9 @@ export interface ProposalRecord {
   candidate_state: StateRecord;
   confidence_score: number;
   rationale: string;
+  source_model: string;
+  /** Derived from the current graph, not persisted in ProposalState. */
+  applied?: boolean;
 }
 
 export interface CanvasNode {
@@ -106,7 +109,7 @@ function usePrefersReducedMotion(): boolean {
   return reducedMotion;
 }
 
-function proposalsFrom(states: StateRecord[]): ProposalRecord[] {
+function proposalsFrom(states: StateRecord[], existingStateIds: Set<string>): ProposalRecord[] {
   return states.flatMap((state) => {
     if (state.type !== "ProposalState") return [];
     const payload = state.payload as Partial<ProposalRecord>;
@@ -118,6 +121,8 @@ function proposalsFrom(states: StateRecord[]): ProposalRecord[] {
         candidate_state: payload.candidate_state,
         confidence_score: Number(payload.confidence_score ?? 0),
         rationale: payload.rationale ?? "Intet rationale angivet",
+        source_model: payload.source_model ?? "Ukendt model",
+        applied: existingStateIds.has(payload.candidate_state.id),
       },
     ];
   });
@@ -161,7 +166,7 @@ export function SpatialCanvas({
       edges: graph.edges,
     };
     setSnapshot(merged.nodes.length || graph.edges.length ? merged : fallback);
-    onProposals?.(proposalsFrom(states));
+    onProposals?.(proposalsFrom(states, new Set(merged.nodes.map((node) => node.id))));
     setError(null);
     setLoading(false);
   }, [onProposals]);
