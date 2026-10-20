@@ -41,7 +41,7 @@ jobs:
           rustc --version
           cargo --version
           apparmor_parser --version
-          sudo apparmor_parser -Q packaging/apparmor/usr.bin.eira-*
+          sudo apparmor_parser -Q -K packaging/apparmor/usr.bin.eira-*
 
       - name: Build Debian package
         env:
