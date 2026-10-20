@@ -2,7 +2,9 @@
 
 Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsperioden, ikke nødvendigvis en publiceret release.
 
-## [0.6.0] — WIP, ikke tagget endnu
+## [0.7.0] — released 2026-10-20
+
+Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
 
 ### Sprint 7 — Spatial Canvas UI, Situation UI og Tauri v2 Desktop App Shell
 - Tauri v2 Unix-socket IPC-bridge i `ui/src-tauri/src/ipc.rs`: protokolkerne på tværs af
@@ -22,7 +24,7 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
   `catch_unwind`-containment, så panik aldrig krydser FFI-grænsen.
 - Kotlin binding (`android/eira-core-binding/`) og Gradle-scaffolding for Android-klienten.
 - Integrationstest for FFI state-eksport i `tests/test_android_ffi_state.py`.
-- Status: PR #68 og #69 er åbne; `v0.6.0` er derfor WIP indtil merge. Dokumentation:
+- Status: PR #68 og #69 er merged. Dokumentation:
   [EIRA_Sprint6_Summary.md](docs/EIRA_Sprint6_Summary.md).
 
 ## [0.5.0] — foreslået release, ikke tagget endnu
