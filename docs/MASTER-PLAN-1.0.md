@@ -205,6 +205,7 @@ A feature is not done until all applicable criteria are met:
 
 - This master plan: scope, dependencies, phases, and exit gates.
 - Architecture baseline: component boundaries and invariants.\n- [GUI Product and Implementation Plan 1.0](architecture/eiraos-gui-product-and-implementation-plan-1.0.md): shell, screens, settings, interaction states, design system, frontend boundaries, accessibility, and GUI acceptance criteria.
+- [Intuitive 3D Desktop prototype](architecture/prototypes/eiraos-intuitive-3d-desktop.html): agreed visual baseline for the spatial workspace and application-object experience; a concept prototype, not production functionality.
 - Gate Kernel, AI Interface, EDP specification and schema: normative contracts.
 - Ubuntu PC API catalog and coverage matrix: capability-level research and verification.
 - Code-review checklist: each requirement mapped to files, functions, tests, and evidence.
