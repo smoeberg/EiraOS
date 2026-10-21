@@ -1,0 +1,575 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eiraos.org/specs/edp-1.0.schema.json",
+  "title": "EiraOS Dialog Protocol 1.0 event",
+  "description": "Validation of the EDP envelope. Action content is validated by action type; schema validity does not imply authorization, delivery, identity verification, or truth.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "edp",
+    "id",
+    "conversation_id",
+    "participants",
+    "action",
+    "transport",
+    "veritas",
+    "temporal"
+  ],
+  "properties": {
+    "edp": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "participants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "identity",
+          "role"
+        ],
+        "properties": {
+          "identity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "role": {
+            "enum": [
+              "member",
+              "observer",
+              "service"
+            ]
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "content"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "utterance",
+            "live_session",
+            "artifact_shared",
+            "commitment_proposed",
+            "commitment_accepted",
+            "commitment_declined",
+            "value_transfer_requested",
+            "value_transfer_confirmed",
+            "consent_requested",
+            "consent_granted",
+            "presence_changed"
+          ]
+        },
+        "content": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "utterance"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "text"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "lang": {
+                    "type": "string"
+                  },
+                  "reply_to": {
+                    "type": "string"
+                  },
+                  "artifact_refs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "live_session"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "operation"
+                ],
+                "properties": {
+                  "operation": {
+                    "enum": [
+                      "start",
+                      "join",
+                      "end",
+                      "reject"
+                    ]
+                  },
+                  "media": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "audio",
+                        "video",
+                        "screen"
+                      ]
+                    }
+                  },
+                  "session_ref": {
+                    "type": "string"
+                  },
+                  "signal_ref": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "artifact_shared"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "artifact_ref"
+                ],
+                "properties": {
+                  "artifact_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mime": {
+                    "type": "string"
+                  },
+                  "provenance_ref": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "commitment_proposed"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "what"
+                ],
+                "properties": {
+                  "what": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "when": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "where": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "commitment_accepted",
+                  "commitment_declined"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "commitment_id"
+                ],
+                "properties": {
+                  "commitment_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "value_transfer_requested"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "amount"
+                ],
+                "properties": {
+                  "amount": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "currency"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]*)(\\\\.[0-9]+)?$"
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$"
+                      }
+                    }
+                  },
+                  "route_hint": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "value_transfer_confirmed"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "transfer_ref"
+                ],
+                "properties": {
+                  "transfer_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "confirmation_ref": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "consent_requested"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "scope",
+                  "purpose"
+                ],
+                "properties": {
+                  "scope": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "consent_granted"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "consent_ref"
+                ],
+                "properties": {
+                  "consent_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence_ref": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "presence_changed"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "object",
+                "required": [
+                  "state"
+                ],
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "available",
+                      "busy",
+                      "away",
+                      "offline",
+                      "unknown"
+                    ]
+                  },
+                  "until": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "degraded"
+      ],
+      "properties": {
+        "preferred": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "actual": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "degraded": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "code"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "veritas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "trust_score",
+        "evidence_refs"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "unassessed",
+            "assessed",
+            "unavailable"
+          ]
+        },
+        "trust_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created_at"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_from": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "supersedes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
