@@ -7,15 +7,16 @@
 
 EiraOS should make communication feel like one coherent system rather than a collection of unrelated applications. Email, chat, SMS, social messaging, voice calls, video meetings, calendar events, contacts, and related files should be accessible through a consistent experience.
 
-The user should be able to move naturally between channels from the same workspace—for example, continue a discussion in chat, compose an SMS to the same person, send an email attachment, or start a voice/video call—without needing to understand the underlying implementation.
+The primary unit is the **conversation**, not the channel. A message is communication; SMS, email, chat, and social networks are merely underlying delivery mechanisms. Users should not have to sort their world into separate SMS and chat areas. They should see people, groups, and ongoing conversations, then communicate naturally from that context.
 
-**The unifying layer is the EiraOS experience, not a claim that all networks are technically the same.** Each channel retains its identity, delivery rules, privacy model, and capabilities.
+**Channel independence is a product principle, not a claim that all networks are technically interchangeable.** EiraOS should abstract away source details from the main experience while preserving channel/account metadata, delivery rules, privacy boundaries, and capability differences in the system. The source is secondary to the user, but still available when needed for delivery status, troubleshooting, security, or explicit channel choice.
 
 ## Experience principles
 
-- One coherent communication workspace with a shared design system, search, contact context, notifications, and clear unread state.
-- A conversation-first view where supported channels can appear together in a contact's communication history, while every message remains clearly labelled with its actual channel and account.
-- Easy channel switching from the same window. Before sending through a different channel, the UI must make the destination and channel obvious; it must never silently convert or reroute a message.
+- One coherent, **conversation-first** workspace. The primary navigation is organized around people, groups, ongoing conversations, activity, and user intent—not separate top-level buckets for SMS, chat, email, or social networks.
+- Messages from supported sources can participate in one continuous conversation timeline when identities and context can be linked reliably. The interface should not visually fragment the conversation just because the transport changes.
+- Channel and account are secondary metadata, surfaced unobtrusively and when relevant. They must remain discoverable for troubleshooting, delivery state, security, and user choice, but must not dictate the main information architecture.
+- The composer starts from the conversation and user intent. EiraOS chooses or recommends an available route only when policy, recipient reachability, consent, and user settings make that safe. If the route matters or is ambiguous, ask clearly; never silently reroute a message or imply unsupported cross-network delivery.
 - Email, SMS, chat, social messaging, calls, video meetings, calendar, and contacts should feel like parts of one product, not embedded legacy windows.
 - A responsive design language shared by PC and companion mobile experiences, adapted to each form factor.
 - AI language assistance can translate, summarize, draft, and help find information across authorized sources. Sending messages, inviting people, recording meetings, or changing events remains subject to user intent and the relevant permission gate.
@@ -40,7 +41,7 @@ Define a versioned, provider-neutral contract for capabilities such as:
 - Calendar events and invitations.
 - Notifications, synchronization state, capability discovery, and authorization.
 
-The API must express provider differences honestly. A provider may not support edits, reactions, delivery receipts, search, or message history. The contract must report unsupported capabilities instead of pretending they exist.
+The API must express provider differences honestly. A provider may not support edits, reactions, delivery receipts, search, or message history. The contract must report unsupported capabilities instead of pretending they exist. The unified conversation model must not erase source metadata or claim that separate services share a single native thread when they do not.
 
 ### 3. Provider and protocol adapters
 
@@ -75,7 +76,10 @@ Messages remain associated with their original account, channel, sender, timesta
 
 ## Implementation strategy
 
-1. Define user journeys and the shared interaction model before selecting engines.
+1. Define the conversation-first information architecture and user journeys before selecting engines. Do not begin by creating separate SMS, chat, and email screens and combining them later.
+2. Define identity-linking rules: merge communication into one person's history only when the user links identities or a reliable, explainable rule supports the association. Avoid speculative identity merges.
+3. Define routing and fallback behavior with explicit user control, including when EiraOS may recommend a delivery route and when it must ask first.
+4. Define user journeys and the shared interaction model before selecting engines.
 2. Create the versioned Eira Communication API and a capability/permission model.
 3. Prototype the UI with mock adapters and representative data; validate navigation, channel switching, accessibility, and responsive layouts.
 4. Evaluate candidate engines and integrations against maintenance, license, security, platform support, API quality, test coverage, and long-term replaceability.
