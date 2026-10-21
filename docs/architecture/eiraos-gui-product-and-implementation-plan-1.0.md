@@ -49,6 +49,47 @@ The shell must provide stable, predictable access to:
 
 Exact placement, dock/panel behavior, workspace gestures, and visual composition require a UX prototype decision. The shell must not hard-code the assumption that all users use touch or one display size.
 
+## 3.1 Spatial 3D workspace — core product direction
+
+EiraOS is intended to offer a spatial desktop in which the screen is perceived as a navigable three-dimensional space, not only as a flat stack of windows. This is a product direction to prototype and validate; it is not a claim that a 3D interface is already implemented.
+
+### Spatial behavior
+
+- **Depth and occlusion:** objects can occupy different depths. Foreground objects can overlap or obscure background objects, with clear rules for selection, focus, and bringing an object forward.
+- **Rotation and orientation:** supported objects can rotate around one or more axes when the action is meaningful. Rotation must not make labels, controls, or critical information unreadable.
+- **Spatial placement:** users can arrange app surfaces, documents, work groups, tools, and assistant/context objects in a navigable workspace. Position and depth must have understandable meaning rather than being decoration alone.
+- **Direct manipulation:** objects can be selected, moved, brought forward/back, grouped, opened, minimized, pinned, and returned to a known home position using supported pointer, keyboard, and touch interactions.
+- **Navigation:** users can pan, zoom, change viewpoint, or switch between spatial workspaces without losing track of where objects are. Provide a clear reset/recenter action and an overview that shows the overall arrangement.
+- **Layered work:** users can keep current work in the foreground and supporting material behind or beside it, while still being able to discover and retrieve obscured objects.
+- **Transitions:** motion should communicate movement and hierarchy. It must be short, interruptible where possible, and disabled or reduced when the user requests reduced motion.
+- **Persistent arrangement:** spatial positions and groups may be saved per workspace, with explicit recovery behavior when a display resolution, monitor arrangement, or application size changes.
+
+### Product and technical boundaries
+
+- Treat 3D as a **spatial interaction model**, not as a requirement to render every control as a heavy 3D object. Settings forms, text, terminal output, tables, and accessibility surfaces may remain flat panels placed within the spatial environment.
+- Preserve normal desktop productivity: resizable app surfaces, keyboard shortcuts, focus order, text selection, drag-and-drop where supported, multi-monitor behavior, and a real Linux terminal.
+- The spatial shell must not trap users in perspective navigation. Offer a stable 2D/flat mode or reduced-depth mode, plus keyboard-accessible ways to perform every essential operation.
+- Do not rely on depth, color, motion, or rotation alone to convey status or affordance. Keep labels, focus indicators, selection outlines, and accessible names.
+- Keep rendering and interaction in the presentation layer. Spatial transforms, object layout, camera/view state, and animations must not own system policy or execute privileged actions.
+- Define a stable object model for identity, type, position/depth, orientation, size, grouping, z-order, focus, persistence, and capability references. Keep it separate from React component instances and operating-system authorization.
+- Prototype the rendering strategy before selecting a production dependency. Evaluate performance, GPU/driver compatibility, text readability, input latency, memory use, reduced-motion behavior, and maintainability on the pinned Ubuntu 26.04.x target.
+- Do not introduce a WebGL/3D engine dependency solely for visual novelty. Document the trade-offs and verify that the selected approach works with the existing React/Tauri/compositor architecture.
+
+### Required prototype and acceptance evidence
+
+The spatial direction must be proven with a runnable prototype before the shell architecture is locked. The prototype should demonstrate:
+
+1. At least three distinct objects at visibly different depths, with foreground/background occlusion.
+2. User-controlled rotation of a supported object and clear selection/focus behavior.
+3. Moving objects through depth and restoring an object to the foreground.
+4. Pan/zoom or viewpoint navigation, plus overview and recenter/reset.
+5. Object grouping and persistence of a workspace arrangement.
+6. Keyboard-only navigation and actions, readable text, focus indicators, and reduced-motion mode.
+7. Flat/reduced-depth fallback and behavior at representative display sizes/scaling.
+8. Measured rendering responsiveness on the target hardware class and graceful behavior when 3D acceleration is unavailable.
+
+Until these criteria are demonstrated and reviewed, label the feature **specified / prototype pending**, not implemented or verified.
+
 ## 4. Required screens and surfaces
 
 ### 4.1 First-run setup and onboarding
