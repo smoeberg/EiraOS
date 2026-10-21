@@ -96,7 +96,7 @@ propose_action(
 
 **Input:**
 - `intent`: Output fra EiraLang.
-- `allowed_actions`: Liste af EDP-handlingstyper, som gaten har forhåndsgodkendt som *mulige* i denne kontekst.
+- `allowed_actions`: Liste af EDP-handlingstyper, som `intentd` udleder fra den aktuelle policy og kontekst som *kandidater*, der må foreslås. Listen er ikke en tilladelse, samtykke eller autorisation til at udføre handlingen.
 - `context`: Samme kontekst som EiraLang.
 
 **Output — `EdpAction`:** Et EDP 1.0-kompatibelt forslag (uden `transport` og `veritas`, som sættes af `intentd`/`veritasd`).
@@ -150,12 +150,13 @@ ModelAdapter:
 2. Kald `EiraLang.extract_intent()`.
    - Ved `Abstain`: Spørg brugeren om afklaring (via UI, ikke via model).
    - Ved `Error`: Returnér sikker fejltilstand.
-3. Beregn `allowed_actions` ud fra kontekst og politik (ikke fra modellen).
+3. Beregn `allowed_actions` ud fra kontekst og politik (ikke fra modellen). Dette er kun et forslagsscope; ingen handling er dermed autoriseret.
 4. Kald `EiraAI.propose_action()`.
    - Ved `Abstain`: Informér brugeren om, at handlingen ikke kan udføres.
    - Ved `Error`: Returnér sikker fejltilstand.
-5. Berig forslaget med `transport`, `veritas` og `temporal` (fra `intentd`, `veritasd`, `graphd`).
-6. Send til Gate Kernel.
+5. Berig forslaget med `transport`, `veritas` og `temporal` (fra `intentd`, `veritasd`, `graphd`) uden at ændre `action.type` eller `action.content`.
+6. Validér den komplette, berigede EDP-envelope mod den kanoniske versionerede schema.
+7. Send til Gate Kernel, som selv gentager schema-, semantik-, policy-, samtykke-, autorisations- og tilstandskontroller. En tidligere kontrol i `intentd` er aldrig autoritativ.
 
 **Regel:** `intentd` må ikke ændre `action.type` eller `action.content` efter modellens forslag — kun tilføje metadata.
 
