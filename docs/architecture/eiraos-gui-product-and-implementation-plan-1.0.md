@@ -226,6 +226,82 @@ Every interactive surface must account for applicable states:
 
 UI wording must reflect actual backend status. For example, “completed” requires a verified postcondition, not merely a successful IPC response. A timeout must not be presented as proof that the operation failed if the result is unknown; show an explicit unknown/reconciliation state and avoid unsafe blind retries.
 
+## 5.1 UX resilience, discoverability, and recovery contract
+
+EiraOS must be understandable and recoverable when intent recognition, policy, authorization, integrations, or application hosting do not behave as expected. Fail-closed security is mandatory; a dead-end user experience is not.
+
+### A. Intent repair and graceful degradation
+
+- Distinguish low confidence, ambiguous target, unsupported capability, policy denial, missing consent, missing authentication, timeout/unknown outcome, and execution failure. Do not collapse them into a generic “I don't understand” response.
+- When intent is ambiguous, present a short, ranked set of interpretations and let the user choose; do not silently guess when the choice materially changes the action.
+- Offer a direct repair path: clarify, rephrase, inspect the proposed plan, choose a visible manual route, or cancel.
+- When intent automation is unavailable, keep supported manual navigation and ordinary app workflows usable.
+- A failed interpretation must not be treated as a failed operation if execution may already have occurred. Reconcile state before retrying non-idempotent actions.
+- Keep explanations short by default, with optional technical detail and diagnostic identifiers.
+
+### B. Discoverability and first-run experience
+
+- Provide a visible, searchable capability catalogue that explains what the user can do in the current context, which capabilities are unavailable, and what permissions or setup are needed.
+- Pair natural-language entry with discoverable controls, contextual actions, keyboard shortcuts, examples, and a first-run guided task. Intent must not be the only route to important functionality.
+- Use progressive disclosure: show essential choices first and advanced controls when requested or contextually relevant.
+- Design onboarding around a useful, completed task, not a tour of abstract concepts. Let users skip, revisit, and reset onboarding.
+- Validate first-run comprehension with representative users, including people who do not know Linux or EiraOS terminology.
+
+### C. Trust, assurance, and Gate explanations
+
+- Do not expose a universal trust percentage by default. Show a score only when it is meaningful, calibrated, explainable, and useful to the decision at hand.
+- Prefer a clear state and reason (for example, verified, needs review, or blocked) with accessible text; never rely on color alone.
+- When an action is blocked, explain the specific unmet requirement at an appropriate level, distinguish policy denial from missing consent/authentication, and provide the shortest legitimate next step where one exists.
+- Never imply that user confirmation can override policy or grant authority the user does not possess.
+- Record the machine-readable denial reason and diagnostics separately from the human explanation; avoid leaking sensitive policy or system details.
+
+### D. The hybrid desktop: spatial objects and ordinary work
+
+- Treat files, URLs, browser tabs/pages, messages, and supported app windows as first-class entry/exit points across the spatial workspace and conventional desktop workflows.
+- Support ordinary open-with, save/download, copy/paste, drag/drop where supported, file picker, browser navigation, and export/share paths without requiring users to convert everything into a graph object.
+- Preserve provenance and meaningful metadata when content crosses application boundaries, subject to privacy and platform constraints.
+- Make unsupported integration boundaries explicit and provide a normal fallback. Do not present a mock or wrapper as native integration.
+- The spatial layer must not block conventional window management, dense lists/tables, text selection, keyboard shortcuts, multi-monitor use, or accessibility tools.
+
+### E. Latency and responsiveness budgets
+
+Use the following as initial product targets to measure in the prototype, not as claims about current performance. Refine them using representative hardware and usability tests:
+
+- Local interaction feedback (focus, selection, opening a lightweight panel): target p95 at or below 100 ms.
+- Local navigation or simple view transition: target p95 at or below 150 ms.
+- First visible acknowledgement for an intent request: target at or below 100 ms; show progress and allow cancellation while interpretation continues.
+- Simple local read-only intent plan: target p95 at or below 400 ms, excluding slow external services.
+- Any operation that exceeds its budget must expose truthful progress or a non-blocking pending state; do not freeze the GUI while waiting on a daemon, model, or network.
+- Instrument end-to-end latency by stage (input, parse, policy/assurance, IPC, service, render) and report p50/p95/p99. Do not optimize by bypassing Gate or required verification.
+
+### F. Undo, history, and recovery
+
+- Define undo per operation, not as a universal promise. Offer undo only when the system can guarantee the inverse or restore a saved state safely.
+- Distinguish undo, restore/recover, retry, and duplicate execution. Explain when an operation is irreversible or its result is uncertain.
+- Provide a human-readable activity history for material actions, including what was requested, what was actually done, outcome, and available recovery options.
+- Spatial layout changes should be independently undoable and persist separately from application data and system authorization state.
+- Never automatically replay a consequential action during crash recovery or workspace restoration.
+
+### G. Identity and organizational context
+
+- Make the active identity, account, organization, role, and acting context visible when relevant to the consequence of an action.
+- Require deliberate context switching and make the target context explicit before material or external actions. Avoid repeated prompts when a valid context remains established, but never silently transfer authority across contexts.
+- Explain whether a denial is caused by identity, role, policy, authentication, or resource scope; offer a legitimate resolution path when possible.
+- Design for delegated roles, organizational acting context, and future public-sector identity integrations without assuming any one provider is already implemented.
+
+### H. Priority failure-path tests
+
+Before broad GUI expansion, prototype and test these end-to-end journeys:
+
+1. **Intent misfire:** User asks to perform a task; the interpretation is ambiguous or confidence is low. The UI offers useful choices or a manual route, preserves the original request, and does not execute a consequential guess.
+2. **Gate denial:** User requests a protected action. The UI explains the actual denial category and next legitimate step, does not leak sensitive internals, and cannot bypass the Gate through an alternative UI path.
+3. **Hybrid work:** User downloads or selects an ordinary file, opens it in a supported application, returns to the spatial workspace, and can locate/export it without losing context or creating duplicate/conflicting state.
+4. **Slow or unavailable service:** The UI remains responsive, shows progress or a clear stale/offline state, and reconciles uncertain outcomes before offering retry.
+5. **Undo and recovery:** User makes a reversible workspace change and restores it; then tests an irreversible action and sees an honest explanation of what cannot be undone.
+6. **Identity context:** User switches between personal and organizational contexts and can identify which context will authorize a consequential action.
+
+These are release-blocking UX acceptance scenarios for the relevant flows. They must be covered by automated tests where feasible and usability tests with representative users. A design document or visual prototype alone does not count as passing evidence.
+
 ## 6. Frontend architecture
 
 Keep the dependency direction:
