@@ -364,6 +364,29 @@ Resolve through prototype and usability review rather than silently hard-coding 
 - Touch/gesture support expectations and supported hardware.
 - Which communications surfaces belong in the first release.
 
+## 13.1 Agreed visual baseline: Intuitive 3D Desktop
+
+The primary visual reference is the EiraOS Intuitive 3D Desktop concept, captured as a maintained, self-contained HTML prototype:
+
+- [Intuitive 3D Desktop prototype](prototypes/eiraos-intuitive-3d-desktop.html)
+
+This is the agreed direction for the GUI design baseline. It builds on the attached concept's dark Nordic palette, restrained cyan accent, glass-like surfaces, white app-icon tiles, soft ambient lighting, spatial window depth, and centered application dock. The HTML file is a design prototype, not a production implementation; its sample system values and app content are illustrative and must not be presented as live system state.
+
+### Required application-object model
+
+Applications are represented in the spatial desktop as independently managed objects. Each object has a stable application/window identity and presentation state, including position, depth, orientation, size, focus, grouping, and minimized/restored state. The spatial presentation model must remain separate from application execution, authorization, system policy, and EiraSystemAPI.
+
+- Activating an object brings it into readable focus; other objects recede without losing their own state.
+- Minimizing an application removes its surface from the active spatial stage but does not imply closing the application. A dock or object overview must restore it.
+- Restoring an object should recover its prior placement and size when the underlying windowing integration permits it.
+- Native Linux applications should be hosted through a supported desktop/windowing integration. Windows applications such as Microsoft Word and Excel require a separately validated compatibility strategy (for example Wine or a virtual machine); the GUI must not imply that Windows binaries run natively on Ubuntu.
+- Free placement, rotation, grouping, spatial navigation, keyboard access, reduced-motion support, and a flat overview are product requirements. The current HTML prototype only demonstrates a subset of these interactions; it does not prove production window management.
+- System controls displayed in the spatial environment must call typed, authorized system capabilities through EiraSystemAPI. Mock controls and static status labels must never be mistaken for real settings.
+
+### Decision status
+
+The visual direction is agreed as the baseline. The implementation technology, compositor/window integration, object persistence format, and interaction details remain subject to prototype evaluation and repository audit. This decision does not mark the GUI, 3D renderer, application hosting, or Ubuntu controls as implemented or verified.
+
 ## 14. Related contracts
 
 - [Master Plan 1.0](../MASTER-PLAN-1.0.md)
