@@ -1,0 +1,335 @@
+# EiraOS GUI Product and Implementation Plan 1.0
+
+**Status:** Product and implementation specification draft; requires UX review and repository audit  
+**Date:** 2026-10-21  
+**Target platform:** Ubuntu Desktop 26.04 LTS  
+**Applies to:** React/Tauri desktop shell, settings/control center, app surfaces, notifications, terminal surface, accessibility, and presentation-layer tests
+
+> The GUI is EiraOS's primary product experience—not a dashboard placed on top of Ubuntu.
+
+This document defines what the EiraOS GUI must contain, how it should behave, how it connects to system capabilities, and how completeness is verified. It describes the target, not a claim that all screens or features already exist.
+
+## 1. Product objective
+
+Create a distinctive, modern PC experience that combines:
+- The approachability and direct manipulation of good tablet/mobile interaction patterns.
+- The flexibility of a desktop: windows, keyboard, mouse, multitasking, files, external displays, and advanced workflows.
+- A coherent intent- and conversation-oriented layer for finding and doing things.
+- Full access to real Linux capabilities without forcing every user to learn Linux terminology.
+- Clear status, privacy, permissions, and recovery behavior.
+
+EiraOS must not be a superficial Ubuntu theme or a phone interface stretched across a monitor. It must work well on desktop displays, laptops, touch screens, keyboard/mouse setups, and assistive technologies.
+
+## 2. UX principles
+
+1. **Simple by default; advanced when requested.** Common tasks use plain language; detailed controls remain discoverable.
+2. **One coherent system.** Navigation, search, settings, notifications, dialogs, and status use consistent patterns.
+3. **User intent, not hidden magic.** The system may suggest an action, but shows material consequences and asks when consent or authorization is required.
+4. **Real state only.** A control must show actual state from a service or explicitly say unavailable, loading, unsupported, or in development.
+5. **Presentation stays separate.** React renders state and captures user intent. It does not implement system policy, invoke arbitrary shell commands, or call privileged OS services directly.
+6. **Progressive disclosure.** Basic and advanced modes share the same contracts and state; advanced mode reveals detail rather than a separate unsafe pathway.
+7. **No silent changes to user intent.** Do not silently change recipients, accounts, transports, privacy, cost, target devices, or destructive parameters.
+8. **Recoverability.** Errors explain what happened, what did not happen, and safe next steps.
+9. **Accessible and adaptable.** Keyboard, pointer, touch, screen reader, scalable text, high contrast, reduced motion, and localization are first-class.
+10. **Respect the desktop.** Do not remove normal application windows, filesystem access, external peripherals, or terminal capabilities in pursuit of a simplified UX.
+
+## 3. Shell and global layout
+
+The shell must provide stable, predictable access to:
+- **Home / workspace** — current work, pinned apps/objects, recent items, and resumable tasks.
+- **Global search / command palette** — apps, settings, files, people, objects, and actions, with result types and permission-aware actions.
+- **Application launcher** — installed apps, favorites, search, and app details.
+- **Workspace and window controls** — overview, switcher, move/resize, snap/tiling, minimize/maximize/close, and multi-monitor behavior.
+- **System status area** — network, audio, power/battery, Bluetooth, notifications, time/date, and active background tasks, only when the underlying capability exists.
+- **Quick settings** — safe, common toggles with truthful state and links to detailed settings.
+- **Notification center** — grouped notifications, action buttons, do-not-disturb/focus, and notification history policy.
+- **Eira assistant entry point** — persistent but unobtrusive, available from keyboard and GUI, with explicit proposed/executing/completed/failed states.
+- **Settings / Control Center** — complete navigation to supported PC capabilities.
+- **Terminal** — launchable as an application and usable alongside other applications.
+
+Exact placement, dock/panel behavior, workspace gestures, and visual composition require a UX prototype decision. The shell must not hard-code the assumption that all users use touch or one display size.
+
+## 4. Required screens and surfaces
+
+### 4.1 First-run setup and onboarding
+- Language, region, keyboard layout, accessibility options, display scaling, network setup where available, privacy choices, and optional account/device setup.
+- Explain local processing and any optional cloud processing in understandable terms.
+- Clearly distinguish required setup from optional integrations.
+- Allow safe skip/revisit where possible; never imply a service is configured when it is not.
+- Provide recovery when network, hardware, or permissions are unavailable.
+
+### 4.2 Home and workspace
+- User-configurable favorites and pinned items.
+- Recent and active work with understandable provenance.
+- Contextual suggestions must be explainable, dismissible, and not presented as facts without evidence.
+- Clear empty states for new users and unavailable services.
+- No fabricated activity, fake service status, or demo records in production mode.
+
+### 4.3 Search and command palette
+- Keyboard shortcut and visible entry point.
+- Search across applications, settings, files, supported people/objects, and help.
+- Typed result categories; preserve the distinction between finding an item and performing an action.
+- Permission-aware filtering without leaking inaccessible secrets.
+- Ambiguity handling: zero, one, or multiple matches must be explicit.
+- Destructive or external actions show a review/confirmation step when required; search results cannot bypass Gate.
+- Recent queries/history must have documented privacy and retention behavior.
+
+### 4.4 Application launcher and app management
+- Installed apps, favorites, categories, search, launch, pin/unpin, and uninstall/update entry points only where supported.
+- Show app source, permissions, and installation status where reliable metadata exists.
+- Use supported Ubuntu package/service interfaces behind EiraSystemAPI; UI must not execute package commands directly.
+- Distinguish unsupported package formats and failed/partial installs.
+
+### 4.5 Windowing and multitasking
+- Open, focus, minimize, maximize, restore, close, move, resize, snap/tiling, and workspace switching.
+- Overview and task switcher, including keyboard navigation.
+- External monitor, mixed scaling, orientation, and display-disconnect recovery.
+- Focus order and shortcuts must be consistent and documented.
+- Do not lose unsaved work silently when closing windows or changing display state.
+- Define whether app windows are managed by the compositor/window manager or by EiraOS; do not simulate window management inside a single React page if native windows are required.
+
+### 4.6 Settings / Control Center
+Settings is a first-class product area, not a collection of placeholder pages. Organize by user task, with search and consistent detail pages.
+
+Required categories and candidate capabilities (availability depends on hardware and Ubuntu services):
+- **Network & Internet:** Ethernet, Wi-Fi, connection status, saved networks, VPN, proxy, DNS details where supported.
+- **Bluetooth & Devices:** Bluetooth state, pairing, connected devices, input devices, printers/scanners, cameras, audio devices.
+- **Display:** resolution, scaling, refresh rate, orientation, night light/color options when supported, multi-monitor arrangement.
+- **Sound:** output/input device, volume, per-device settings where supported, microphone privacy/status.
+- **Appearance:** theme, accent, wallpaper/background, desktop/panel behavior, icon/text scaling, animation/reduced-motion preference.
+- **Personalization & Accessibility:** text size, contrast, keyboard navigation, screen reader integration, sticky/filter keys, magnification, captions where supported.
+- **Power & Battery:** power mode, battery status, screen blanking, suspend behavior; never expose unsupported controls.
+- **Storage:** volumes, free space, removable devices, mount/eject, storage usage; destructive format/partition operations require explicit risk handling and suitable authorization.
+- **Applications:** installed apps, defaults, startup apps, permissions where supported, updates/uninstall.
+- **Users & Accounts:** local users and session settings where permitted; account/provider integrations remain explicit.
+- **Privacy & Security:** screen/mic/camera indicators where supported, permissions, lock/screen timeout, firewall status, connected services, data retention and cloud-processing controls.
+- **Updates & Recovery:** update status, review/install updates, restart requirements, recovery/rollback status where available.
+- **Date, Time & Region:** timezone, clock format, locale, language, calendar, number/date formats.
+- **Keyboard, Mouse, Touchpad & Input:** layouts, shortcuts, pointer speed, gestures, repeat settings, touch behavior.
+- **Printers & Scanners:** discovery, add/remove, queue and error state where supported.
+- **Sharing & Remote Access:** disabled by default unless the product explicitly enables a capability; disclose network exposure and require authorization.
+- **Developer & Advanced:** terminal, diagnostics, logs, service status, supported developer settings; advanced controls must not bypass Gate.
+- **About EiraOS:** version, Ubuntu base/image, support status, hardware/software information, licenses, diagnostics export, update channel.
+
+Each settings page must define: capability identifier, read model, supported mutations, loading/empty/error/permission-denied/offline states, authorization and confirmation rules, success postcondition, audit behavior, and automated tests.
+
+### 4.7 Quick settings and status
+- Show current, sourced state; unknown is not the same as off.
+- Toggle only capabilities whose operation and rollback/error behavior are implemented.
+- Provide detailed settings navigation.
+- Warn when a change disconnects the active network, stops a service, affects a call, or otherwise interrupts current work.
+- Do not display fabricated battery, VPN, device, update, or privacy status.
+
+### 4.8 Notifications and system activity
+- Notification grouping, focus/do-not-disturb, per-app controls where supported, and actionable notifications.
+- Long-running operations show progress, cancellation support where safe, and final outcomes.
+- Distinguish completed, failed, partially completed, waiting for consent, waiting for authentication, and waiting for user input.
+- Notification action handlers go through typed contracts and Gate.
+- Define persistence and retention; sensitive message contents must not leak onto lock screen by default.
+
+### 4.9 Files and storage UX
+- Browse approved files and locations; navigate, search, preview supported file types, open with apps, and show metadata.
+- Make file operations explicit: create, rename, copy, move, delete, trash/restore, mount/eject, and permissions only as capabilities are implemented.
+- Respect sandboxing, filesystem permissions, symlinks, mount boundaries, and path traversal protections.
+- Clearly distinguish permanent delete from moving to trash; provide undo only when technically guaranteed.
+- Show progress, conflicts, permission failures, and partial completion for multi-file operations.
+- No broad filesystem authority based solely on AI interpretation.
+
+### 4.10 Assistant and intent workflow
+- Conversational entry point and contextual actions, without taking over the entire desktop by default.
+- Show the interpreted intent and target when ambiguity or consequence warrants it.
+- Separate suggestion, plan, consent, authentication, execution, and verified outcome states.
+- Explain why clarification, confirmation, or elevated authentication is needed.
+- Never report success solely because the model or UI says so; use the service postcondition and persisted state.
+- Allow cancellation before the point of no return where supported and explain when cancellation is no longer possible.
+- Provide an inspectable activity/evidence view for material system actions.
+
+### 4.11 Communications
+- Unified conversation-first UX may combine views, but must preserve transport, account, recipient, privacy, cost, delivery and failure metadata when material.
+- Explicit account/provider connection and disconnection controls.
+- Distinguish draft, proposed, queued, sent, delivered, failed, and accepted states where the transport supports them.
+- No silent cross-transport rerouting, recipient substitution, or cloud processing.
+- Contact resolution must handle ambiguous or duplicate identities before sending.
+
+### 4.12 Terminal and developer surfaces
+- Real PTY-backed terminal, not an emulated text input.
+- Normal logged-in user permissions by default; no automatic root or sudo.
+- Support multiple terminal sessions, Unicode, resize, signals, exit status, and interactive TUI programs.
+- Provide clear session lifecycle, copy/paste, keyboard shortcuts, and accessible terminal behavior.
+- Terminal commands are not a back door into EiraSystemAPI or Gate-protected GUI actions.
+- Developer tools and logs expose useful diagnostics without revealing secrets.
+
+### 4.13 Lock screen, session, and recovery
+- Lock/unlock, session switching where supported, login/session errors, sleep/wake, and crash recovery.
+- Sensitive notifications hidden by default while locked.
+- Restore windows/workspaces only where safe and without restoring secrets or executing actions automatically.
+- Recovery mode and safe diagnostic path for broken UI, display configuration, or unavailable daemons.
+
+## 5. Interaction states and behavior contract
+
+Every interactive surface must account for applicable states:
+- Initial / empty
+- Loading / refreshing
+- Ready / current
+- Stale / disconnected
+- Unsupported / hardware unavailable
+- Permission denied
+- Waiting for consent
+- Waiting for authentication
+- Validation error
+- Running / progress
+- Cancelled
+- Failed
+- Partially completed
+- Completed and verified
+
+UI wording must reflect actual backend status. For example, “completed” requires a verified postcondition, not merely a successful IPC response. A timeout must not be presented as proof that the operation failed if the result is unknown; show an explicit unknown/reconciliation state and avoid unsafe blind retries.
+
+## 6. Frontend architecture
+
+Keep the dependency direction:
+
+1. **Presentation:** React pages/components, design tokens, animations, accessibility, local view state.
+2. **UI application layer:** screen orchestration, view models, input validation, navigation, optimistic updates only where safe.
+3. **Typed EiraOS client:** generated/hand-maintained typed requests and responses, schema/version validation, cancellation and correlation IDs.
+4. **Tauri IPC boundary:** narrow command surface and validation; no generic arbitrary privileged command endpoint.
+5. **EiraOS domain/services:** use cases, Gate, identity/object resolution, state transitions, audit, persistence.
+6. **EiraSystemAPI adapters:** Ubuntu/D-Bus/service integration with native authorization.
+7. **Ubuntu/platform:** compositor, session, hardware, system services, drivers.
+
+Rules:
+- Components do not access daemon sockets or D-Bus directly.
+- Components do not run shell commands for system management.
+- No policy decisions based on hidden UI state.
+- Backend authorization is authoritative; disabling a button is usability, not security.
+- Typed errors are translated into understandable UI messages without dropping diagnostic codes.
+- IPC contracts are versioned and tested.
+- Loading, stale, retry, cancellation, and duplicate-submit behavior is standardized.
+- Keep domain models independent from React and CSS.
+- Test user flows through accessible roles/labels rather than fragile DOM structure where practical.
+
+## 7. Design system and component inventory
+
+Create and maintain a single design system with:
+- Color, typography, spacing, density, elevation, borders, radii, icon sizing, focus rings, motion and z-index tokens.
+- Light/dark themes, high contrast, accent choice, and reduced motion.
+- Layout primitives for app shell, page header, navigation rail/panel, content region, cards, lists, tables, forms, dialogs, popovers, menus, toasts, progress, empty/error states.
+- Reusable controls: button, text field, search field, checkbox, radio, toggle, select, slider, segmented control, tabs, breadcrumb, list row, tree, data table, device card, permission prompt, confirmation dialog, status indicator.
+- Consistent destructive-action hierarchy and confirmation language.
+- Icon naming and meaning rules; icons are never the only label for important actions.
+- Responsive breakpoints for laptop, desktop, high-DPI, touch, and narrow windows.
+- Component documentation and visual regression coverage.
+
+Avoid arbitrary one-off styling. A screen-specific component is allowed when it represents a real domain concept, not merely to bypass the design system.
+
+## 8. State, persistence, and data boundaries
+
+- Server/system state is sourced from authoritative services; local UI state is used only for transient presentation.
+- Cache entries include freshness/invalidity semantics.
+- A mutation updates the UI only from authoritative response or a clearly marked pending state.
+- Use correlation IDs for user-visible long-running actions and audit traces.
+- Idempotency keys protect retries where applicable.
+- No secrets in local storage, logs, analytics, notifications, crash reports, or view models unless an explicit secure design permits it.
+- Define offline behavior and reconciliation for every feature that can run while services are unavailable.
+- Avoid optimistic success for privileged or irreversible operations.
+
+## 9. GUI implementation work packages
+
+### GUI-0 — Audit current frontend
+Inventory React routes/components, CSS/design tokens, Tauri commands, IPC wrappers, dev HTTP bridge, navigation, app entry points, tests, and any duplicated state. Map each existing screen to this plan. Do not replace existing functionality before understanding it.
+
+### GUI-1 — UX map and shell decision
+Create screen map, primary navigation, shell layout, workspace/window strategy, keyboard shortcuts, and interaction flows. Build low-fidelity wireframes and review them before committing to a detailed visual direction.
+
+### GUI-2 — Design system foundation
+Implement tokens, themes, primitives, focus behavior, accessibility defaults, component examples, and visual regression baseline.
+
+### GUI-3 — Real shell and global navigation
+Implement app shell, launcher, search entry, workspace/window integration, status area, quick settings, notifications, and assistant entry point with truthful state.
+
+### GUI-4 — Settings framework
+Build capability-driven settings navigation and page templates; integrate read-only status first, then safe mutations with authorization, confirmation, error and postcondition handling.
+
+### GUI-5 — Files, app management, and everyday workflows
+Implement only supported capabilities, with permission boundaries and failure/recovery behavior.
+
+### GUI-6 — Assistant and action lifecycle UI
+Represent proposal, clarification, consent, authentication, execution, failure, partial success, and verified completion using the same Gate contract.
+
+### GUI-7 — Communication and terminal surfaces
+Build on their typed contracts and independent service boundaries; do not fake transport delivery or terminal execution.
+
+### GUI-8 — Accessibility, localization, and polish
+Keyboard-only review, screen-reader pass, high contrast, scaling, reduced motion, language expansion, multi-monitor, sleep/wake, and error-state coverage.
+
+### GUI-9 — Release readiness
+Test clean install, upgrade, first run, missing services, denied permissions, offline state, app crash, daemon restart, and recovery. Verify the actual target Ubuntu image.
+
+## 10. GUI acceptance checklist
+
+A GUI capability is accepted only when all applicable criteria pass:
+
+- [ ] The screen and user story are documented.
+- [ ] Navigation and keyboard access are defined.
+- [ ] UI states and error copy cover unavailable, denied, stale, failed and partial outcomes.
+- [ ] The underlying capability exists and is represented in the coverage matrix.
+- [ ] The UI calls a typed EiraOS contract, not a shell command or direct OS service.
+- [ ] Gate, consent, and authorization remain enforced by backend services.
+- [ ] Success is shown only after the required postcondition is verified.
+- [ ] Loading, timeout, cancellation, duplicate submit and stale state are tested.
+- [ ] Accessibility and localization requirements are checked.
+- [ ] Unit/component and relevant integration/E2E tests pass.
+- [ ] Screenshots or visual regression evidence are attached where useful.
+- [ ] Unsupported functionality is labelled honestly and cannot appear to succeed.
+- [ ] Documentation and support status are updated.
+
+## 11. GUI test strategy
+
+- **Design-system tests:** tokens, themes, keyboard focus, accessible names, contrast, reduced motion.
+- **Component tests:** form validation, menus/dialogs, status indicators, errors, loading, cancellation.
+- **Contract tests:** typed IPC request/response, schema mismatch, error mapping, timeouts.
+- **Flow tests:** navigation, search, settings, confirmation, permission denial, long-running tasks.
+- **Security tests:** UI cannot bypass Gate; forged or repeated IPC calls are still rejected by backend policy.
+- **Integration tests:** actual Tauri IPC and service adapters against controlled test services.
+- **Target-image tests:** display/session, NetworkManager and device capability behavior on pinned Ubuntu 26.04.x.
+- **E2E tests:** verified state and audit records, not screenshots alone.
+- **Visual regression:** key shell/screen states across light/dark, scaling, and representative viewport sizes.
+- **Manual exploratory tests:** multi-monitor, touch, screen reader, sleep/wake, terminal TUI, recovery, and real hardware where automation is insufficient.
+
+## 12. Definition of GUI completeness
+
+The GUI is not complete because the home screen looks polished. It is complete only when:
+- The core shell and navigation are coherent.
+- The full PC Core settings map is either implemented or explicitly marked unsupported/blocked with evidence.
+- Common desktop workflows work with keyboard and pointer, and touch where applicable.
+- Every visible control reflects a real capability or an honest unavailable state.
+- AI workflows obey the Gate and report verified outcomes.
+- The terminal remains a real terminal.
+- Errors, permissions, offline conditions, restart, and recovery are designed—not afterthoughts.
+- Accessibility, localization, and target-platform behavior are tested.
+- Every supported capability has traceable acceptance evidence.
+
+## 13. Open UX decisions
+
+Resolve through prototype and usability review rather than silently hard-coding assumptions:
+- Main shell arrangement: top bar, dock/panel, navigation rail, or combination.
+- Default home/workspace layout and whether it can be customized.
+- Window management and compositor integration strategy.
+- Search/command palette scope and shortcuts.
+- How the assistant is summoned and how contextual suggestions are surfaced.
+- Basic/advanced settings presentation.
+- Notification privacy and retention defaults.
+- Visual identity, icon family, theme defaults, and density.
+- Touch/gesture support expectations and supported hardware.
+- Which communications surfaces belong in the first release.
+
+## 14. Related contracts
+
+- [Master Plan 1.0](../MASTER-PLAN-1.0.md)
+- [Architecture Baseline 1.0](eiraos-architecture-baseline-1.0.md)
+- [Separation of Presentation and Logic](separation-of-presentation-and-logic.md)
+- [EiraOS Design Principles](eiraos-design-principles.md)
+- [Ubuntu PC API Coverage Matrix](ubuntu-pc-api-coverage-matrix.md)
+- [Gate Kernel 1.0](../../specs/GATE-KERNEL-1.0.md)
+- [AI Interface 1.0](../../specs/AI-INTERFACE-1.0.md)
+- [EDP 1.0](../../specs/EDP-1.0.md)
