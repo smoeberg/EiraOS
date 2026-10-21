@@ -43,7 +43,7 @@ Brugerens intention
 
 ## 3. Valideringslag (obligatorisk rækkefølge)
 
-Hvert lag skal returnere en eksplicit beslutning: `PASS`, `REJECT` eller `CLARIFY` (kun lag 1–3).
+Hvert lag skal returnere en eksplicit beslutning: `PASS`, `REJECT` eller `CLARIFY`. `CLARIFY` må kun bruges i lag 1–3, hvor brugerens betydning eller nødvendige handlingsdata er uklare. Manglende samtykke eller autorisation i senere lag er aldrig `CLARIFY` inde i gaten; de returnerer en eksplicit afvisning uden udførelse, hvorefter UI kan starte en separat samtykke-/step-up-proces. Efter denne proces skal hele handlingen valideres igen.
 
 ### 3.1 Lag 1 — Syntaks
 
@@ -63,9 +63,9 @@ Constrained decoding (JSON Schema i Ollama, GBNF i llama.cpp) kan reducere synta
 |---|---|
 | `action.type` | Skal være i EDP 1.0's lukkede taksonomi |
 | `action.content` | Skal følge skemaet for den pågældende `type` |
-| `participants[]` | Mindst én; `identity` skal være gyldig DID |
-| `transport` | `degraded` skal være boolesk; `error` skal være `null` eller gyldig fejlkode |
-| `veritas` | `trust_score` i [0.0, 1.0]; `level` i {`green`, `yellow`, `red`} |
+| `participants[]` | Mindst én; hver identitet skal følge en understøttet identitetssyntaks. DID'er og eksterne, scheme-kvalificerede adresser er forskellige identitetstyper; syntaks er ikke bevis på ejerskab eller autorisation |
+| `transport` | `degraded` skal være boolesk; `error` skal være `null` eller et struktureret objekt med gyldig `code` |
+| `veritas` | `status` i {`unassessed`, `assessed`, `unavailable`}; `trust_score` er `null` eller i [0.0, 1.0]; `evidence_refs` er en liste. EDP 1.0 har ikke et normativt `level`-felt |
 
 **Ved fejl:** `REJECT` med `E_SCHEMA`.
 
@@ -101,7 +101,7 @@ Constrained decoding (JSON Schema i Ollama, GBNF i llama.cpp) kan reducere synta
 | Samtykke givet? | Er der et gyldigt, ikke-udløbet samtykke for netop denne handling? |
 | Samtykke dækker parametre? | Dækker samtykket de konkrete parametre (beløb, modtager, sti)? |
 
-**Ved fejl:** `REJECT` med `E_CONSENT` eller `CLARIFY` med `E_NEED_CONSENT`.
+**Ved fejl:** `REJECT` med `E_CONSENT` eller `E_NEED_CONSENT`. `E_NEED_CONSENT` betyder, at en separat samtykkeproces kan tilbydes; det tillader ikke udførelse. Efter et samtykke skal den oprindelige handling sendes gennem alle Gate-lag igen.
 
 ### 3.6 Lag 6 — Autorisation
 
@@ -111,7 +111,7 @@ Constrained decoding (JSON Schema i Ollama, GBNF i llama.cpp) kan reducere synta
 | Rettighed gælder nu | Er rettigheden ikke tilbagekaldt eller udløbet? |
 | Step-up niveau | Kræver handlingen et højere assurance-niveau end sessionens? |
 
-**Ved fejl:** `REJECT` med `E_UNAUTHORIZED` eller `CLARIFY` med `E_STEP_UP_REQUIRED`.
+**Ved fejl:** `REJECT` med `E_UNAUTHORIZED` eller `E_STEP_UP_REQUIRED`. `E_STEP_UP_REQUIRED` kan starte en separat autentifikationsproces, men handlingen er ikke autoriseret, før Gate kontrollerer den igen efter step-up.
 
 **Regel:** Autorisation kontrolleres **igen umiddelbart før udførelse** (lag 7), ikke kun ved planlægning.
 
@@ -147,7 +147,7 @@ Gaten returnerer altid én af:
 | `REJECT` | Handlingen er ugyldig eller forbudt | Ingen udførelse; audit logges |
 | `CLARIFY` | Handlingen kræver brugerafklaring | UI viser spørgsmål; ingen udførelse |
 
-**Der findes ingen `PASS_WITH_WARNING`.** Hvis der er tvivl, er svaret `REJECT` eller `CLARIFY`.
+**Der findes ingen `PASS_WITH_WARNING`.** Hvis semantikken er uklar i lag 1–3, er svaret `CLARIFY`. Hvis en sikkerheds-, samtykke-, autorisations- eller tilstandskontrol fejler, er svaret `REJECT`. En separat afklarings-/samtykke-/autentifikationsproces må aldrig genbruge en gammel `PASS`; handlingen skal valideres igen.
 
 ## 5. Fejlkoder
 
@@ -159,16 +159,16 @@ Gaten returnerer altid én af:
 | `E_MISSING_FIELD` | Nødvendigt felt kan ikke udledes | 3 |
 | `E_POLICY` | Handling, mål eller parametre ikke tilladt | 4 |
 | `E_CONSENT` | Manglende eller utilstrækkeligt samtykke | 5 |
-| `E_NEED_CONSENT` | Samtykke kan indhentes | 5 |
+| `E_NEED_CONSENT` | Samtykke mangler; separat samtykkeproces kan tilbydes, ingen udførelse | 5 |
 | `E_UNAUTHORIZED` | Ingen rettighed til handlingen | 6 |
-| `E_STEP_UP_REQUIRED` | Højere assurance-niveau nødvendigt | 6 |
+| `E_STEP_UP_REQUIRED` | Højere assurance-niveau nødvendigt; separat step-up og fuld genvalidering kræves | 6 |
 | `E_STATE` | Ugyldig tilstandsovergang | 7 |
 | `E_PARTIAL` | Executor fejlede delvist | 8 |
 | `E_EXECUTOR_UNAVAILABLE` | Ingen executor registreret | 8 |
 
 ## 6. Reversibilitetsklasser
 
-Hver `action.type` skal have en deklareret reversibilitetsklasse i EDP-skemaet:
+Hver tilladt handlingstype/operation skal have en deklareret reversibilitetsklasse i Gate-policy registry. Klassen er ikke autoritativ, hvis den kommer fra modeloutput eller brugerleveret EDP:
 
 | Klasse | Betydning | Krav |
 |---|---|---|
@@ -176,7 +176,7 @@ Hver `action.type` skal have en deklareret reversibilitetsklasse i EDP-skemaet:
 | `compensable` | Kan rulles tilbage via kompenserende handling | Kompensationshandling skal være registreret |
 | `irreversible` | Kan ikke fortrydes | Eksplicit bekræftelse + audit |
 
-**Regel:** Hvis reversibilitetsklassen ikke er deklareret, behandles handlingen som `irreversible`.
+**Regel:** Reversibilitetsklassen er intern Gate-policy metadata i et versionsstyret, testet policy-registry — ikke et felt, modellen kan vælge i EDP-payloaden. Hvis registry ikke har en eksplicit klasse for handlingstypen og den konkrete operation, behandles handlingen som `irreversible`. Ændring af klassen kræver policy review og tests.
 
 ## 7. Testkrav (acceptkriterier)
 
