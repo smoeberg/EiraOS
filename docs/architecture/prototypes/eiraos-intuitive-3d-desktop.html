@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="da" class="h-full bg-slate-950 text-slate-100 dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EiraOS 3D Spatial Desktop Showcase</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans for ren nordisk typografi -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            eira: {
+              bg: '#080c14',
+              accent: '#38bdf8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at 50% -10%, #1e293b 0%, #080c14 85%);
+      overflow: hidden;
+    }
+
+    /* Nordisk Glassmorphism styling */
+    .glass-panel {
+      background: rgba(15, 22, 36, 0.75);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Kunstneriske ikoner: Hvide kvadratiske beholdere med rene sorte streger */
+    .eira-icon-btn {
+      width: 44px;
+      height: 44px;
+      background-color: #ffffff;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .eira-icon-btn:hover {
+      transform: scale(1.08) translateY(-3px);
+      box-shadow: 0 10px 24px rgba(255,255,255,0.3);
+    }
+
+    .eira-icon-svg {
+      width: 22px;
+      height: 22px;
+      stroke: #090d16;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    /* 3D Spatial Viewport Layout System */
+    .spatial-viewport {
+      perspective: 1400px;
+      perspective-origin: 50% 40%;
+    }
+
+    .spatial-stage {
+      transform-style: preserve-3d;
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Vindueskort i 3D-rummet */
+    .spatial-window {
+      position: absolute;
+      transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.55s ease, filter 0.55s ease, box-shadow 0.55s ease;
+      transform-style: preserve-3d;
+      will-change: transform, opacity, filter;
+    }
+
+    /* AKTIVT VINDUE (Fokus): Skarpt, lige foran dig, let at læse */
+    .spatial-window.active-window {
+      transform: translate3d(0, 0, 70px) rotateX(0deg) rotateY(0deg) scale(1) !important;
+      opacity: 1 !important;
+      filter: blur(0px) brightness(1) !important;
+      z-index: 40 !important;
+      border-color: rgba(56, 189, 248, 0.4) !important;
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.15) !important;
+    }
+
+    /* PASSIVE VINDUER (Trådt tilbage i 3D-rummet med naturligt perspektiv) */
+    .spatial-window.passive-window-left {
+      transform: translate3d(-340px, -20px, -80px) rotateY(12deg) rotateX(3deg) scale(0.9);
+      opacity: 0.72;
+      filter: blur(1px) brightness(0.85);
+      z-index: 10;
+    }
+
+    .spatial-window.passive-window-right {
+      transform: translate3d(340px, 15px, -60px) rotateY(-10deg) rotateX(2deg) scale(0.92);
+      opacity: 0.78;
+      filter: blur(1px) brightness(0.88);
+      z-index: 15;
+    }
+
+    .spatial-window.passive-window-top {
+      transform: translate3d(0px, -220px, -140px) rotateX(8deg) scale(0.85);
+      opacity: 0.6;
+      filter: blur(2px) brightness(0.75);
+      z-index: 5;
+    }
+
+    /* Klassisk Fladt Mode (Når 3D er slået fra) */
+    .flat-mode .spatial-window {
+      transform: none !important;
+      filter: none !important;
+      position: relative !important;
+      opacity: 1 !important;
+    }
+
+    /* Toggle switch */
+    .toggle-checkbox:checked + .toggle-label {
+      background-color: #38bdf8;
+    }
+    .toggle-checkbox:checked + .toggle-label .toggle-dot {
+      transform: translateX(100%);
+    }
+
+    /* Lys-effekter i baggrunden */
+    .glow-orb-sky {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.12) 0%, rgba(0,0,0,0) 70%);
+      top: 5%;
+      left: 20%;
+      pointer-events: none;
+      filter: blur(60px);
+    }
+
+    .glow-orb-purple {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, rgba(0,0,0,0) 70%);
+      bottom: 10%;
+      right: 15%;
+      pointer-events: none;
+      filter: blur(60px);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col justify-between select-none relative overflow-hidden">
+
+  <!-- Bløde lys-glød i baggrunden -->
+  <div class="glow-orb-sky"></div>
+  <div class="glow-orb-purple"></div>
+
+  <!-- TOPBAR (EiraOS System-status & Mode Toggle) -->
+  <header class="w-full h-14 border-b border-white/10 glass-panel z-50 px-6 flex items-center justify-between">
+    <!-- EiraOS Logo & Platform -->
+    <div class="flex items-center space-x-3">
+      <div class="eira-icon-btn !w-8 !h-8 !rounded-lg">
+        <svg class="eira-icon-svg !w-5 !h-5" viewBox="0 0 24 24">
+          <path d="M12 3v18M3 12h18M6 6l12 12M6 18L18 6"/>
+        </svg>
+      </div>
+      <span class="font-semibold text-base tracking-wide text-white">
+        EiraOS <span class="text-xs font-normal text-slate-400 ml-1.5">Spatial Desktop</span>
+      </span>
+    </div>
+
+    <!-- Mode Selector & Parallax Info -->
+    <div class="flex items-center space-x-4">
+      <!-- Intuitivt 3D Rum / Fladt Overblik Toggle -->
+      <button id="view-mode-btn" onclick="toggleViewMode()" class="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-medium text-slate-200 transition">
+        <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+        <span id="view-mode-text">Intuitivt 3D Rum</span>
+      </button>
+
+      <!-- Søg / Spørg Eira Genvej -->
+      <button onclick="openCommandPalette()" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-slate-400 hover:text-white hover:border-white/20 transition">
+        <span>Søg eller spørg Eira...</span>
+        <span class="px-1.5 py-0.5 text-[10px] font-mono bg-white/10 rounded text-slate-300">⌘K</span>
+      </button>
+
+      <!-- Klokkeslæt -->
+      <div class="text-xs text-slate-300 font-medium pl-2 border-l border-white/10 flex items-center space-x-2">
+        <span>Onsdag 21. okt</span>
+        <span class="text-white font-semibold">16:42</span>
+      </div>
+    </div>
+  </header>
+
+
+  <!-- 3D SPATIAL VIEWPORT (Hvor alle vinduer svæver i rummet) -->
+  <main id="viewport" class="spatial-viewport flex-1 relative w-full h-[calc(100vh-7rem)] flex items-center justify-center p-6">
+    
+    <div id="stage" class="spatial-stage w-full max-w-6xl h-full relative flex items-center justify-center">
+
+      <!-- ========================================================================= -->
+      <!-- VINDUE 1: NOTER & DOKUMENTER (Workspace / Aktivt vindue ved start) -->
+      <!-- ========================================================================= -->
+      <div id="win-notes" onclick="bringToFront('win-notes')" class="spatial-window active-window glass-panel rounded-2xl w-full max-w-xl p-6 cursor-pointer border border-white/15">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div class="flex items-center space-x-3">
+            <div class="eira-icon-btn">
+              <svg class="eira-icon-svg" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-base font-semibold text-white">Noter &amp; Design-specifikation</h2>
+              <p class="text-xs text-slate-400">EiraOS 3D Spatial Desktop Plan</p>
+            </div>
+          </div>
+          <span class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20">Aktivt fokus</span>
+        </div>
+
+        <div class="space-y-3 text-sm text-slate-200 leading-relaxed">
+          <p class="font-light">
+            <strong class="font-medium text-white">3.1 Spatial Desktop Architecture:</strong> Skrivebordet fungerer som et fysisk rum foran brugeren. Når du klikker på et vindue, bevæger det sig ubesværet frem i fokus.
+          </p>
+          <div class="p-3.5 rounded-xl bg-white/5 border border-white/5 space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400">Status på dybdeperspektiv</span>
+              <span class="text-emerald-400 font-medium">98% Intuitivt</span>
+            </div>
+            <div class="w-full bg-black/40 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-gradient-to-r from-sky-400 to-emerald-400 h-full w-[98%]"></div>
+            </div>
+          </div>
+          <p class="text-xs text-slate-400 italic">
+            Klik på et af de andre svævende vinduer i baggrunden for at bringe det frem forrest i 3D-rummet.
+          </p>
+        </div>
+      </div>
+
+
+      <!-- ========================================================================= -->
+      <!-- VINDUE 2: KONTROLPANEL & INDSTILLINGER (Svæver til højre i 3D-rummet) -->
+      <!-- ========================================================================= -->
+      <div id="win-control" onclick="bringToFront('win-control')" class="spatial-window passive-window-right glass-panel rounded-2xl w-full max-w-md p-6 cursor-pointer border border-white/10">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div class="flex items-center space-x-3">
+            <div class="eira-icon-btn">
+              <svg class="eira-icon-svg" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-base font-semibold text-white">Kontrolpanel</h2>
+              <p class="text-xs text-slate-400">Systemindstillinger &amp; Lyd</p>
+            </div>
+          </div>
+          <span class="text-xs font-mono text-slate-400">Eira Core</span>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Wi-Fi Kontrol -->
+          <div class="glass-card p-3.5 rounded-xl flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="eira-icon-btn !w-8 !h-8 !rounded-lg">
+                <svg class="eira-icon-svg !w-4 !h-4" viewBox="0 0 24 24">
+                  <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                  <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                  <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                  <line x1="12" y1="20" x2="12.01" y2="20"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-white">Wi-Fi Netværk</p>
+                <p class="text-[11px] text-sky-400 font-medium">Nordic_Fiber_5G</p>
+              </div>
+            </div>
+            <div class="relative inline-block w-10 align-middle select-none">
+              <input type="checkbox" id="wifi-toggle" checked class="toggle-checkbox hidden"/>
+              <label for="wifi-toggle" class="toggle-label block overflow-hidden h-5 rounded-full bg-white/20 cursor-pointer transition-colors duration-200">
+                <span class="toggle-dot block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Lydstyrke slider -->
+          <div class="glass-card p-3.5 rounded-xl space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300 font-medium">Lydstyrke</span>
+              <span id="vol-text" class="text-sky-400 font-mono">80%</span>
+            </div>
+            <input type="range" min="0" max="100" value="80" oninput="document.getElementById('vol-text').innerText = this.value + '%'" class="w-full accent-sky-400 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer">
+          </div>
+
+          <!-- Skærmlysstyrke slider -->
+          <div class="glass-card p-3.5 rounded-xl space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300 font-medium">Skærmlysstyrke</span>
+              <span id="bright-text" class="text-sky-400 font-mono">65%</span>
+            </div>
+            <input type="range" min="0" max="100" value="65" oninput="document.getElementById('bright-text').innerText = this.value + '%'" class="w-full accent-sky-400 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer">
+          </div>
+
+          <!-- Privatlivsbeskyttelse -->
+          <div class="glass-card p-3 rounded-xl flex items-center justify-between text-xs">
+            <span class="text-slate-300">Kamera &amp; Mikrofon</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Beskyttet</span>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ========================================================================= -->
+      <!-- VINDUE 3: MEDIER & GALLERI (Svæver til venstre i 3D-rummet) -->
+      <!-- ========================================================================= -->
+      <div id="win-media" onclick="bringToFront('win-media')" class="spatial-window passive-window-left glass-panel rounded-2xl w-full max-w-md p-6 cursor-pointer border border-white/10">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div class="flex items-center space-x-3">
+            <div class="eira-icon-btn">
+              <svg class="eira-icon-svg" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-base font-semibold text-white">Galleri &amp; Lyd</h2>
+              <p class="text-xs text-slate-400">Visuelt Inspirationsbræt</p>
+            </div>
+          </div>
+          <span class="text-xs text-slate-400">Medier</span>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Billede eksempler -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="h-28 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 p-3 flex flex-col justify-end relative overflow-hidden group">
+              <div class="absolute inset-0 bg-sky-500/10 opacity-0 group-hover:opacity-100 transition"></div>
+              <span class="text-xs font-medium text-white z-10">Nordisk Arkitektur</span>
+              <span class="text-[10px] text-slate-400 z-10">2.4 MB · RAW</span>
+            </div>
+            <div class="h-28 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 p-3 flex flex-col justify-end relative overflow-hidden group">
+              <div class="absolute inset-0 bg-purple-500/10 opacity-0 group-hover:opacity-100 transition"></div>
+              <span class="text-xs font-medium text-white z-10">Interface Skitse</span>
+              <span class="text-[10px] text-slate-400 z-10">EiraOS UI v2</span>
+            </div>
+          </div>
+
+          <!-- Lydafspiller widget -->
+          <div class="glass-card p-3.5 rounded-xl flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="eira-icon-btn !w-8 !h-8 !rounded-lg">
+                <svg class="eira-icon-svg !w-4 !h-4" viewBox="0 0 24 24">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-xs font-medium text-white">Nordic Ambient Sounds</p>
+                <p class="text-[10px] text-slate-400">B&amp;O Beoplay HX</p>
+              </div>
+            </div>
+            <button class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xs">
+              ▶
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+
+  <!-- FLOATING COMMAND PALETTE / SØG & SPØRG EIRA (MODAL MODAL OVERLAY) -->
+  <div id="command-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md transition-opacity duration-300">
+    <div class="w-full max-w-xl glass-panel rounded-3xl p-6 border border-white/20 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+      
+      <!-- Søgefelt med Eira Ikon -->
+      <div class="flex items-center space-x-3">
+        <div class="eira-icon-btn !w-10 !h-10 !rounded-xl">
+          <svg class="eira-icon-svg" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <input id="cmd-input" type="text" placeholder="Spørg Eira eller søg i dine dokumenter..." class="w-full bg-transparent text-white text-lg font-light placeholder-slate-400 focus:outline-none">
+        <button onclick="closeCommandPalette()" class="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-white/10">ESC</button>
+      </div>
+
+      <div class="h-px w-full bg-white/10"></div>
+
+      <!-- Forslag & Handlinger -->
+      <div class="space-y-2 text-sm">
+        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Foreslåede Handlinger</p>
+        
+        <div onclick="bringToFront('win-notes'); closeCommandPalette();" class="glass-card p-3 rounded-xl flex items-center justify-between cursor-pointer hover:bg-white/10">
+          <span class="text-white font-medium">Åbn Noter &amp; Design-specifikation</span>
+          <span class="text-xs text-sky-400">Dokument</span>
+        </div>
+
+        <div onclick="bringToFront('win-control'); closeCommandPalette();" class="glass-card p-3 rounded-xl flex items-center justify-between cursor-pointer hover:bg-white/10">
+          <span class="text-white font-medium">Juster Lydstyrke &amp; Skærmlysstyrke</span>
+          <span class="text-xs text-slate-400">Kontrolpanel</span>
+        </div>
+
+        <div onclick="bringToFront('win-media'); closeCommandPalette();" class="glass-card p-3 rounded-xl flex items-center justify-between cursor-pointer hover:bg-white/10">
+          <span class="text-white font-medium">Vis Galleri &amp; Afspil Lyd</span>
+          <span class="text-xs text-slate-400">Medier</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- BUND DOCK (Svævende i 3D-rummet med kunstneriske hvide ikoner) -->
+  <footer class="w-full h-16 flex justify-center items-center pb-4 z-40">
+    <div class="glass-panel px-6 py-2.5 rounded-2xl flex items-center space-x-6 border border-white/15 shadow-2xl">
+      
+      <!-- Dock Ikon 1: Noter -->
+      <div onclick="bringToFront('win-notes')" class="group relative flex flex-col items-center">
+        <div class="eira-icon-btn">
+          <svg class="eira-icon-svg" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        </div>
+        <span class="absolute -top-9 px-2.5 py-1 text-[11px] bg-slate-900/90 text-slate-100 rounded-md border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">Noter &amp; Dokumenter</span>
+        <span class="w-1 h-1 rounded-full bg-sky-400 mt-1"></span>
+      </div>
+
+      <!-- Dock Ikon 2: Kontrolpanel -->
+      <div onclick="bringToFront('win-control')" class="group relative flex flex-col items-center">
+        <div class="eira-icon-btn">
+          <svg class="eira-icon-svg" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </div>
+        <span class="absolute -top-9 px-2.5 py-1 text-[11px] bg-slate-900/90 text-slate-100 rounded-md border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">Kontrolpanel</span>
+        <span class="w-1 h-1 rounded-full bg-white/40 mt-1"></span>
+      </div>
+
+      <!-- Dock Ikon 3: Galleri & Medier -->
+      <div onclick="bringToFront('win-media')" class="group relative flex flex-col items-center">
+        <div class="eira-icon-btn">
+          <svg class="eira-icon-svg" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        <span class="absolute -top-9 px-2.5 py-1 text-[11px] bg-slate-900/90 text-slate-100 rounded-md border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">Galleri &amp; Lyd</span>
+        <span class="w-1 h-1 rounded-full bg-white/40 mt-1"></span>
+      </div>
+
+      <!-- Skillelinje -->
+      <div class="w-px h-8 bg-white/15"></div>
+
+      <!-- Dock Ikon 4: Søg / Spørg Eira -->
+      <div onclick="openCommandPalette()" class="group relative flex flex-col items-center">
+        <div class="eira-icon-btn">
+          <svg class="eira-icon-svg" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <span class="absolute -top-9 px-2.5 py-1 text-[11px] bg-slate-900/90 text-slate-100 rounded-md border border-white/10 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">Søg &amp; Spørg Eira</span>
+        <span class="w-1 h-1 rounded-full bg-purple-400 mt-1"></span>
+      </div>
+
+    </div>
+  </footer>
+
+
+  <!-- SCRIPT FOR INTUITIV 3D NAVIGATION OG PARALLAKS -->
+  <script>
+    let is3DMode = true;
+    let currentActiveId = 'win-notes';
+
+    // Bring det valgte vindue direkte frem i fokus (Z-akse), og placer de andre i naturlige 3D-vinkler
+    function bringToFront(targetId) {
+      if (currentActiveId === targetId && is3DMode) return;
+      currentActiveId = targetId;
+
+      const allWindows = ['win-notes', 'win-control', 'win-media'];
+      const inactiveIds = allWindows.filter(id => id !== targetId);
+
+      // Sæt det aktive vindue
+      const activeEl = document.getElementById(targetId);
+      activeEl.className = 'spatial-window active-window glass-panel rounded-2xl w-full max-w-xl p-6 cursor-pointer border border-white/15';
+
+      // Sæt de passive vinduer med behagelig 3D-perspektiv
+      const leftEl = document.getElementById(inactiveIds[0]);
+      leftEl.className = 'spatial-window passive-window-left glass-panel rounded-2xl w-full max-w-md p-6 cursor-pointer border border-white/10';
+
+      const rightEl = document.getElementById(inactiveIds[1]);
+      rightEl.className = 'spatial-window passive-window-right glass-panel rounded-2xl w-full max-w-md p-6 cursor-pointer border border-white/10';
+    }
+
+    // Toggle mellem Intuitivt 3D Rum og Klassisk Fladt Overblik
+    function toggleViewMode() {
+      const viewport = document.getElementById('viewport');
+      const btnText = document.getElementById('view-mode-text');
+      
+      is3DMode = !is3DMode;
+
+      if (is3DMode) {
+        viewport.classList.remove('flat-mode');
+        btnText.innerText = 'Intuitivt 3D Rum';
+      } else {
+        viewport.classList.add('flat-mode');
+        btnText.innerText = 'Fladt Overblik';
+      }
+    }
+
+    // Mus Parallaks Effekt (Giver en blød fornemmelse af dybde uden at gøre brugeren rundtosset)
+    document.addEventListener('mousemove', (e) => {
+      if (!is3DMode) return;
+
+      const stage = document.getElementById('stage');
+      const mouseX = (e.clientX / window.innerWidth - 0.5) * 12; // Max 6 graders hældning
+      const mouseY = (e.clientY / window.innerHeight - 0.5) * -10;
+
+      stage.style.transform = `rotateY(${mouseX}deg) rotateX(${mouseY}deg)`;
+    });
+
+    // Command Palette Modal Controls
+    function openCommandPalette() {
+      const modal = document.getElementById('command-modal');
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        document.getElementById('cmd-input').focus();
+      }, 50);
+    }
+
+    function closeCommandPalette() {
+      document.getElementById('command-modal').classList.add('hidden');
+    }
+
+    // Lyt efter Cmd+K / Ctrl+K genvej
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+      }
+      if (e.key === 'Escape') {
+        closeCommandPalette();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from app.capability import list_manifests
+from app.capability import ASSURANCE_RANK, list_manifests
 from app.database import get_connection, utc_now_iso
 from app.executor import execute_intent
 from app.intent_parser import list_trust_items, parse_intent_request, plan_intent
@@ -75,26 +75,55 @@ def intent_confirm(params: dict) -> dict:
             {"user_message": "Afklar intentionen før bekræftelse"},
         )
 
-    required = pending.get("required_assurance")
-    session = get_session(sid)
-    if required == "org_acting" and session and session.get("assurance_level") != "org_acting":
+    # The plan is the authorization decision. Never let assurance or a
+    # capability match override an explicit block (or a missing plan decision).
+    if pending.get("can_execute") is not True:
         raise JsonRpcError(
-            ASSURANCE_REQUIRED,
-            "assurance_required",
+            -32002,
+            "cannot_execute",
             {
-                "required": "org_acting",
-                "current": session.get("assurance_level", "eid_low"),
-                "user_message": "Denne handling kræver MitID Erhverv",
+                "user_message": pending.get("block_reason")
+                or "Planen tillader ikke, at handlingen udføres",
             },
         )
 
-    if pending.get("can_execute") is False:
-        assurance_ok = not required or session.get("assurance_level") == required
-        if not (assurance_ok and pending.get("capability_match")):
+    session = get_session(sid)
+    if not session:
+        raise JsonRpcError(
+            -32002,
+            "cannot_execute",
+            {"user_message": "Sessionen findes ikke længere — planlæg handlingen igen"},
+        )
+
+    required = pending.get("required_assurance")
+    capability_match = pending.get("capability_match")
+    if not isinstance(capability_match, dict):
+        raise JsonRpcError(
+            -32002,
+            "cannot_execute",
+            {"user_message": "Planen mangler et gyldigt capability-match"},
+        )
+
+    # Recheck assurance at confirmation time; plans may outlive session changes.
+    capability_required = capability_match.get("required_assurance")
+    required_levels = [
+        level for level in (required, capability_required) if level is not None
+    ]
+    current_level = session.get("assurance_level")
+    current_rank = ASSURANCE_RANK.get(current_level, -1)
+    for required_level in required_levels:
+        required_rank = ASSURANCE_RANK.get(required_level)
+        if required_rank is None or current_rank < required_rank:
             raise JsonRpcError(
-                -32002,
-                "cannot_execute",
-                {"user_message": pending.get("block_reason", "Handling kan ikke udføres")},
+                ASSURANCE_REQUIRED,
+                "assurance_required",
+                {
+                    "required": required_level,
+                    "current": current_level,
+                    "user_message": (
+                        f"Handlingen kræver assurance-niveauet {required_level}"
+                    ),
+                },
             )
 
     execution = execute_intent(pending)
