@@ -55,10 +55,69 @@ impl FrameDecoder {
         }
     }
 
-    pub fn push(&mut self, bytes: &[u8]) {
-        if !self.poisoned {
-            self.buf.extend_from_slice(bytes);
+    /// Most bytes the decoder ever holds: one header plus one maximal frame.
+    pub fn capacity(&self) -> usize {
+        4 + self.max
+    }
+
+    /// Offer bytes from the stream. Returns how many were accepted; the
+    /// caller drains frames with [`next_frame`](Self::next_frame) and offers
+    /// the rest again. Memory is bounded by [`capacity`](Self::capacity),
+    /// and an oversized or empty length header is rejected here, as soon as
+    /// its four bytes have arrived — before any payload is buffered.
+    pub fn push(&mut self, bytes: &[u8]) -> Result<usize, FrameError> {
+        if self.poisoned {
+            return Err(FrameError::Poisoned);
         }
+        let room = self.capacity() - self.buf.len();
+        let take = bytes.len().min(room);
+        self.buf.extend_from_slice(&bytes[..take]);
+        if let Some(error) = self.header_error() {
+            return Err(error);
+        }
+        Ok(take)
+    }
+
+    /// Convenience: feed a whole chunk, draining frames as they complete.
+    ///
+    /// The decoder's *internal* buffer stays bounded by `capacity()` however
+    /// large `bytes` is. The *returned* `Vec` holds every frame in the chunk,
+    /// so total memory grows with the input. For untrusted peers, read in
+    /// bounded chunks or use `push` + `next_frame` and hand each frame on.
+    pub fn push_all(&mut self, mut bytes: &[u8]) -> Result<Vec<Vec<u8>>, FrameError> {
+        let mut frames = Vec::new();
+        loop {
+            let taken = self.push(bytes)?;
+            bytes = &bytes[taken..];
+            while let Some(frame) = self.next_frame()? {
+                frames.push(frame);
+            }
+            if bytes.is_empty() {
+                return Ok(frames);
+            }
+            if taken == 0 {
+                // Full buffer and no complete frame: cannot happen while the
+                // header check holds, but never spin.
+                return Err(FrameError::Poisoned);
+            }
+        }
+    }
+
+    fn header_error(&mut self) -> Option<FrameError> {
+        if self.buf.len() < 4 {
+            return None;
+        }
+        let len = u32::from_be_bytes(self.buf[..4].try_into().unwrap()) as usize;
+        if len != 0 && len <= self.max {
+            return None;
+        }
+        self.poisoned = true;
+        self.buf = Vec::new();
+        Some(if len == 0 {
+            FrameError::Empty
+        } else {
+            FrameError::TooLarge { len, max: self.max }
+        })
     }
 
     /// Next complete frame, `Ok(None)` if more bytes are needed.
@@ -66,19 +125,13 @@ impl FrameDecoder {
         if self.poisoned {
             return Err(FrameError::Poisoned);
         }
+        if let Some(error) = self.header_error() {
+            return Err(error);
+        }
         if self.buf.len() < 4 {
             return Ok(None);
         }
         let len = u32::from_be_bytes(self.buf[..4].try_into().unwrap()) as usize;
-        if len == 0 || len > self.max {
-            self.poisoned = true;
-            self.buf = Vec::new();
-            return Err(if len == 0 {
-                FrameError::Empty
-            } else {
-                FrameError::TooLarge { len, max: self.max }
-            });
-        }
         if self.buf.len() < 4 + len {
             return Ok(None);
         }
@@ -103,18 +156,18 @@ mod tests {
         let b = encode_frame(b"\x82\x01\x02").unwrap();
         let stream: Vec<u8> = [a.clone(), b.clone()].concat();
 
-        // Two frames in one push.
+        // Two frames in one chunk.
         let mut dec = FrameDecoder::default();
-        dec.push(&stream);
-        assert_eq!(dec.next_frame().unwrap().unwrap(), b"\xa0");
-        assert_eq!(dec.next_frame().unwrap().unwrap(), b"\x82\x01\x02");
-        assert_eq!(dec.next_frame().unwrap(), None);
+        assert_eq!(
+            dec.push_all(&stream).unwrap(),
+            vec![b"\xa0".to_vec(), b"\x82\x01\x02".to_vec()]
+        );
 
         // One byte at a time.
         let mut dec = FrameDecoder::default();
         let mut got = Vec::new();
         for byte in &stream {
-            dec.push(std::slice::from_ref(byte));
+            assert_eq!(dec.push(std::slice::from_ref(byte)).unwrap(), 1);
             while let Some(frame) = dec.next_frame().unwrap() {
                 got.push(frame);
             }
@@ -123,34 +176,68 @@ mod tests {
 
         // Half a header, then the rest.
         let mut dec = FrameDecoder::default();
-        dec.push(&b[..2]);
+        dec.push(&b[..2]).unwrap();
         assert_eq!(dec.next_frame().unwrap(), None);
-        dec.push(&b[2..5]);
+        dec.push(&b[2..5]).unwrap();
         assert_eq!(dec.next_frame().unwrap(), None);
-        dec.push(&b[5..]);
+        dec.push(&b[5..]).unwrap();
         assert_eq!(dec.next_frame().unwrap().unwrap(), b"\x82\x01\x02");
         assert_eq!(dec.buffered(), 0);
     }
 
     #[test]
-    fn oversized_and_empty_frames_poison_the_stream() {
+    fn oversized_and_empty_headers_are_rejected_in_push() {
         let mut dec = FrameDecoder::new(8);
-        dec.push(&9u32.to_be_bytes());
         assert_eq!(
-            dec.next_frame(),
+            dec.push(&9u32.to_be_bytes()),
             Err(FrameError::TooLarge { len: 9, max: 8 })
         );
-        dec.push(&encode_frame(b"\xa0").unwrap());
+        assert_eq!(
+            dec.push(&encode_frame(b"\xa0").unwrap()),
+            Err(FrameError::Poisoned)
+        );
         assert_eq!(dec.next_frame(), Err(FrameError::Poisoned));
 
         let mut dec = FrameDecoder::default();
-        dec.push(&0u32.to_be_bytes());
-        assert_eq!(dec.next_frame(), Err(FrameError::Empty));
+        assert_eq!(dec.push(&0u32.to_be_bytes()), Err(FrameError::Empty));
 
-        // The limit is enforced from the header alone, before buffering.
         let mut dec = FrameDecoder::default();
-        dec.push(&u32::MAX.to_be_bytes());
-        assert!(matches!(dec.next_frame(), Err(FrameError::TooLarge { .. })));
+        assert!(matches!(
+            dec.push(&u32::MAX.to_be_bytes()),
+            Err(FrameError::TooLarge { .. })
+        ));
+    }
+
+    /// Regression (review of #134): an oversized header followed by payload
+    /// in the same chunk must be refused without buffering the payload.
+    #[test]
+    fn an_oversized_frame_is_refused_before_its_payload_is_buffered() {
+        let mut dec = FrameDecoder::new(1024);
+        let mut chunk = (1_000_000u32).to_be_bytes().to_vec();
+        chunk.extend(vec![0u8; 64 * 1024]);
+        assert!(matches!(dec.push(&chunk), Err(FrameError::TooLarge { .. })));
+        assert_eq!(dec.buffered(), 0);
+    }
+
+    /// Regression (review of #134): push never holds more than one header
+    /// plus one maximal frame, however much a peer sends at once.
+    #[test]
+    fn buffered_bytes_are_bounded_by_capacity() {
+        let mut dec = FrameDecoder::new(16);
+        let frame = encode_frame(&[0xa0; 16]).unwrap();
+        let flood: Vec<u8> = frame
+            .iter()
+            .copied()
+            .cycle()
+            .take(20 * frame.len())
+            .collect();
+        // A single push accepts at most `capacity()` bytes.
+        assert_eq!(dec.push(&flood).unwrap(), dec.capacity());
+        assert!(dec.buffered() <= dec.capacity());
+        // push_all drains as it goes and still never exceeds capacity.
+        let mut dec = FrameDecoder::new(16);
+        assert_eq!(dec.push_all(&flood).unwrap().len(), 20);
+        assert_eq!(dec.buffered(), 0);
     }
 
     #[test]

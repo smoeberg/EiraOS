@@ -55,13 +55,13 @@ Ukendte felter, manglende felter og forkerte typer afvises (fail closed).
 **CBOR-profil** (RFC 8949 core deterministic, strammet op):
 - Kun heltal, bstr, tstr, array, map, `true`, `false` og `null`.
 - Korteste kodning af heads og kun definite length.
-- Map-nøgler sorteres bytevis efter deres kodede form, og dubletter er forbudt.
+- Map-nøgler sorteres i bytevis leksikografisk orden af deres kodede form (RFC 8949 §4.2.1), og dubletter er forbudt. Det er bevidst *ikke* den ældre length-first-regel fra RFC 7049, som RFC 8949 §4.2.3 kun bevarer for bagudkompatibilitet. De to regler giver samme resultat, når alle nøgler har samme kodede længde, hvilket gælder alle envelope-felter. De adskiller sig for blandede nøgler i payload: `100` (`1864`) kommer før `-1` (`20`) bytevis, men efter length-first. Length-first-input afvises.
 - Ingen floats, tags eller andre simple values. Maksimal dybde 32.
 
-**Dekoderen håndhæver profilen.** Gyldig CBOR, der ikke er kanonisk, afvises. Derfor er "decode og encode igen" identiteten. Golden vectors fra RFC 8949 appendiks A ligger i testene. Den signerede golden envelope er desuden verificeret med en uafhængig implementation (Python `cbor2`, `canonical=True`): byte-identisk.
+**Dekoderen håndhæver profilen.** Gyldig CBOR, der ikke er kanonisk, afvises. Derfor er "decode og encode igen" identiteten. Golden vectors fra RFC 8949 appendiks A ligger i testene. Den signerede golden envelope er desuden afkodet og gen-kodet byte-identisk med en uafhængig implementation (Python `cbor2`, `canonical=True`). Den verifikation dækker kun nøgler af samme længde: Python `cbor2` bruger length-first, så den kan ikke bekræfte rækkefølgen for blandede nøgler. Den rækkefølge er fastlagt med test-vektor i `key_order_is_rfc8949_bytewise_not_rfc7049_length_first`.
 
 ### 3.1a Framing — `frame.rs`
-`u32 big-endian længde || CBOR-besked`, med længde 1–16 MiB. Dekoderen er inkrementel og håndterer halve frames, flere frames i ét læs og én byte ad gangen. Længden 0 eller over grænsen *forgifter* streamen, og forbindelsen skal lukkes. Grænsen håndhæves ud fra headeren alene, før noget bufferes.
+`u32 big-endian længde || CBOR-besked`, med længde 1–16 MiB. Dekoderen er inkrementel og håndterer halve frames, flere frames i ét læs og én byte ad gangen. `push()` accepterer højst `capacity()` = 4 + maks bytes og returnerer, hvor mange bytes den tog. Hukommelsen er derfor begrænset, uanset hvor meget en peer sender på én gang. `push_all()` tømmer færdige frames undervejs. Bemærk forskellen: dekoderens *interne* buffer er begrænset, men den `Vec`, `push_all()` returnerer, rummer alle frames i chunken og vokser derfor med inputtet. Mod upålidelige peers skal man læse i begrænsede chunks eller bruge `push` + `next_frame` og sende hver frame videre. Længden 0 eller over grænsen afvises i `push()`, så snart headerens fire bytes er modtaget og før payload bufferes. Det *forgifter* streamen, og forbindelsen skal lukkes.
 
 ### 3.2–3.3 SequenceTracker og ConsumerProgress — `sequence.rs`
 
@@ -102,7 +102,10 @@ Tests dækker `..`, absolutte og relative symlink-escapes, magic links (`/proc/s
 
 ### 3.5 Systemd FD ownership — `activation.rs`
 
-- `LISTEN_PID` skal være lig vores PID. `LISTEN_FDS` må højst være 64. `LISTEN_FDNAMES`, hvis den er sat, skal navngive hver fd.
+- `LISTEN_PID` skal være lig vores PID, og `LISTEN_FDS` må højst være 64.
+- `LISTEN_FDNAMES`, hvis den er sat, skal navngive hver fd efter systemds regel (`fdname_is_valid`): 1–255 ASCII-tegn, ingen kontroltegn og intet `:`. Mellemrum er tilladt.
+- **Navne behøver ikke være unikke** (som i systemd). `take_listener(name)` kræver præcis én fd med navnet; ellers returnerer den `Ambiguous` og flytter intet. `take_listeners(name)` tager alle fd'er med navnet i `LISTEN_FDS`-rækkefølge, og hvis én af dem er ugyldig, lukkes alle.
+- **Hvornår ejerskabet begynder.** Det begynder, når `LISTEN_PID` matcher, og `LISTEN_FDS` parses til højst 64. Fra da af lukker *alle* senere fejl (forkert antal navne, ugyldigt navn, `fcntl`-fejl) alle fd'erne i stedet for at lække dem. Før det punkt røres intet: variablerne er ikke vores, de er misdannede, eller de lover flere fd'er end EiraOS accepterer. I det sidste tilfælde lukker vi bevidst ikke et ubegrænset interval af fd-numre, vi ikke kan verificere. Servicen skal behandle fejlen som fatal og afslutte, hvilket frigiver det, den har arvet.
 - **Én ejer.** Fra parsing ejes hver fd af præcis én `OwnedFd`, og der sættes `FD_CLOEXEC`.
 - **`take_listener(name)` flytter fd'en ud** og validerer den: `S_IFSOCK`, `SO_DOMAIN = AF_UNIX`, `SO_TYPE = SOCK_STREAM` og `SO_ACCEPTCONN = 1`. Den returnerer en `std::os::unix::net::UnixListener`. Der findes ingen "rå fd", som to ejere deler.
 - Et navn kan kun tages én gang (`AlreadyTaken`). En fd, der fejler valideringen, lukkes.
@@ -181,10 +184,17 @@ Dokumenteret kontrakt ✅ · genanvendeligt Rust-bibliotek i `eira-core` ✅ · 
 
 ## 9. Åbne beslutninger før Phase 1 (ejer)
 
-1. **Forhold til det eksisterende IPC.** Prototypens daemons taler i dag JSON-RPC med én besked pr. linje over `/run/eira/*.sock` (CP-IPC-001). Phase 0 er CBOR med længdefelt. Skal `eira-eventd` erstatte det via en migrationsplan, eller køre ved siden af?
+1. **Forhold til det eksisterende IPC — BESLUTTET (ejer, 6. nov 2026).** JSON-RPC forbliver kommandotransport: eksplicitte kommandoer og forespørgsler. Event-bussen er hændelsestransport. De to kommunikationsformer presses ikke ind i samme mekanisme.
 2. **EDP og envelope.** Forslag: EDP-handlinger (`utterance`, `commitment_proposed` …) er payload i `EventEnvelope`, med `event_type` som `conversation.<action>`.
 3. **Capabilities og Gate Kernel.** Forslag: capabilities (authd) dækker service-til-service-adgang. Gate Kernel dækker beskyttede handlinger på brugerens vegne. Der skal være én policy-motor, ikke to.
-4. **Bus og durability.** Det første Explorer-flow ("samtale om en sag", ADR-0001) må ikke tabe en henvendelse. Det kræver Event Store, eller at den semantiske hændelse persisteres hos producenten, før den publiceres.
+4. **Holdbarhed — BESLUTTET (ejer, 6. nov 2026).** Producenten sikrer hændelsen, før den offentliggøres:
+   1. Producenten skriver hændelsen varigt i sin persistente **outbox/journal**.
+   2. Derefter publiceres den.
+   3. Modtageren kvitterer, først når den selv har lagret hændelsen varigt.
+   4. Producenten beholder hændelsen, indtil kvitteringen er modtaget, og markerer eller fjerner den derefter.
+   5. Ved genstart gensender producenten ikke-kvitterede hændelser.
+
+   **Event Store** er den centrale, varige historik og replay-kilde, men ikke en forudsætning for, at en hændelse må eksistere. At-most-once på bussen må ikke forveksles med holdbar levering fra ende til anden: holdbarheden kommer fra outbox, kvittering og replay, ikke fra transporten. Gensending giver dubletter, og dem håndterer modtageren via `event_id` og `ConsumerProgress` (`Duplicate`).
 5. **ServiceRef og ServiceIdentity, samt user- og system-event fabric** (review-runde 1–2) er besluttet i retning, men ikke en del af denne kode. `producer_id` er wire-identiteten i Phase 0.
 
 ## 10. Review-fund lukket i koden
@@ -205,3 +215,9 @@ Dokumenteret kontrakt ✅ · genanvendeligt Rust-bibliotek i `eira-core` ✅ · 
 | Commit-retry-semantik (4) | Dokumenteret og testet (`PredecessorPending`) |
 | `DropByAge` ikke generisk (4) | `Timestamped`-trait |
 | *Dødvande ved strict commit + at-most-once (ny)* | `gaps()` + eksplicit `declare_lost()` |
+| FD-læk på fejlveje i `from_raw_fds` (#134, review 1) | Alle fd'er indpakkes før validering; regressionstest via peer-EOF |
+| FD-navne strengere end systemd (#135, review 2) | Mellemrum er tilladt, dubletter er tilladt (`take_listeners`, `Ambiguous`), kontroltegn og længde over 255 afvises; tests |
+| Ejerskab ved over 64 fd'er (#135, review 2) | Grænsen for ejerskab er dokumenteret: inklusive tælleloftet. Begrundelsen er, at vi ikke lukker uverificerbare fd-numre |
+| `push_all()`-hukommelse (#135, review 2) | Intern buffer og returværdi er skelnet i både kode og spec |
+| `push()` uden grænse før headertjek (#134, review 1) | `push()` er begrænset til `capacity()`, headertjek i `push()`, `push_all()`; regressionstests |
+| Nøglerækkefølge (#134, review 1) | Fundet afvist som fejl: RFC 8949 §4.2.1 *er* bytevis. Length-first er RFC 7049 (§4.2.3). Profilvalget er præciseret og har fået en test-vektor |
