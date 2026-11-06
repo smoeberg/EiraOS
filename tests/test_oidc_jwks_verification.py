@@ -412,3 +412,51 @@ class TestClaimsFromIdToken:
             mock_fetch.return_value = valid_jwks
             with pytest.raises(ValueError, match="no matching key"):
                 claims_from_id_token(token, oidc_config, nonce="test-nonce")
+
+
+class TestJwksUrl:
+    """The JWKS URL is derived from the authority, not the /v2.0 issuer.
+
+    Entra: issuer https://login.microsoftonline.com/{tenant}/v2.0,
+    keys at https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys.
+    Every other test patches ``_fetch_jwks``, so a wrong URL went unnoticed.
+    """
+
+    @staticmethod
+    def _cfg(issuer: str = "", tenant_id: str = "contoso") -> "OidcConfig":
+        from app.auth.oidc import OidcConfig
+
+        return OidcConfig(
+            issuer=issuer,
+            client_id="client",
+            client_secret="",
+            redirect_uri="http://localhost/callback",
+            scopes="openid",
+            tenant_id=tenant_id,
+            mock_enabled=False,
+        )
+
+    def test_url_from_explicit_v2_issuer(self, monkeypatch):
+        from app.auth.oidc import _get_jwks_url
+
+        monkeypatch.delenv("OIDC_JWKS_URI", raising=False)
+        cfg = self._cfg(issuer="https://login.microsoftonline.com/contoso/v2.0")
+        assert (
+            _get_jwks_url(cfg)
+            == "https://login.microsoftonline.com/contoso/discovery/v2.0/keys"
+        )
+
+    def test_url_from_tenant_only(self, monkeypatch):
+        from app.auth.oidc import _get_jwks_url
+
+        monkeypatch.delenv("OIDC_JWKS_URI", raising=False)
+        assert (
+            _get_jwks_url(self._cfg())
+            == "https://login.microsoftonline.com/contoso/discovery/v2.0/keys"
+        )
+
+    def test_explicit_override(self, monkeypatch):
+        from app.auth.oidc import _get_jwks_url
+
+        monkeypatch.setenv("OIDC_JWKS_URI", "https://idp.example/keys")
+        assert _get_jwks_url(self._cfg()) == "https://idp.example/keys"
