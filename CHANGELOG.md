@@ -2,6 +2,16 @@
 
 Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsperioden, ikke nødvendigvis en publiceret release.
 
+## [Unreleased]
+
+### Oprydning
+- Fjernede `ui/node_modules`, `__pycache__`-filer, `data/run/*.port` og løse filer (`jid`, `rid`)
+  fra git og udvidede `.gitignore` (node_modules, Rust `target/`, `data/run/`, SQLite WAL-filer).
+- Fjernede de forældede `packaging/systemd/`-units; de hærdede units i `systemd/` er de eneste,
+  som `.deb`-pakken og `scripts/deploy_systemd.sh` installerer.
+- README: rettede stier og links, opstartsvejledning fra repoets rod, korrekte socket-navne og en
+  statustabel over alle ni daemons i stedet for de modstridende tal (6/7).
+
 ## [0.7.0] — released 2026-10-20
 
 Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
@@ -24,7 +34,7 @@ Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
   `catch_unwind`-containment, så panik aldrig krydser FFI-grænsen.
 - Kotlin binding (`android/eira-core-binding/`) og Gradle-scaffolding for Android-klienten.
 - Integrationstest for FFI state-eksport i `tests/test_android_ffi_state.py`.
-- Status: PR #68 og #69 er merged. Dokumentation:
+- Status: issue #68 (E2EE) og #69 (device pairing) er lukket, og koden ligger på main. Dokumentation:
   [EIRA_Sprint6_Summary.md](docs/EIRA_Sprint6_Summary.md).
 
 ## [0.5.0] — foreslået release, ikke tagget endnu
@@ -32,11 +42,9 @@ Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
 ### Sprint 5 — Multi-Device E2EE State Sync
 - Merkle DAG synkroniseringsmotor med diff og fork resolution: SHA3-256 med domæneseparation,
   kanonisk JSON og konflikt uden automatisk overskrivning af historik.
-- E2EE payload-kryptering (**leverance åben: PR #68**; forberedende kode på main fra
-  sprint-5/6-commits: ChaCha20-Poly1305 + HKDF-SHA256, HKDF info `eiraos-fleet-sync-v1`),
-  plaintext-metadata (`id`, `version`, `hash`) for Merkle-sammenligning, og fail-closed ved
-  fejlet integritetsvalidering (`PayloadIntegrityError`). #68 blokerer i øjeblikket #69 og
-  Android-synkroniseringskæden.
+- E2EE payload-kryptering (issue #68, lukket; ChaCha20-Poly1305 + HKDF-SHA256, HKDF info
+  `eiraos-fleet-sync-v1`), plaintext-metadata (`id`, `version`, `hash`) for Merkle-sammenligning,
+  og fail-closed ved fejlet integritetsvalidering (`PayloadIntegrityError`).
 - WebSockets real-time synkronisering i `fleetd`: handshake + rodudveksling,
   `sync.request_blocks`, `sync.push_blocks` og kædevalidering i lokal `StateStore`.
 - Device pairing-registry med engangskode/QR-enrollment, X25519-nøglevalidering, heartbeat
