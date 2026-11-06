@@ -79,7 +79,11 @@ impl FrameDecoder {
     }
 
     /// Convenience: feed a whole chunk, draining frames as they complete.
-    /// Memory stays bounded by `capacity()` however large `bytes` is.
+    ///
+    /// The decoder's *internal* buffer stays bounded by `capacity()` however
+    /// large `bytes` is. The *returned* `Vec` holds every frame in the chunk,
+    /// so total memory grows with the input. For untrusted peers, read in
+    /// bounded chunks or use `push` + `next_frame` and hand each frame on.
     pub fn push_all(&mut self, mut bytes: &[u8]) -> Result<Vec<Vec<u8>>, FrameError> {
         let mut frames = Vec::new();
         loop {

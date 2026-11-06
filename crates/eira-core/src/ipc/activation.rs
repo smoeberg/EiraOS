@@ -25,6 +25,8 @@ pub enum ActivationError {
     NotForThisProcess,
     NotFound(String),
     AlreadyTaken(String),
+    /// Several descriptors share this name; use `take_listeners`.
+    Ambiguous(String),
     /// Not a listening AF_UNIX stream socket.
     WrongSocketType(String),
     Io(io::Error),
@@ -78,9 +80,13 @@ fn is_listening_unix_stream(fd: RawFd) -> io::Result<bool> {
         && sockopt(fd, libc::SO_ACCEPTCONN)? == 1)
 }
 
-/// systemd `FileDescriptorName=`: 1–255 printable ASCII characters, no `:`.
+/// systemd's rule for `FileDescriptorName=` (`fdname_is_valid`): 1–255
+/// ASCII characters that are not control characters, and no `:` (the list
+/// separator). Space is allowed. Names need not be unique.
 fn valid_fd_name(name: &str) -> bool {
-    !name.is_empty() && name.len() <= 255 && name.bytes().all(|b| b.is_ascii_graphic() && b != b':')
+    !name.is_empty()
+        && name.len() <= 255
+        && name.bytes().all(|b| (0x20..0x7f).contains(&b) && b != b':')
 }
 
 impl Activation {
@@ -88,9 +94,14 @@ impl Activation {
     /// process was not socket-activated (no `LISTEN_FDS`).
     ///
     /// # Safety
-    /// Once `LISTEN_PID` matches and `LISTEN_FDS` parses, this owns fds
+    /// Ownership begins once `LISTEN_PID` matches and `LISTEN_FDS` parses to
+    /// a count of at most [`MAX_LISTEN_FDS`]. From then on this owns fds
     /// `3..3+LISTEN_FDS` — on success and on every later error, which closes
-    /// them. Before that point (not for us / malformed) nothing is touched.
+    /// them. Before that point nothing is touched: the variables are not for
+    /// us, malformed, or claim more descriptors than EiraOS accepts. In that
+    /// last case we deliberately do not close an unbounded range of fd
+    /// numbers we cannot verify; the service must treat the error as fatal
+    /// and exit, which releases whatever it inherited.
     /// The caller
     /// must ensure nothing else in the process owns or closes them, which
     /// holds at the start of `main` in a systemd-activated service.
@@ -159,14 +170,8 @@ impl Activation {
         if owned.len() != names.len() {
             return Err(ActivationError::InvalidEnvironment("name count mismatch"));
         }
-        let mut seen = HashSet::new();
-        for name in &names {
-            if !valid_fd_name(name) {
-                return Err(ActivationError::InvalidEnvironment("invalid fd name"));
-            }
-            if !seen.insert(name.as_str()) && name != "unknown" {
-                return Err(ActivationError::InvalidEnvironment("duplicate fd name"));
-            }
+        if !names.iter().all(|name| valid_fd_name(name)) {
+            return Err(ActivationError::InvalidEnvironment("invalid fd name"));
         }
         for fd in &owned {
             // systemd passes descriptors without FD_CLOEXEC; never leak them.
@@ -185,24 +190,47 @@ impl Activation {
         self.fds.iter().map(|(n, _)| n.as_str())
     }
 
-    /// Move the descriptor named `name` out as a validated listener.
+    /// Move the single descriptor named `name` out as a validated listener.
     /// A descriptor that fails validation is closed, not handed back.
+    /// If several descriptors carry the name (systemd allows that), nothing
+    /// is moved and `Ambiguous` is returned; use [`take_listeners`](Self::take_listeners).
     pub fn take_listener(&mut self, name: &str) -> Result<UnixListener, ActivationError> {
+        if self.fds.iter().filter(|(n, _)| n == name).count() > 1 {
+            return Err(ActivationError::Ambiguous(name.to_owned()));
+        }
+        let mut listeners = self.take_listeners(name)?;
+        Ok(listeners.remove(0))
+    }
+
+    /// Move out every descriptor named `name`, in `LISTEN_FDS` order.
+    /// All of them are validated; if any one is not a listening AF_UNIX
+    /// stream socket, all of them are closed and an error is returned.
+    pub fn take_listeners(&mut self, name: &str) -> Result<Vec<UnixListener>, ActivationError> {
         if self.taken.contains(name) {
             return Err(ActivationError::AlreadyTaken(name.to_owned()));
         }
-        let index = self
-            .fds
-            .iter()
-            .position(|(n, _)| n == name)
-            .ok_or_else(|| ActivationError::NotFound(name.to_owned()))?;
-        let (name, fd) = self.fds.remove(index);
-        self.taken.insert(name.clone());
-        match is_listening_unix_stream(fd.as_raw_fd()) {
-            Ok(true) => Ok(UnixListener::from(fd)),
-            Ok(false) => Err(ActivationError::WrongSocketType(name)),
-            Err(error) => Err(ActivationError::Io(error)),
+        let mut moved = Vec::new();
+        let mut rest = Vec::with_capacity(self.fds.len());
+        for (n, fd) in self.fds.drain(..) {
+            if n == name {
+                moved.push(fd);
+            } else {
+                rest.push((n, fd));
+            }
         }
+        self.fds = rest;
+        if moved.is_empty() {
+            return Err(ActivationError::NotFound(name.to_owned()));
+        }
+        self.taken.insert(name.to_owned());
+        for fd in &moved {
+            match is_listening_unix_stream(fd.as_raw_fd()) {
+                Ok(true) => {}
+                Ok(false) => return Err(ActivationError::WrongSocketType(name.to_owned())),
+                Err(error) => return Err(ActivationError::Io(error)),
+            }
+        }
+        Ok(moved.into_iter().map(UnixListener::from).collect())
     }
 
     /// Same ownership contract, converted for Tokio (must run inside a runtime).
@@ -287,11 +315,13 @@ mod tests {
     #[test]
     fn rejected_activation_closes_every_descriptor() {
         use std::io::Read;
-        let cases: [(&str, Vec<&str>); 4] = [
+        let long = "x".repeat(256);
+        let cases: [(&str, Vec<&str>); 5] = [
             ("count mismatch", vec!["a"]),
-            ("invalid name", vec!["a", "has:colon"]),
+            ("colon", vec!["a", "has:colon"]),
             ("empty name", vec!["a", ""]),
-            ("duplicate name", vec!["a", "a"]),
+            ("control character", vec!["a", "tab\there"]),
+            ("too long", vec!["a", long.as_str()]),
         ];
         for (why, names) in cases {
             let (a, mut peer_a) = UnixStream::pair().unwrap();
@@ -312,17 +342,64 @@ mod tests {
         }
     }
 
+    /// systemd allows spaces and allows several fds with the same name.
     #[test]
-    fn unnamed_descriptors_may_share_the_default_name() {
-        let (a, _pa) = UnixStream::pair().unwrap();
-        let (b, _pb) = UnixStream::pair().unwrap();
-        let act = unsafe {
+    fn names_follow_systemd_spaces_and_duplicates_are_allowed() {
+        let (a, path_a) = listener_fd();
+        let (b, path_b) = listener_fd();
+        let (c, path_c) = listener_fd();
+        let mut act = unsafe {
             Activation::from_raw_fds(
-                vec![a.into_raw_fd(), b.into_raw_fd()],
-                vec!["unknown".into(), "unknown".into()],
+                vec![a, b, c],
+                vec!["event bus".into(), "eventd".into(), "eventd".into()],
             )
-        };
-        assert!(act.unwrap().is_some());
+        }
+        .unwrap()
+        .unwrap();
+        // Ambiguous names are refused by take_listener and nothing moves.
+        assert!(matches!(
+            act.take_listener("eventd"),
+            Err(ActivationError::Ambiguous(_))
+        ));
+        assert_eq!(act.names().filter(|n| *n == "eventd").count(), 2);
+        let both = act.take_listeners("eventd").unwrap();
+        assert_eq!(both.len(), 2);
+        assert!(matches!(
+            act.take_listeners("eventd"),
+            Err(ActivationError::AlreadyTaken(_))
+        ));
+        let spaced = act.take_listener("event bus").unwrap();
+        // All three work, in LISTEN_FDS order.
+        for (listener, path) in [(&spaced, &path_a), (&both[0], &path_b), (&both[1], &path_c)] {
+            let _client = UnixStream::connect(path).unwrap();
+            listener.accept().unwrap();
+        }
+        for path in [path_a, path_b, path_c] {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn one_invalid_descriptor_under_a_name_closes_them_all() {
+        use std::io::Read;
+        let (listener, path) = listener_fd();
+        let (stream, mut peer) = UnixStream::pair().unwrap();
+        let mut act = unsafe {
+            Activation::from_raw_fds(
+                vec![listener, stream.into_raw_fd()],
+                vec!["eventd".into(), "eventd".into()],
+            )
+        }
+        .unwrap()
+        .unwrap();
+        assert!(matches!(
+            act.take_listeners("eventd"),
+            Err(ActivationError::WrongSocketType(_))
+        ));
+        let mut buf = [0u8; 1];
+        assert_eq!(peer.read(&mut buf).unwrap(), 0);
+        assert!(UnixStream::connect(&path).is_err());
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
