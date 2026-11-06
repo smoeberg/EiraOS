@@ -24,6 +24,7 @@ for tool in curl gpg sha256sum; do
 done
 
 mkdir -p -- "$DEST"
+DEST=$(realpath -- "$DEST")
 cd -- "$DEST"
 
 curl -fsSL --retry 3 -o SHA256SUMS "$RELEASE_URL/SHA256SUMS"
@@ -49,4 +50,4 @@ if ! grep -E " \*?${ISO_NAME//./\\.}\$" SHA256SUMS | sha256sum --check --status 
     grep -E " \*?${ISO_NAME//./\\.}\$" SHA256SUMS | sha256sum --check --strict >&2
 fi
 
-echo "$(realpath -- "$DEST/$ISO_NAME")" >&3
+echo "$DEST/$ISO_NAME" >&3
