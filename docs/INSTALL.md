@@ -39,11 +39,13 @@ Erstat `/dev/sdX` med USB-nøglen (tjek med `lsblk`). Alt på nøglen slettes. P
 4. Opret din bruger med adgangskode.
 5. Genstart, og fjern USB-nøglen.
 
-Ved første opstart gør `eira-firstboot` EiraOS til din standard-session. Log ind på login-skærmen som normalt. Ubuntus egen session kan stadig vælges via tandhjulet på login-skærmen, hvis du har brug for den.
+Ved første opstart gør `eira-firstboot` EiraOS til din standard-session, og du logger ind på login-skærmen som normalt. EiraOS er den eneste session, der kan vælges. Ubuntus egne sessioner (GNOME osv.) skjules af `eira-session-policy`, fordi Explorer ikke har nogen flugtvej (ADR-0001). Login-skærmen er kun infrastruktur, ikke brugerfladen.
+
+Terminal, filer og andre klassiske værktøjer ligger i **Builder Mode** i EiraOS. Builder er slået fra, indtil IT tillader den med `EIRA_BUILDER_MODE_ALLOWED=1` i `/etc/eira/eira.conf`. Skal en maskine have hele Ubuntu-skrivebordet, for eksempel en IT-arbejdsstation, kan IT tilføje `EIRA_ALLOW_UBUNTU_SESSION=1` samme sted og genstarte. Så kommer sessionerne tilbage.
 
 ## Sådan testes installationen automatisk
 
-CI installerer testbilledet i en virtuel maskine (QEMU/KVM, UEFI), booter den installerede disk og logger automatisk ind. Derefter tjekker `eira-ci-report` daemons, sockets, IPC, første boot, standard-session, login-skærmen, labwc og EiraOS-shellen. Resultatet står i artefaktet `vm-acceptance-logs`.
+CI installerer testbilledet i en virtuel maskine (QEMU/KVM, UEFI), booter den installerede disk og logger automatisk ind. Derefter tjekker `eira-ci-report` daemons, sockets, IPC, første boot, standard-session, at EiraOS er den eneste session, login-skærmen, labwc og EiraOS-shellen. Resultatet står i artefaktet `vm-acceptance-logs`.
 
 ## Kendte begrænsninger i 1.0 RC1
 

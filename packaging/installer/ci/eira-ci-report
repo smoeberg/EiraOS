@@ -54,10 +54,14 @@ reply = json.loads(s.makefile().readline())
 assert reply["result"]["ok"] is True, reply
 PY
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
+# Explorer has no escape hatch: EiraOS is the only selectable session.
+check only-eira-session sh -c '[ "$(ls /usr/share/wayland-sessions /usr/share/xsessions 2>/dev/null | grep "\.desktop$")" = "eira-session.desktop" ]'
+check gnome-session-hidden sh -c '! ls /usr/share/wayland-sessions/ubuntu*.desktop >/dev/null 2>&1'
+check session-policy-active systemctl is-active --quiet eira-session-policy.service
 check firstboot-done test -e /var/lib/eira/firstboot.done
 check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
 check user-in-eira-group sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
-check gdm wait_for 300 systemctl is-active --quiet gdm.service
+check login-screen wait_for 300 systemctl is-active --quiet display-manager.service
 check labwc-running wait_for 600 pgrep -u "$USER_NAME" -x labwc
 check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=EiraOS session policy (kun EiraOS-sessionen ved login)
+Documentation=file:///usr/share/doc/eira-os-core/
+DefaultDependencies=no
+After=local-fs.target
+Before=display-manager.service gdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/eira/eira-session-policy
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

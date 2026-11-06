@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+# Give the system back its own login sessions when EiraOS is removed.
+case "${1:-}" in
+    remove|purge)
+        hidden=/var/lib/eira/hidden-sessions
+        if [ -d "$hidden" ]; then
+            for stored in "$hidden"/*; do
+                [ -e "$stored" ] || continue
+                base=$(basename "$stored")
+                dir=${base%%--*}
+                name=${base#*--}
+                dpkg-divert --local --rename --divert "$stored" \
+                    --remove "/usr/share/$dir/$name" || true
+            done
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

@@ -3,8 +3,8 @@
 #
 # Kører én gang, før login-skærmen (GDM) starter: finder den første
 # menneskelige bruger, sætter EiraOS som brugerens session i AccountsService
-# og giver brugeren adgang til daemon-sockets (gruppen eira). Ubuntus egen
-# session kan stadig vælges på login-skærmen.
+# og giver brugeren adgang til daemon-sockets (gruppen eira). Andre sessioner
+# skjules af eira-session-policy (fra pakken), medmindre IT tillader dem.
 set -eu
 
 STAMP=${EIRA_FIRSTBOOT_STAMP:-/var/lib/eira/firstboot.done}
