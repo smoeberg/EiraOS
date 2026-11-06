@@ -189,6 +189,9 @@ jobs:
           # A screenshot every 5 minutes shows where an install stalls.
           ( for n in $(seq -w 1 15); do sleep 300; [ -S qemu-mon.sock ] || break
               echo "screendump screens/install-$n.ppm" | socat - UNIX-CONNECT:qemu-mon.sock >/dev/null 2>&1
+              echo "::group::serial console after $((10#$n * 5)) min"
+              tr -d '\r' < install-serial.log | strings | tail -n 25
+              echo "::endgroup::"
             done ) &
           timeout 75m qemu-system-x86_64 -enable-kvm -monitor unix:qemu-mon.sock,server,nowait -machine q35 -cpu host -smp 4 -m 8192 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
