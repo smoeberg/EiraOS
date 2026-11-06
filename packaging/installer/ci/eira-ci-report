@@ -33,8 +33,8 @@ wait_for() {
     return 1
 }
 
-say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME")"
-check eira.target systemctl is-active --quiet eira.target
+say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME") uptime=$(cut -d' ' -f1 /proc/uptime)s"
+check eira.target wait_for 300 systemctl is-active --quiet eira.target
 for daemon in $DAEMONS; do
     check "daemon-$daemon" systemctl is-active --quiet "eira-$daemon.service"
     check "socket-$daemon" test -S "/run/eira/$daemon.sock"
@@ -57,17 +57,24 @@ check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desk
 check firstboot-done test -e /var/lib/eira/firstboot.done
 check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
 check user-in-eira-group sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
-check gdm systemctl is-active --quiet gdm.service
-check labwc-running wait_for 240 pgrep -u "$USER_NAME" -x labwc
-check eira-shell-running wait_for 120 pgrep -u "$USER_NAME" -f eira-spatial-desktop
+check gdm wait_for 300 systemctl is-active --quiet gdm.service
+check labwc-running wait_for 600 pgrep -u "$USER_NAME" -x labwc
+check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop
 
 if [ "$failed" -ne 0 ]; then
     {
         echo "---- systemctl --failed"
         systemctl --failed --no-pager
+        echo "---- pending jobs"
+        systemctl list-jobs --no-pager
+        echo "---- sessions"
+        loginctl list-sessions --no-pager
+        ps -eo user,pid,cmd | grep -E "labwc|eira-|gdm-wayland|gnome-session" | grep -v grep
         echo "---- journal (eira, gdm, labwc)"
         journalctl -b --no-pager -n 300 -u 'eira-*' -u gdm.service
         journalctl -b --no-pager -n 150 _COMM=labwc _COMM=eira-spatial-de _COMM=eira-session
+        echo "---- user journal ($USER_NAME)"
+        journalctl -b --no-pager -n 120 _UID="$(id -u "$USER_NAME")"
     } > "$OUT" 2>&1
 fi
 

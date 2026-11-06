@@ -1,13 +1,15 @@
 [Unit]
 Description=EiraOS CI acceptance report (serial console, then poweroff)
-After=graphical.target eira.target
-Wants=graphical.target
+# Not after graphical.target: on first boot snapd seeding can keep it pending
+# for a long time. The report waits for what it checks by itself.
+After=eira.target gdm.service eira-firstboot.service
+Wants=eira.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/eira/eira-ci-report
 StandardOutput=journal+console
-TimeoutStartSec=900
+TimeoutStartSec=1200
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
