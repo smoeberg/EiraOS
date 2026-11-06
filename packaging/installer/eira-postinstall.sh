@@ -8,8 +8,19 @@
 set -eu
 
 SRC=${EIRA_INSTALL_SRC:-/var/lib/eira-install}
+LOG=${EIRA_POSTINSTALL_LOG:-/var/log/eira-postinstall.log}
 export DEBIAN_FRONTEND=noninteractive
 
+# Everything is logged in the installed system for diagnosis.
+exec >>"$LOG" 2>&1
+echo "== eira-postinstall $(date -u +%FT%TZ)"
+set -x
+
+# The installer may leave the target without package lists.
+apt-get update
+# apt's sandbox user must be able to read the local package.
+chmod 0755 "$SRC"
+chmod 0644 "$SRC/eira-os-core.deb"
 apt-get install -y "$SRC/eira-os-core.deb"
 
 install -D -m 0755 "$SRC/eira-firstboot" /usr/lib/eira/eira-firstboot

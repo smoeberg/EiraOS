@@ -29,5 +29,5 @@ autoinstall:
     - cp -r /cdrom/eira/. /target/var/lib/eira-install/
     - curtin in-target --target=/target -- sh /var/lib/eira-install/eira-postinstall.sh
   error-commands:
-    - sh -c 'echo EIRA-CI INSTALL FAILED > /dev/ttyS0; tail -n 300 /var/log/installer/subiquity-server-debug.log /var/log/curtin/install.log > /dev/ttyS0 2>&1 || true'
+    - sh -c 'echo EIRA-CI INSTALL FAILED > /dev/ttyS0; echo "---- eira-postinstall.log" > /dev/ttyS0; tail -n 150 /target/var/log/eira-postinstall.log > /dev/ttyS0 2>&1; echo "---- end eira-postinstall.log" > /dev/ttyS0; tail -n 60 /var/log/installer/subiquity-server-debug.log > /dev/ttyS0 2>&1; poweroff -f || true'
   shutdown: poweroff

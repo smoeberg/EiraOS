@@ -203,8 +203,13 @@ jobs:
           echo "installer VM exited with ${status:-0} (124 = timeout)"
           tail -c 20000 install-serial.log | tr -d '\r' || true
           for f in screens/*.ppm; do [ -f "$f" ] && pnmtopng "$f" > "${f%.ppm}.png" && rm "$f"; done
+          if grep -aq "EIRA-CI INSTALL FAILED" install-serial.log; then
+            echo "::group::eira-postinstall.log"
+            tr -d '\r' < install-serial.log | sed -n '/---- eira-postinstall.log/,/---- end eira-postinstall.log/p'
+            echo "::endgroup::"
+            exit 1
+          fi
           [ "${status:-0}" -eq 0 ]
-          ! grep -aq "EIRA-CI INSTALL FAILED" install-serial.log
 
       - name: Boot installed system and run acceptance report
         run: |

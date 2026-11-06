@@ -23,10 +23,13 @@ case "${1:-configure}" in
             chmod 0640 /etc/eira/eira.conf
         fi
 
-        if command -v apparmor_parser >/dev/null 2>&1; then
+        # Load the profiles now when the kernel has AppArmor. During an OS
+        # install (chroot) this can fail; apparmor.service loads them at boot,
+        # so a failure here must not abort package installation.
+        if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
             for profile in /etc/apparmor.d/usr.bin.eira-*; do
                 [ -f "$profile" ] || continue
-                apparmor_parser -r "$profile"
+                apparmor_parser -r "$profile" || echo "eira-os-core: kunne ikke indlæse $profile nu; indlæses ved boot" >&2
             done
         fi
 
