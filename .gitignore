@@ -14,3 +14,15 @@ data/*.db
 data/fleet_master.key
 data/fleet_salt
 *.db
+*.db-shm
+*.db-wal
+
+# Runtime-filer fra daemons (sockets og port-filer)
+data/run/
+
+# Node / frontend
+node_modules/
+ui/dist/
+
+# Rust build-output
+target/

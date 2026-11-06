@@ -433,19 +433,30 @@ describe("updateLayoutIncrementally", () => {
 // Performance tests
 // =============================================================================
 
+// Wall-clock checks on shared CI runners are noisy, and the first call pays
+// for JIT warm-up. Measure the fastest of several runs: still catches an
+// algorithmic regression, but not a busy runner.
+function fastestMs<T>(run: () => T, runs = 5): { result: T; ms: number } {
+  let best = Number.POSITIVE_INFINITY;
+  let result = run();
+  for (let i = 0; i < runs; i++) {
+    const start = performance.now();
+    result = run();
+    best = Math.min(best, performance.now() - start);
+  }
+  return { result, ms: best };
+}
+
 describe("performance", () => {
   it("should handle 500 nodes in grid layout quickly", () => {
     const states = Array.from({ length: 500 }, (_, i) =>
       mockState(`node-${i}`, `Type${i % 5}`),
     );
 
-    const start = performance.now();
-    const nodes = computeGridLayout(states);
-    const end = performance.now();
+    const { result: nodes, ms } = fastestMs(() => computeGridLayout(states));
 
     expect(nodes).toHaveLength(500);
-    // Should complete in under 100ms (loose tolerance for CI)
-    expect(end - start).toBeLessThan(100);
+    expect(ms).toBeLessThan(100);
   });
 
   it("should handle 500 nodes in force layout quickly", () => {
@@ -453,17 +464,16 @@ describe("performance", () => {
       mockNode(`node-${i}`, 0, 0, `Type${i % 5}`),
     );
 
-    const start = performance.now();
-    const result = computeForceLayout(nodes, [], {
-      ...DEFAULT_FORCE_CONFIG,
-      iterations: 5, // Reduced for test speed
-    }, 1600, 1000);
-    const end = performance.now();
+    const { result, ms } = fastestMs(() =>
+      computeForceLayout(nodes, [], {
+        ...DEFAULT_FORCE_CONFIG,
+        iterations: 5, // Reduced for test speed
+      }, 1600, 1000),
+    );
 
     expect(result).toHaveLength(500);
-    // Should complete in under 100ms (loose tolerance for CI)
-    // Note: Force layout is O(n^2) so this might be slower
-    expect(end - start).toBeLessThan(200); // Looser tolerance for force layout
+    // Force layout is O(n^2), hence the looser bound.
+    expect(ms).toBeLessThan(200);
   });
 
   it("should filter 500 nodes quickly", () => {
@@ -479,12 +489,10 @@ describe("performance", () => {
       zoom: 1,
     };
 
-    const start = performance.now();
-    const visible = filterVisibleNodes(nodes, viewport);
-    const end = performance.now();
+    const { result: visible, ms } = fastestMs(() => filterVisibleNodes(nodes, viewport));
 
     // Only nodes in viewport should be returned
     expect(visible.length).toBeLessThan(500);
-    expect(end - start).toBeLessThan(10);
+    expect(ms).toBeLessThan(10);
   });
 });
