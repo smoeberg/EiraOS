@@ -55,11 +55,6 @@ export interface PowerStatus {
   sources: { upower: boolean; logind: boolean };
 }
 
-export interface PowerActionResult {
-  action: PowerAction;
-  accepted: boolean;
-}
-
 type SystemTransport = (request: {
   api_version: "1";
   request_id: string;
@@ -100,10 +95,11 @@ export async function callSystem<T>(operation: string, input: unknown = {}): Pro
   return response.result;
 }
 
+// Read-only. Turning the machine off, restarting or suspending is a protected
+// action: it is proposed as an intention and executed only through the Gate,
+// never by a direct call from the UI.
 export const power = {
   status: () => callSystem<PowerStatus>("power.get_status"),
-  request: (action: PowerAction, confirmed: boolean) =>
-    callSystem<PowerActionResult>("power.request_action", { action, confirmed }),
 };
 
 export function systemErrorMessage(error: unknown): string {

@@ -160,11 +160,15 @@ describe("TerminalPanel", () => {
 });
 
 describe("App terminal entry points", () => {
-  it("toggles the terminal with the header button and Ctrl+Alt+T", async () => {
+  const ipcWithMode = (mode: string) => async (_daemon: string, method: string) =>
+    method === "presentation.mode_get" ? { mode } : { states: [], proposals: [] };
+
+  it("in Builder Mode, toggles the terminal with the header button and Ctrl+Alt+T", async () => {
     fakeBackend();
-    window.__EIRA_TEST_IPC__ = async () => ({ states: [], proposals: [] });
+    window.__EIRA_TEST_IPC__ = ipcWithMode("builder");
     render(<App />);
 
+    const button = await screen.findByRole("button", { name: "Terminal" });
     expect(screen.queryByRole("region", { name: "Terminal" })).not.toBeInTheDocument();
     fireEvent.keyDown(window, { key: "t", ctrlKey: true, altKey: true });
     expect(await screen.findByRole("region", { name: "Terminal" })).toBeInTheDocument();
@@ -172,7 +176,38 @@ describe("App terminal entry points", () => {
     fireEvent.click(screen.getByRole("button", { name: "Luk terminal" }));
     expect(screen.queryByRole("region", { name: "Terminal" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    fireEvent.click(button);
     expect(await screen.findByRole("region", { name: "Terminal" })).toBeInTheDocument();
+  });
+
+  it.each(["explorer", "normal"])("in %s mode, offers no terminal at all", async (mode) => {
+    fakeBackend();
+    window.__EIRA_TEST_IPC__ = ipcWithMode(mode);
+    render(<App />);
+    await screen.findByText("Lokal Unix IPC");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByRole("button", { name: "Terminal" })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "t", ctrlKey: true, altKey: true });
+    expect(screen.queryByRole("region", { name: "Terminal" })).not.toBeInTheDocument();
+  });
+
+  it("falls back to Explorer when the mode cannot be confirmed", async () => {
+    fakeBackend();
+    window.__EIRA_TEST_IPC__ = async (_daemon: string, method: string) => {
+      if (method === "presentation.mode_get") throw "daemon_unavailable";
+      return { states: [], proposals: [] };
+    };
+    render(<App />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("button", { name: "Terminal" })).not.toBeInTheDocument();
+  });
+
+  it("shows no power controls in Explorer", async () => {
+    fakeBackend();
+    window.__EIRA_TEST_IPC__ = ipcWithMode("explorer");
+    render(<App />);
+    await screen.findByText("Lokal Unix IPC");
+    expect(screen.queryByRole("button", { name: /strøm|sluk|genstart/i })).not.toBeInTheDocument();
   });
 });
