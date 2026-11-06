@@ -76,7 +76,7 @@ const CanvasNodeComponent = React.memo(function CanvasNodeComponent({
       <span className="node-type">{node.type}</span>
       <strong>{node.label}</strong>
       <span className="node-meta">
-        {node.state ? `v${node.state.version} 3 ${node.state.hash.slice(0, 8)}` : "Grafobjekt"}
+        {node.state ? `v${node.state.version} · ${node.state.hash.slice(0, 8)}` : "Grafobjekt"}
       </span>
     </button>
   );
@@ -437,9 +437,9 @@ export function SpatialCanvas({
           <span className="eyebrow">Levende tilstandsgraf</span>
           <h2>Spatial Canvas</h2>
         </div>
-        <div className="canvas-tools" aria-label="Canvasvrktojer">
+        <div className="canvas-tools" aria-label="Canvasværktøjer">
           <button type="button" onClick={() => setZoom((value) => Math.max(0.45, value - 0.15))}>
-            
+            −
           </button>
           <output
             aria-label="Zoomniveau"
@@ -510,7 +510,7 @@ export function SpatialCanvas({
             onNodePointerDown={handleNodePointerDown}
           />
         </div>
-        {loading && <p className="canvas-status">Indlser tilstande</p>}
+        {loading && <p className="canvas-status">Indlæser tilstande…</p>}
         {!loading && error && (
           <p role="alert" className="canvas-status canvas-status--error">
             {error}
