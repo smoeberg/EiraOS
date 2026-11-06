@@ -305,13 +305,16 @@ mod ffi_tests {
 
     #[test]
     fn rejects_unregistered_handles_without_dereferencing() {
-        let invalid = 1_usize as *mut StateStore;
+        // Handle tokens start at 1 and are shared by all tests in this process,
+        // so a small literal could belong to a store another test just opened
+        // (and closing it would break that test). usize::MAX is never issued.
+        let invalid = usize::MAX as *mut StateStore;
         // SAFETY: unregistered tokens are checked in the registry before use.
         assert_eq!(unsafe { eira_stated_count(invalid) }, -1);
         // SAFETY: close/free ignore tokens not allocated by this library.
         unsafe {
             eira_stated_close(invalid);
-            eira_stated_free_string(1_usize as *mut std::ffi::c_char);
+            eira_stated_free_string(usize::MAX as *mut std::ffi::c_char);
         }
     }
 
