@@ -1,0 +1,76 @@
+#!/bin/sh
+# CI-only boot acceptance check for the installed EiraOS system.
+#
+# Prints one "EIRA-CI <check> PASS|FAIL" line per check and a final
+# "EIRA-CI RESULT PASS|FAIL" to the serial console (/dev/ttyS0), which the CI
+# job reads from QEMU's serial log. Then powers the VM off.
+set -u
+
+OUT=${EIRA_CI_OUT:-/dev/ttyS0}
+USER_NAME=tester
+DAEMONS="stated identityd fleetd veritasd intentd graphd"
+failed=0
+
+say() { echo "EIRA-CI $*" > "$OUT" 2>/dev/null || echo "EIRA-CI $*"; }
+check() {
+    name=$1
+    shift
+    if "$@" >/dev/null 2>&1; then
+        say "$name PASS"
+    else
+        say "$name FAIL"
+        failed=1
+    fi
+}
+wait_for() {
+    seconds=$1
+    shift
+    while [ "$seconds" -gt 0 ]; do
+        "$@" >/dev/null 2>&1 && return 0
+        sleep 5
+        seconds=$((seconds - 5))
+    done
+    return 1
+}
+
+say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME")"
+check eira.target systemctl is-active --quiet eira.target
+for daemon in $DAEMONS; do
+    check "daemon-$daemon" systemctl is-active --quiet "eira-$daemon.service"
+    check "socket-$daemon" test -S "/run/eira/$daemon.sock"
+done
+check stated-ipc-health python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(5)
+s.connect("/run/eira/stated.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "health",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+assert reply["result"]["ok"] is True, reply
+PY
+check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
+check firstboot-done test -e /var/lib/eira/firstboot.done
+check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
+check user-in-eira-group sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
+check gdm systemctl is-active --quiet gdm.service
+check labwc-running wait_for 240 pgrep -u "$USER_NAME" -x labwc
+check eira-shell-running wait_for 120 pgrep -u "$USER_NAME" -f eira-spatial-desktop
+
+if [ "$failed" -ne 0 ]; then
+    {
+        echo "---- systemctl --failed"
+        systemctl --failed --no-pager
+        echo "---- journal (eira, gdm, labwc)"
+        journalctl -b --no-pager -n 300 -u 'eira-*' -u gdm.service
+        journalctl -b --no-pager -n 150 _COMM=labwc _COMM=eira-spatial-de _COMM=eira-session
+    } > "$OUT" 2>&1
+fi
+
+if [ "$failed" -eq 0 ]; then say "RESULT PASS"; else say "RESULT FAIL"; fi
+sleep 2
+[ -n "${EIRA_CI_NO_POWEROFF:-}" ] || systemctl poweroff

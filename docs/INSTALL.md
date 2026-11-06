@@ -1,18 +1,18 @@
 # Installér EiraOS på en pc
 
-EiraOS installeres fra et ISO, der er bygget på Ubuntu 24.04 LTS' officielle installer. Installeren spørger om sprog, tastatur, netværk, disk og bruger. Efter genstart starter maskinen direkte i EiraOS-sessionen.
+EiraOS installeres fra et ISO, der er bygget på Ubuntu Desktop 26.04 LTS' officielle installer. Installeren lægger først et komplet Ubuntu Desktop på maskinen og derefter EiraOS ovenpå. Du logger ind med din adgangskode på Ubuntus login-skærm, og EiraOS er din standard-session.
 
 ## Krav
 
-- amd64-pc med UEFI eller BIOS, mindst 4 GB RAM og 25 GB disk
-- Internetforbindelse under installationen (Ubuntu-pakker hentes fra arkivet)
-- USB-nøgle på mindst 4 GB
+- amd64-pc med UEFI eller BIOS, mindst 8 GB RAM og 40 GB disk
+- Internetforbindelse under installationen (opdateringer og labwc hentes fra Ubuntus arkiv)
+- USB-nøgle på mindst 8 GB
 
 ## 1. Hent eller byg ISO'et
 
-**Fra CI:** Kør workflowet *Ubuntu 24.04 Packaging Acceptance* (fanen Actions → Run workflow), og hent artefaktet `eira-installer-iso-ubuntu-24.04-amd64`.
+**Fra CI:** Kør workflowet *Ubuntu 26.04 Packaging Acceptance* (fanen Actions → Run workflow), og hent artefaktet `eira-installer-iso-ubuntu-26.04-amd64`. Brug aldrig artefaktet `eira-ci-iso`: det er et testbillede, som sletter den første disk uden at spørge.
 
-**Lokalt på Ubuntu 24.04:**
+**Lokalt på Ubuntu 26.04:**
 
 ```bash
 sudo apt install xorriso gnupg curl
@@ -21,7 +21,7 @@ BASE=$(scripts/fetch_ubuntu_iso.sh)
 scripts/build_iso.sh --base-iso "$BASE" --deb dist/eira-os-core.deb --output-dir dist
 ```
 
-`fetch_ubuntu_iso.sh` henter det nyeste Ubuntu 24.04 live-server-ISO og afviser det, hvis `SHA256SUMS` ikke er signeret med Canonicals CD-image-nøgle, eller hvis checksummen ikke passer. Resultatet er `dist/EiraOS-1.0-RC1-amd64.iso` med `.sha3-256` og `.build-info.json`.
+`fetch_ubuntu_iso.sh` henter det nyeste Ubuntu Desktop 26.04-ISO og afviser det, hvis `SHA256SUMS` ikke er signeret med Canonicals CD-image-nøgle, eller hvis checksummen ikke passer. Resultatet er `dist/EiraOS-1.0-RC1-amd64.iso` med `.sha3-256` og `.build-info.json`.
 
 ## 2. Skriv ISO'et til en USB-nøgle
 
@@ -33,16 +33,20 @@ Erstat `/dev/sdX` med USB-nøglen (tjek med `lsblk`). Alt på nøglen slettes. P
 
 ## 3. Installér
 
-1. Boot pc'en fra USB-nøglen, og vælg **Installér EiraOS (Ubuntu 24.04 LTS)**.
-2. Bekræft, at du vil bruge EiraOS' autoinstall-konfiguration.
+1. Boot pc'en fra USB-nøglen, og vælg **Installér EiraOS (Ubuntu 26.04 LTS)**.
+2. Bekræft, at du vil bruge EiraOS' automatiske installationsopsætning.
 3. Vælg sprog og tastatur (dansk er forvalgt), netværk og **den disk, der skal bruges**. Installeren sletter kun den disk, du selv vælger.
-4. Opret din bruger.
+4. Opret din bruger med adgangskode.
 5. Genstart, og fjern USB-nøglen.
 
-Ved første opstart binder `eira-firstboot` din bruger til EiraOS-sessionen, og skærmen skifter til EiraOS. Det kan tage op til et minut, mens cloud-init gør brugeren færdig.
+Ved første opstart gør `eira-firstboot` EiraOS til din standard-session. Log ind på login-skærmen som normalt. Ubuntus egen session kan stadig vælges via tandhjulet på login-skærmen, hvis du har brug for den.
+
+## Sådan testes installationen automatisk
+
+CI installerer testbilledet i en virtuel maskine (QEMU/KVM, UEFI), booter den installerede disk og logger automatisk ind. Derefter tjekker `eira-ci-report` daemons, sockets, IPC, første boot, standard-session, login-skærmen, labwc og EiraOS-shellen. Resultatet står i artefaktet `vm-acceptance-logs`.
 
 ## Kendte begrænsninger i 1.0 RC1
 
-- Sessionen logger automatisk ind uden adgangskode; login i selve shellen kommer i en senere PR.
-- Installationen kræver netværk; et offline-ISO kommer senere.
-- Fejler installationen, pakkes logs i `/var/log/installer/eira-error-logs.tgz` i installer-miljøet. Hent dem før genstart (shell: Help → Enter shell).
+- EiraOS-shellen har endnu ikke egne flader til netværk, lyd, strøm og indstillinger; de kommer gennem EiraSystemAPI i de næste PR'er.
+- Installationen kræver netværk.
+- Fejler installationen, pakkes logs i `/var/log/installer/eira-error-logs.tgz` i installer-miljøet. Hent dem før genstart.

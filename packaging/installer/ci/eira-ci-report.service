@@ -1,0 +1,13 @@
+[Unit]
+Description=EiraOS CI acceptance report (serial console, then poweroff)
+After=graphical.target eira.target
+Wants=graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/eira/eira-ci-report
+StandardOutput=journal+console
+TimeoutStartSec=900
+
+[Install]
+WantedBy=graphical.target

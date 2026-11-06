@@ -32,8 +32,9 @@ Depends:
  python3-httpx,
  python3-pydantic (>= 2.10),
  python3-websockets (>= 13),
- labwc
-Recommends: gdm3 | lightdm
+ labwc,
+ xwayland
+Recommends: gdm3
 Description: EiraOS local-first desktop core and Calm Command session
  EiraOS is a local-first Ubuntu desktop overlay. This package installs the
  Unix-socket daemons, AppArmor confinement, hardened systemd units and the

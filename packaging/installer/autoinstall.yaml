@@ -1,4 +1,4 @@
-# EiraOS installer — Ubuntu 24.04 LTS (subiquity) autoinstall.
+# EiraOS installer — Ubuntu Desktop 26.04 LTS autoinstall.
 #
 # Ligger i roden af installations-ISO'et som /autoinstall.yaml.
 # Sprog, tastatur, netværk, disk og bruger vælges interaktivt, så installeren
@@ -17,17 +17,11 @@ autoinstall:
     layout: dk
   timezone: Europe/Copenhagen
   source:
-    id: ubuntu-server-minimal
-  ssh:
-    install-server: false
+    id: ubuntu-desktop-minimal
   updates: security
   packages:
-    - greetd
     - labwc
     - xwayland
-    - network-manager
-    - fonts-noto-core
-    - fonts-noto-color-emoji
   late-commands:
     - mkdir -p /target/var/lib/eira-install
     - cp -r /cdrom/eira/. /target/var/lib/eira-install/

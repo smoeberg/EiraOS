@@ -32,9 +32,14 @@ override_dh_auto_install:
 		debian/eira-os-core/usr/bin/eira-spatial-desktop
 	install -m 0755 packaging/session/eira-session \
 		debian/eira-os-core/usr/bin/eira-session
-	install -d debian/eira-os-core/usr/share/xsessions
+	install -d debian/eira-os-core/usr/share/wayland-sessions
 	install -m 0644 packaging/session/eira-session.desktop \
-		debian/eira-os-core/usr/share/xsessions/eira-session.desktop
+		debian/eira-os-core/usr/share/wayland-sessions/eira-session.desktop
+	install -d debian/eira-os-core/usr/share/eira-os/labwc
+	install -m 0644 packaging/session/config/labwc/rc.xml \
+		debian/eira-os-core/usr/share/eira-os/labwc/rc.xml
+	install -m 0755 packaging/session/config/labwc/autostart \
+		debian/eira-os-core/usr/share/eira-os/labwc/autostart
 	install -d debian/eira-os-core/usr/lib/systemd/system
 	install -m 0644 systemd/eira-*.service systemd/eira.target \
 		debian/eira-os-core/usr/lib/systemd/system/

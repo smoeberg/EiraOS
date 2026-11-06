@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Builds the installable EiraOS ISO.
 #
-# The official Ubuntu 24.04 LTS live-server ISO is remastered: eira-os-core,
-# the session configuration and an autoinstall file are added, and the
+# The official Ubuntu Desktop 26.04 LTS ISO is remastered: eira-os-core, the
+# post-install/first-boot scripts and an autoinstall file are added, and the
 # original El Torito/GPT boot records are replayed unchanged. The result boots
-# Ubuntu's own installer (subiquity), which asks for language, keyboard,
-# network, disk and user, then installs EiraOS. No root is needed.
+# Ubuntu's own installer, which asks for language, keyboard, network, disk and
+# user, installs Ubuntu Desktop and then EiraOS on top. No root is needed.
+#
+# --ci-unattended builds a TEST image instead: it installs without asking and
+# WIPES THE FIRST DISK, then runs a boot acceptance check. CI/VM use only.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -15,13 +18,16 @@ BASE_ISO=${EIRA_BASE_ISO:-}
 WORK_DIR=
 DEB_PATH=
 KEEP_WORK=0
+CI_UNATTENDED=0
 
 usage() {
     cat >&2 <<'USAGE'
-Usage: build_iso.sh --base-iso PATH [--deb PATH] [--output-dir DIR] [--work-dir DIR] [--keep-work]
+Usage: build_iso.sh --base-iso PATH [--deb PATH] [--output-dir DIR] [--work-dir DIR]
+                    [--keep-work] [--ci-unattended]
 
-Builds an installable amd64 EiraOS ISO from the official Ubuntu 24.04 LTS
-live-server ISO (fetch and verify it with scripts/fetch_ubuntu_iso.sh).
+Builds an installable amd64 EiraOS ISO from the official Ubuntu Desktop
+26.04 LTS ISO (fetch and verify it with scripts/fetch_ubuntu_iso.sh).
+--ci-unattended: test image that wipes the first disk without asking (VM only).
 If --deb is omitted, scripts/build_deb.sh creates the package first.
 EIRA_BASE_ISO may be used instead of --base-iso.
 USAGE
@@ -51,6 +57,10 @@ while (($#)); do
             ;;
         --keep-work)
             KEEP_WORK=1
+            shift
+            ;;
+        --ci-unattended)
+            CI_UNATTENDED=1
             shift
             ;;
         -h|--help)
@@ -111,32 +121,47 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 INSTALLER=${REPO_ROOT}/packaging/installer
-SESSION=${REPO_ROOT}/packaging/session/config
 STAGE=${WORK_DIR}/stage
-install -d -m 0755 "$STAGE/eira/session/greetd" "$STAGE/eira/session/labwc"
+install -d -m 0755 "$STAGE/eira"
 install -m 0644 -- "$DEB_PATH" "$STAGE/eira/eira-os-core.deb"
 install -m 0755 -- "$INSTALLER/eira-postinstall.sh" "$STAGE/eira/eira-postinstall.sh"
 install -m 0755 -- "$INSTALLER/eira-firstboot" "$STAGE/eira/eira-firstboot"
 install -m 0644 -- "$INSTALLER/eira-firstboot.service" "$STAGE/eira/eira-firstboot.service"
-install -m 0644 -- "$SESSION/greetd/config.toml" "$STAGE/eira/session/greetd/config.toml"
-install -m 0644 -- "$SESSION/labwc/rc.xml" "$STAGE/eira/session/labwc/rc.xml"
-install -m 0755 -- "$SESSION/labwc/autostart" "$STAGE/eira/session/labwc/autostart"
-install -m 0644 -- "$INSTALLER/autoinstall.yaml" "$STAGE/autoinstall.yaml"
+if [[ $CI_UNATTENDED -eq 1 ]]; then
+    install -d -m 0755 "$STAGE/eira/ci"
+    install -m 0755 -- "$INSTALLER/ci/eira-ci-setup" "$STAGE/eira/ci/eira-ci-setup"
+    install -m 0755 -- "$INSTALLER/ci/eira-ci-report" "$STAGE/eira/ci/eira-ci-report"
+    install -m 0644 -- "$INSTALLER/ci/eira-ci-report.service" "$STAGE/eira/ci/eira-ci-report.service"
+    install -m 0644 -- "$INSTALLER/ci/autoinstall-ci.yaml" "$STAGE/autoinstall.yaml"
+    ISO_NAME=EiraOS-1.0-RC1-amd64-ci-unattended.iso
+else
+    install -m 0644 -- "$INSTALLER/autoinstall.yaml" "$STAGE/autoinstall.yaml"
+    ISO_NAME=EiraOS-1.0-RC1-amd64.iso
+fi
 
-# Rename the boot menu entry; the rest of the GRUB configuration is untouched.
+# Rename the default boot entry. The CI image also boots it immediately and
+# passes 'autoinstall', so the installer starts without asking for confirmation.
 xorriso -osirrox on -indev "$BASE_ISO" \
     -extract /boot/grub/grub.cfg "$STAGE/grub.cfg" >/dev/null 2>&1 || {
-    echo "Base ISO has no /boot/grub/grub.cfg; is it an Ubuntu live-server ISO?" >&2
+    echo "Base ISO has no /boot/grub/grub.cfg; is it an Ubuntu installer ISO?" >&2
     exit 65
 }
 chmod u+w "$STAGE/grub.cfg"
-if grep -q 'menuentry "Try or Install Ubuntu Server"' "$STAGE/grub.cfg"; then
-    sed -i 's/menuentry "Try or Install Ubuntu Server"/menuentry "Installér EiraOS (Ubuntu 24.04 LTS)"/' "$STAGE/grub.cfg"
+if grep -qE 'menuentry "Try or Install Ubuntu[^"]*"' "$STAGE/grub.cfg"; then
+    sed -i -E '0,/menuentry "Try or Install Ubuntu[^"]*"/s//menuentry "Installér EiraOS (Ubuntu 26.04 LTS)"/' "$STAGE/grub.cfg"
 else
     echo "Warning: default GRUB entry not found; boot menu keeps Ubuntu's title" >&2
 fi
+if [[ $CI_UNATTENDED -eq 1 ]]; then
+    sed -i -E 's/^set timeout=.*/set timeout=1/' "$STAGE/grub.cfg"
+    sed -i -E '0,/^([[:space:]]*linux[[:space:]].*) ---/s//\1 autoinstall ---/' "$STAGE/grub.cfg"
+    grep -q ' autoinstall ---' "$STAGE/grub.cfg" || {
+        echo "Could not add 'autoinstall' to the kernel command line" >&2
+        exit 65
+    }
+fi
 
-ISO_OUTPUT=${OUTPUT_DIR}/EiraOS-1.0-RC1-amd64.iso
+ISO_OUTPUT=${OUTPUT_DIR}/${ISO_NAME}
 rm -f -- "$ISO_OUTPUT"
 xorriso -indev "$BASE_ISO" -outdev "$ISO_OUTPUT" \
     -map "$STAGE/eira" /eira \
@@ -211,13 +236,14 @@ commit_match = (
 
 manifest = {
     "format": "eira-iso-build-info-v2",
-    "method": "remastered Ubuntu live-server ISO + subiquity autoinstall",
+    "method": "remastered Ubuntu Desktop ISO + autoinstall",
+    "variant": "ci-unattended" if "ci-unattended" in iso_path.name else "installer",
     "source_commit": source_commit,
     "source_commit_verified": source_commit != "unknown",
     "package_build_info_present": bool(package_info),
     "package_source_commit": package_commit,
     "package_commit_matches_iso_source": commit_match,
-    "base_distribution": "Ubuntu 24.04 LTS (noble)",
+    "base_distribution": "Ubuntu Desktop 26.04 LTS",
     "architecture": "amd64",
     "built_at_utc": datetime.now(timezone.utc).isoformat(),
     "inputs": [

@@ -1,14 +1,16 @@
 #!/bin/sh
-# EiraOS first boot — binder den første menneskelige bruger til EiraOS-sessionen.
+# EiraOS first boot — gør EiraOS til standard-session for brugeren fra installeren.
 #
-# Kører én gang efter cloud-init har oprettet brugeren fra installeren:
-# sætter greetd til at starte eira-session som den bruger, giver brugeren
-# adgang til daemon-sockets (gruppen eira) og starter greetd på tty1.
+# Kører én gang, før login-skærmen (GDM) starter: finder den første
+# menneskelige bruger, sætter EiraOS som brugerens session i AccountsService
+# og giver brugeren adgang til daemon-sockets (gruppen eira). Ubuntus egen
+# session kan stadig vælges på login-skærmen.
 set -eu
 
-STAMP=/var/lib/eira/firstboot.done
-GREETD_CONF=${EIRA_GREETD_CONF:-/etc/greetd/config.toml}
+STAMP=${EIRA_FIRSTBOOT_STAMP:-/var/lib/eira/firstboot.done}
 PASSWD=${EIRA_PASSWD_FILE:-/etc/passwd}
+ACCOUNTS_DIR=${EIRA_ACCOUNTS_DIR:-/var/lib/AccountsService/users}
+SESSION=eira-session
 
 [ -e "$STAMP" ] && exit 0
 
@@ -24,16 +26,22 @@ case "$user" in
         ;;
 esac
 
-sed -i "s/^user = .*/user = \"$user\"/" "$GREETD_CONF"
+install -d -m 0755 "$ACCOUNTS_DIR"
+account="$ACCOUNTS_DIR/$user"
+if [ -f "$account" ] && grep -q '^Session=' "$account"; then
+    sed -i "s/^Session=.*/Session=$SESSION/" "$account"
+elif [ -f "$account" ] && grep -q '^\[User\]' "$account"; then
+    sed -i "/^\[User\]/a Session=$SESSION" "$account"
+else
+    printf '[User]\nSession=%s\nSystemAccount=false\n' "$SESSION" >> "$account"
+fi
+chmod 0600 "$account"
 
 if [ -z "${EIRA_FIRSTBOOT_DRY_RUN:-}" ]; then
     usermod -aG eira "$user"
-    systemctl disable getty@tty1.service >/dev/null 2>&1 || true
-    systemctl enable greetd.service
+    systemctl try-restart accounts-daemon.service >/dev/null 2>&1 || true
     install -d -m 0755 "$(dirname "$STAMP")"
     touch "$STAMP"
     systemctl disable eira-firstboot.service >/dev/null 2>&1 || true
-    systemctl stop getty@tty1.service >/dev/null 2>&1 || true
-    systemctl start --no-block greetd.service
 fi
-echo "eira-firstboot: EiraOS-session bundet til $user"
+echo "eira-firstboot: EiraOS er standard-session for $user"

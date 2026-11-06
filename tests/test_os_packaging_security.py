@@ -177,9 +177,8 @@ def test_iso_builder_remasters_ubuntu_installer_and_embeds_local_deb() -> None:
     assert "--base-iso" in script
     assert '-map "$STAGE/eira" /eira' in script
     assert '-map "$STAGE/autoinstall.yaml" /autoinstall.yaml' in script
-    assert '"$SESSION/greetd/config.toml"' in script
-    assert '"$SESSION/labwc/rc.xml"' in script
-    assert '"$SESSION/labwc/autostart"' in script
+    assert '"$INSTALLER/eira-firstboot"' in script
+    assert "--ci-unattended" in script
     assert '"$INSTALLER/eira-postinstall.sh"' in script
     assert "lb config" not in script
     assert "package_commit_matches_iso_source" in script

@@ -1,8 +1,8 @@
 [Unit]
-Description=EiraOS first boot: bind installer user to the EiraOS session
+Description=EiraOS first boot: make EiraOS the default session for the installer user
 Documentation=https://github.com/smoeberg/EiraOS
-After=cloud-final.service systemd-user-sessions.service
-Wants=cloud-final.service
+After=cloud-config.service systemd-user-sessions.service accounts-daemon.service
+Before=display-manager.service gdm.service
 ConditionPathExists=!/var/lib/eira/firstboot.done
 
 [Service]
@@ -11,4 +11,4 @@ ExecStart=/usr/lib/eira/eira-firstboot
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
