@@ -549,3 +549,99 @@ button {
 .intent-error {
   color: #ff9d9d;
 }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.header-button:hover,
+.header-button:focus-visible,
+.header-button[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  background: var(--blue-soft);
+  color: #e6edf3;
+}
+
+/* Eira Terminal: docked over the lower part of the workspace. */
+.terminal-panel {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  height: min(46vh, 520px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #0b1117;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.terminal-title {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.terminal-status {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.terminal-actions button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.terminal-actions button:hover,
+.terminal-actions button:focus-visible {
+  border-color: var(--line-strong);
+  color: #e6edf3;
+}
+
+.terminal-host {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px 4px 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-panel {
+    box-shadow: none;
+  }
+}
