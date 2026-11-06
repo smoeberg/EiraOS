@@ -1,6 +1,42 @@
 mod ipc;
 #[cfg(unix)]
+mod system_api;
+#[cfg(unix)]
 mod terminal;
+
+#[cfg(unix)]
+mod system_api_commands {
+    //! The one Tauri entry point for EiraSystemAPI v1. The operation set is
+    //! closed and validated in Rust (system_api::SystemApi::handle).
+
+    use crate::system_api::{power::DbusPowerAdapter, EiraRequest, EiraResponse, SystemApi, UnavailablePower};
+    use tauri::State;
+    use tokio::sync::OnceCell;
+
+    #[derive(Default)]
+    pub struct SystemApiState(OnceCell<SystemApi>);
+
+    impl SystemApiState {
+        async fn api(&self) -> &SystemApi {
+            self.0
+                .get_or_init(|| async {
+                    match DbusPowerAdapter::system().await {
+                        Ok(adapter) => SystemApi::new(Box::new(adapter)),
+                        Err(_) => SystemApi::new(Box::new(UnavailablePower)),
+                    }
+                })
+                .await
+        }
+    }
+
+    #[tauri::command]
+    pub async fn eira_system(
+        state: State<'_, SystemApiState>,
+        request: EiraRequest,
+    ) -> Result<EiraResponse, String> {
+        Ok(state.api().await.handle(request).await)
+    }
+}
 
 #[cfg(unix)]
 mod terminal_commands {
@@ -144,6 +180,7 @@ pub fn run() {
         use tauri::Manager;
         builder
             .manage(terminal_commands::TerminalState::default())
+            .manage(system_api_commands::SystemApiState::default())
             .setup(|app| {
                 let state = app.state::<terminal_commands::TerminalState>();
                 terminal_commands::init(app.handle(), &state);
@@ -157,6 +194,7 @@ pub fn run() {
             })
             .invoke_handler(tauri::generate_handler![
                 ipc::send_ipc_request,
+                system_api_commands::eira_system,
                 terminal_commands::terminal_create,
                 terminal_commands::terminal_write,
                 terminal_commands::terminal_resize,
