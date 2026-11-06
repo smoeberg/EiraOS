@@ -55,13 +55,13 @@ Ukendte felter, manglende felter og forkerte typer afvises (fail closed).
 **CBOR-profil** (RFC 8949 core deterministic, strammet op):
 - Kun heltal, bstr, tstr, array, map, `true`, `false` og `null`.
 - Korteste kodning af heads og kun definite length.
-- Map-nøgler sorteres bytevis efter deres kodede form, og dubletter er forbudt.
+- Map-nøgler sorteres i bytevis leksikografisk orden af deres kodede form (RFC 8949 §4.2.1), og dubletter er forbudt. Det er bevidst *ikke* den ældre length-first-regel fra RFC 7049, som RFC 8949 §4.2.3 kun bevarer for bagudkompatibilitet. De to regler giver samme resultat, når alle nøgler har samme kodede længde, hvilket gælder alle envelope-felter. De adskiller sig for blandede nøgler i payload: `100` (`1864`) kommer før `-1` (`20`) bytevis, men efter length-first. Length-first-input afvises.
 - Ingen floats, tags eller andre simple values. Maksimal dybde 32.
 
-**Dekoderen håndhæver profilen.** Gyldig CBOR, der ikke er kanonisk, afvises. Derfor er "decode og encode igen" identiteten. Golden vectors fra RFC 8949 appendiks A ligger i testene. Den signerede golden envelope er desuden verificeret med en uafhængig implementation (Python `cbor2`, `canonical=True`): byte-identisk.
+**Dekoderen håndhæver profilen.** Gyldig CBOR, der ikke er kanonisk, afvises. Derfor er "decode og encode igen" identiteten. Golden vectors fra RFC 8949 appendiks A ligger i testene. Den signerede golden envelope er desuden afkodet og gen-kodet byte-identisk med en uafhængig implementation (Python `cbor2`, `canonical=True`). Den verifikation dækker kun nøgler af samme længde: Python `cbor2` bruger length-first, så den kan ikke bekræfte rækkefølgen for blandede nøgler. Den rækkefølge er fastlagt med test-vektor i `key_order_is_rfc8949_bytewise_not_rfc7049_length_first`.
 
 ### 3.1a Framing — `frame.rs`
-`u32 big-endian længde || CBOR-besked`, med længde 1–16 MiB. Dekoderen er inkrementel og håndterer halve frames, flere frames i ét læs og én byte ad gangen. Længden 0 eller over grænsen *forgifter* streamen, og forbindelsen skal lukkes. Grænsen håndhæves ud fra headeren alene, før noget bufferes.
+`u32 big-endian længde || CBOR-besked`, med længde 1–16 MiB. Dekoderen er inkrementel og håndterer halve frames, flere frames i ét læs og én byte ad gangen. `push()` accepterer højst `capacity()` = 4 + maks bytes og returnerer, hvor mange bytes den tog. Hukommelsen er derfor begrænset, uanset hvor meget en peer sender på én gang. `push_all()` tømmer færdige frames undervejs. Længden 0 eller over grænsen afvises i `push()`, så snart headerens fire bytes er modtaget og før payload bufferes. Det *forgifter* streamen, og forbindelsen skal lukkes.
 
 ### 3.2–3.3 SequenceTracker og ConsumerProgress — `sequence.rs`
 
@@ -102,7 +102,8 @@ Tests dækker `..`, absolutte og relative symlink-escapes, magic links (`/proc/s
 
 ### 3.5 Systemd FD ownership — `activation.rs`
 
-- `LISTEN_PID` skal være lig vores PID. `LISTEN_FDS` må højst være 64. `LISTEN_FDNAMES`, hvis den er sat, skal navngive hver fd.
+- `LISTEN_PID` skal være lig vores PID. `LISTEN_FDS` må højst være 64. `LISTEN_FDNAMES`, hvis den er sat, skal navngive hver fd med 1–255 printbare ASCII-tegn uden `:` og uden dubletter (undtagen standardnavnet `unknown`).
+- **Fd'er lukkes også ved fejl.** Når PID og antal er i orden, ejes fd'erne. Så lukker *alle* senere fejl (forkert antal navne, ugyldigt eller dubleret navn, `fcntl`-fejl) alle fd'erne i stedet for at lække dem. Før det punkt (ikke vores, eller miljøet er misdannet) røres intet.
 - **Én ejer.** Fra parsing ejes hver fd af præcis én `OwnedFd`, og der sættes `FD_CLOEXEC`.
 - **`take_listener(name)` flytter fd'en ud** og validerer den: `S_IFSOCK`, `SO_DOMAIN = AF_UNIX`, `SO_TYPE = SOCK_STREAM` og `SO_ACCEPTCONN = 1`. Den returnerer en `std::os::unix::net::UnixListener`. Der findes ingen "rå fd", som to ejere deler.
 - Et navn kan kun tages én gang (`AlreadyTaken`). En fd, der fejler valideringen, lukkes.
@@ -205,3 +206,6 @@ Dokumenteret kontrakt ✅ · genanvendeligt Rust-bibliotek i `eira-core` ✅ · 
 | Commit-retry-semantik (4) | Dokumenteret og testet (`PredecessorPending`) |
 | `DropByAge` ikke generisk (4) | `Timestamped`-trait |
 | *Dødvande ved strict commit + at-most-once (ny)* | `gaps()` + eksplicit `declare_lost()` |
+| FD-læk på fejlveje i `from_raw_fds` (#134, review 1) | Alle fd'er indpakkes før validering; regressionstest via peer-EOF |
+| `push()` uden grænse før headertjek (#134, review 1) | `push()` er begrænset til `capacity()`, headertjek i `push()`, `push_all()`; regressionstests |
+| Nøglerækkefølge (#134, review 1) | Fundet afvist som fejl: RFC 8949 §4.2.1 *er* bytevis. Length-first er RFC 7049 (§4.2.3). Profilvalget er præciseret og har fået en test-vektor |

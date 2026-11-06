@@ -4,7 +4,12 @@
 //!
 //! * integers, byte strings, text strings, arrays, maps, `true`, `false`, `null`;
 //! * shortest-form heads, definite lengths only;
-//! * map keys sorted bytewise by their encoded form, no duplicates;
+//! * map keys sorted in the bytewise lexicographic order of their encoded
+//!   form, no duplicates. This is the RFC 8949 §4.2.1 rule. It is *not* the
+//!   older RFC 7049 "canonical" length-first rule (kept in RFC 8949 §4.2.3
+//!   for compatibility); the two agree when all keys encode to the same
+//!   length and differ otherwise (`100` = `1864` sorts before `-1` = `20`
+//!   bytewise, after it length-first). Length-first input is rejected;
 //! * no floats, no tags, no `undefined`, no simple values beyond the three above.
 //!
 //! The decoder enforces the same profile: a message that is valid CBOR but not
@@ -362,6 +367,30 @@ mod tests {
             (Value::Integer(10), Value::Null),
         ]);
         assert_eq!(hex(&encode(&value).unwrap()), "a30af61864f620f6");
+    }
+
+    /// Regression (review of #134): the profile uses the RFC 8949 §4.2.1
+    /// bytewise order, deliberately not RFC 7049 length-first. A peer that
+    /// encodes length-first (for example Python cbor2 with canonical=True)
+    /// produces a different byte string for mixed-length keys, and the
+    /// decoder refuses it instead of silently accepting two encodings.
+    #[test]
+    fn key_order_is_rfc8949_bytewise_not_rfc7049_length_first() {
+        let bytewise = "a30af61864f620f6"; // {10, 100, -1}
+        let length_first = "a30af620f61864f6"; // {10, -1, 100}
+        let value = decode(&unhex(bytewise)).unwrap();
+        assert_eq!(hex(&encode(&value).unwrap()), bytewise);
+        assert_eq!(
+            decode(&unhex(length_first)),
+            Err(CborError::UnsortedMapKeys)
+        );
+        // Same-length keys (all envelope fields): both rules agree.
+        let text = Value::Map(vec![
+            (Value::text("bb"), Value::Null),
+            (Value::text("a"), Value::Null),
+            (Value::text("c"), Value::Null),
+        ]);
+        assert_eq!(hex(&encode(&text).unwrap()), "a36161f66163f6626262f6");
     }
 
     #[test]

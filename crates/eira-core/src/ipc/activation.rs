@@ -78,12 +78,20 @@ fn is_listening_unix_stream(fd: RawFd) -> io::Result<bool> {
         && sockopt(fd, libc::SO_ACCEPTCONN)? == 1)
 }
 
+/// systemd `FileDescriptorName=`: 1–255 printable ASCII characters, no `:`.
+fn valid_fd_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 255 && name.bytes().all(|b| b.is_ascii_graphic() && b != b':')
+}
+
 impl Activation {
     /// Parse activation variables from `env`. Returns `Ok(None)` when the
     /// process was not socket-activated (no `LISTEN_FDS`).
     ///
     /// # Safety
-    /// On success this takes ownership of fds `3..3+LISTEN_FDS`. The caller
+    /// Once `LISTEN_PID` matches and `LISTEN_FDS` parses, this owns fds
+    /// `3..3+LISTEN_FDS` — on success and on every later error, which closes
+    /// them. Before that point (not for us / malformed) nothing is touched.
+    /// The caller
     /// must ensure nothing else in the process owns or closes them, which
     /// holds at the start of `main` in a systemd-activated service.
     pub unsafe fn from_env(
@@ -110,11 +118,8 @@ impl Activation {
             Some(list) => list.split(':').map(str::to_owned).collect(),
             None => vec!["unknown".to_owned(); count],
         };
-        if names.len() != count {
-            return Err(ActivationError::InvalidEnvironment(
-                "LISTEN_FDNAMES does not match LISTEN_FDS",
-            ));
-        }
+        // From here on the fds are ours: a name/count mismatch is detected
+        // inside from_raw_fds, after they have been wrapped (and closed).
         let fds = (0..count as RawFd)
             .map(|i| SD_LISTEN_FDS_START + i)
             .collect();
@@ -139,27 +144,39 @@ impl Activation {
     }
 
     /// # Safety
-    /// Takes ownership of every fd in `fds`.
+    /// Takes ownership of every fd in `fds` — on success *and* on every
+    /// error path: each fd is wrapped in an [`OwnedFd`] before anything is
+    /// validated, so a failure closes all of them instead of leaking them.
     pub unsafe fn from_raw_fds(
         fds: Vec<RawFd>,
         names: Vec<String>,
     ) -> Result<Option<Self>, ActivationError> {
-        if fds.len() != names.len() {
+        // SAFETY: ownership transferred by the caller.
+        let owned: Vec<OwnedFd> = fds
+            .into_iter()
+            .map(|fd| unsafe { OwnedFd::from_raw_fd(fd) })
+            .collect();
+        if owned.len() != names.len() {
             return Err(ActivationError::InvalidEnvironment("name count mismatch"));
         }
-        let mut owned = Vec::with_capacity(fds.len());
-        for (fd, name) in fds.into_iter().zip(names) {
-            // SAFETY: ownership transferred by the caller.
-            let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let mut seen = HashSet::new();
+        for name in &names {
+            if !valid_fd_name(name) {
+                return Err(ActivationError::InvalidEnvironment("invalid fd name"));
+            }
+            if !seen.insert(name.as_str()) && name != "unknown" {
+                return Err(ActivationError::InvalidEnvironment("duplicate fd name"));
+            }
+        }
+        for fd in &owned {
             // systemd passes descriptors without FD_CLOEXEC; never leak them.
             // SAFETY: fd is valid and owned.
             if unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
                 return Err(ActivationError::Io(io::Error::last_os_error()));
             }
-            owned.push((name, fd));
         }
         Ok(Some(Self {
-            fds: owned,
+            fds: names.into_iter().zip(owned).collect(),
             taken: HashSet::new(),
         }))
     }
@@ -179,9 +196,6 @@ impl Activation {
             .iter()
             .position(|(n, _)| n == name)
             .ok_or_else(|| ActivationError::NotFound(name.to_owned()))?;
-        if self.fds.iter().filter(|(n, _)| n == name).count() > 1 {
-            return Err(ActivationError::InvalidEnvironment("duplicate fd name"));
-        }
         let (name, fd) = self.fds.remove(index);
         self.taken.insert(name.clone());
         match is_listening_unix_stream(fd.as_raw_fd()) {
@@ -260,18 +274,55 @@ mod tests {
                 Activation::from_env(env(&[("LISTEN_FDS", "999"), ("LISTEN_PID", "42")]), 42),
                 Err(ActivationError::InvalidEnvironment(_))
             ));
-            assert!(matches!(
-                Activation::from_env(
-                    env(&[
-                        ("LISTEN_FDS", "2"),
-                        ("LISTEN_PID", "42"),
-                        ("LISTEN_FDNAMES", "a")
-                    ]),
-                    42
-                ),
-                Err(ActivationError::InvalidEnvironment(_))
-            ));
         }
+    }
+
+    // A LISTEN_FDNAMES/LISTEN_FDS mismatch is checked inside from_raw_fds
+    // (after taking ownership); it is tested there with our own sockets,
+    // because going through from_env here would take over fds 3.. of the
+    // test process.
+
+    /// Regression (review of #134): every error path in `from_raw_fds` must
+    /// close the descriptors it was given, not leak them.
+    #[test]
+    fn rejected_activation_closes_every_descriptor() {
+        use std::io::Read;
+        let cases: [(&str, Vec<&str>); 4] = [
+            ("count mismatch", vec!["a"]),
+            ("invalid name", vec!["a", "has:colon"]),
+            ("empty name", vec!["a", ""]),
+            ("duplicate name", vec!["a", "a"]),
+        ];
+        for (why, names) in cases {
+            let (a, mut peer_a) = UnixStream::pair().unwrap();
+            let (b, mut peer_b) = UnixStream::pair().unwrap();
+            let result = unsafe {
+                Activation::from_raw_fds(
+                    vec![a.into_raw_fd(), b.into_raw_fd()],
+                    names.into_iter().map(String::from).collect(),
+                )
+            };
+            assert!(
+                matches!(result, Err(ActivationError::InvalidEnvironment(_))),
+                "{why}"
+            );
+            let mut buf = [0u8; 1];
+            assert_eq!(peer_a.read(&mut buf).unwrap(), 0, "{why}: first fd leaked");
+            assert_eq!(peer_b.read(&mut buf).unwrap(), 0, "{why}: second fd leaked");
+        }
+    }
+
+    #[test]
+    fn unnamed_descriptors_may_share_the_default_name() {
+        let (a, _pa) = UnixStream::pair().unwrap();
+        let (b, _pb) = UnixStream::pair().unwrap();
+        let act = unsafe {
+            Activation::from_raw_fds(
+                vec![a.into_raw_fd(), b.into_raw_fd()],
+                vec!["unknown".into(), "unknown".into()],
+            )
+        };
+        assert!(act.unwrap().is_some());
     }
 
     #[test]
