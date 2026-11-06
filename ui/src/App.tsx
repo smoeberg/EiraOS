@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   SpatialCanvas,
   type CanvasNode,
@@ -6,6 +6,7 @@ import {
 } from "./components/SpatialCanvas";
 import { IntentBar } from "./components/IntentBar";
 import { SituationUI } from "./components/SituationUI";
+import { TerminalPanel } from "./components/TerminalPanel";
 import { VeritasHUD, type VeritasResult } from "./components/VeritasHUD";
 import { ipcErrorMessage, sendIpcRequest } from "./lib/ipc";
 
@@ -16,6 +17,19 @@ export default function App() {
   const [veritasLoading, setVeritasLoading] = useState(false);
   const [veritasError, setVeritasError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+
+  // Ctrl+Alt+T opens or closes the terminal, as on Ubuntu.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        setTerminalOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleSelect = useCallback(async (node: CanvasNode | null) => {
     setSelected(node);
@@ -69,9 +83,20 @@ export default function App() {
           <span className="header-divider" aria-hidden />
           <span className="header-context">Spatial Workspace</span>
         </div>
-        <div className="runtime-status">
-          <span aria-hidden />
-          Lokal Unix IPC
+        <div className="header-actions">
+          <button
+            type="button"
+            className="header-button"
+            aria-pressed={terminalOpen}
+            onClick={() => setTerminalOpen((open) => !open)}
+            title="Terminal (Ctrl+Alt+T)"
+          >
+            Terminal
+          </button>
+          <div className="runtime-status">
+            <span aria-hidden />
+            Lokal Unix IPC
+          </div>
         </div>
       </header>
       <IntentBar onExecuted={refreshAfterIntent} />
@@ -85,6 +110,7 @@ export default function App() {
         />
         <SituationUI proposals={proposals} onActivate={handleProposal} />
       </main>
+      {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
     </div>
   );
 }
