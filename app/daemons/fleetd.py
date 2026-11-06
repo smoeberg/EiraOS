@@ -47,9 +47,17 @@ class FleetSyncService:
             StateHeader.from_value(state).as_dict() for state in self.store.list_states()
         ]
 
-    def _authorize(self, params: Mapping[str, Any], *, public_key: bool = False) -> str:
+    def _authorize(
+        self,
+        params: Mapping[str, Any],
+        *,
+        public_key: bool = False,
+        session_authenticated: bool = False,
+    ) -> str:
+        # ``session_authenticated`` is an in-process flag set only by the
+        # WebSocket handler after a token-verified handshake. It must never be
+        # read from caller-supplied params, or any client could skip the token.
         device_id = str(params.get("device_id", ""))
-        session_authenticated = bool(params.get("_session_authenticated", False))
         self.registry.assert_authorized(
             device_id,
             public_key=(
@@ -64,8 +72,12 @@ class FleetSyncService:
         )
         return device_id
 
-    def handshake(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        device_id = self._authorize(params, public_key=True)
+    def handshake(
+        self, params: Mapping[str, Any], *, session_authenticated: bool = False
+    ) -> dict[str, Any]:
+        device_id = self._authorize(
+            params, public_key=True, session_authenticated=session_authenticated
+        )
         remote_headers = list(params.get("headers", []))
         local_states = self.store.list_states()
         diff = self.merkle.diff(local_states, remote_headers)
@@ -79,8 +91,10 @@ class FleetSyncService:
             "offer_hashes": list(diff.missing_from_remote),
         }
 
-    def request_blocks(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        self._authorize(params)
+    def request_blocks(
+        self, params: Mapping[str, Any], *, session_authenticated: bool = False
+    ) -> dict[str, Any]:
+        self._authorize(params, session_authenticated=session_authenticated)
         requested = [str(value) for value in params.get("hashes", [])]
         if len(requested) > 10_000:
             raise FleetProtocolError("Too many state hashes requested")
@@ -91,8 +105,10 @@ class FleetSyncService:
                 blocks.append(self.encryptor.encrypt_state(state))
         return {"blocks": blocks, "count": len(blocks)}
 
-    def push_blocks(self, params: Mapping[str, Any]) -> dict[str, Any]:
-        self._authorize(params)
+    def push_blocks(
+        self, params: Mapping[str, Any], *, session_authenticated: bool = False
+    ) -> dict[str, Any]:
+        self._authorize(params, session_authenticated=session_authenticated)
         raw_blocks = list(params.get("blocks", []))
         if len(raw_blocks) > 10_000:
             raise FleetProtocolError("Too many state blocks supplied")
@@ -180,18 +196,25 @@ class FleetSyncService:
     ) -> tuple[str, dict[str, Any]]:
         method = str(message.get("method") or message.get("type") or "")
         params = dict(message.get("params") or {})
+        session_authenticated = False
         if authenticated_device:
             supplied_device = params.get("device_id")
             if supplied_device is not None and str(supplied_device) != authenticated_device:
                 raise DeviceAuthorizationError("WebSocket device identity cannot change")
             params["device_id"] = authenticated_device
-            params["_session_authenticated"] = True
+            session_authenticated = True
         if method == "sync.handshake":
-            return method, self.handshake(params)
+            return method, self.handshake(
+                params, session_authenticated=session_authenticated
+            )
         if method == "sync.request_blocks":
-            return method, self.request_blocks(params)
+            return method, self.request_blocks(
+                params, session_authenticated=session_authenticated
+            )
         if method == "sync.push_blocks":
-            return method, self.push_blocks(params)
+            return method, self.push_blocks(
+                params, session_authenticated=session_authenticated
+            )
         raise FleetProtocolError(f"Unknown fleet sync method: {method}")
 
 

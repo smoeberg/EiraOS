@@ -257,9 +257,16 @@ def _decode_jwt_payload_unverified(token: str) -> dict[str, Any]:
 
 
 def _get_jwks_url(cfg: OidcConfig) -> str:
-    """Build JWKS URL from issuer."""
-    issuer = cfg.issuer or cfg.authority_base() + "/v2.0"
-    return f"{issuer.rstrip('/')}/discovery/v2.0/keys"
+    """Build the Entra ID JWKS URL.
+
+    Entra publishes keys at ``{authority}/discovery/v2.0/keys``; the issuer
+    itself ends in ``/v2.0``, so the authority (issuer without ``/v2.0``) must
+    be used. ``OIDC_JWKS_URI`` overrides this for other providers.
+    """
+    override = os.environ.get("OIDC_JWKS_URI", "").strip()
+    if override:
+        return override
+    return f"{cfg.authority_base()}/discovery/v2.0/keys"
 
 
 def _verify_token_claims(payload: dict[str, Any], cfg: OidcConfig, nonce: str | None = None) -> None:
