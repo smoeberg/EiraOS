@@ -16,6 +16,9 @@ RELEASE_URL=${EIRA_UBUNTU_RELEASE_URL:-https://releases.ubuntu.com/${VERSION}}
 CDIMAGE_KEY=843938DF228D22F7B3742BC0D94AA3F0EFE21092
 DEST=${1:-${EIRA_ISO_CACHE_DIR:-$(pwd)/.cache/ubuntu-iso}}
 
+# Only the final ISO path goes to stdout (callers capture it); everything else to stderr.
+exec 3>&1 1>&2
+
 for tool in curl gpg sha256sum; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing tool: $tool" >&2; exit 69; }
 done
@@ -46,4 +49,4 @@ if ! grep -E " \*?${ISO_NAME//./\\.}\$" SHA256SUMS | sha256sum --check --status 
     grep -E " \*?${ISO_NAME//./\\.}\$" SHA256SUMS | sha256sum --check --strict >&2
 fi
 
-echo "$DEST/$ISO_NAME"
+echo "$(realpath -- "$DEST/$ISO_NAME")" >&3
