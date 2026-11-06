@@ -1,0 +1,39 @@
+#!/bin/sh
+# EiraOS first boot — binder den første menneskelige bruger til EiraOS-sessionen.
+#
+# Kører én gang efter cloud-init har oprettet brugeren fra installeren:
+# sætter greetd til at starte eira-session som den bruger, giver brugeren
+# adgang til daemon-sockets (gruppen eira) og starter greetd på tty1.
+set -eu
+
+STAMP=/var/lib/eira/firstboot.done
+GREETD_CONF=${EIRA_GREETD_CONF:-/etc/greetd/config.toml}
+PASSWD=${EIRA_PASSWD_FILE:-/etc/passwd}
+
+[ -e "$STAMP" ] && exit 0
+
+user=$(awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ { print $1; exit }' "$PASSWD")
+if [ -z "$user" ]; then
+    echo "eira-firstboot: ingen bruger fundet (uid 1000-59999)" >&2
+    exit 1
+fi
+case "$user" in
+    *[!a-z0-9_-]*)
+        echo "eira-firstboot: uventet brugernavn: $user" >&2
+        exit 1
+        ;;
+esac
+
+sed -i "s/^user = .*/user = \"$user\"/" "$GREETD_CONF"
+
+if [ -z "${EIRA_FIRSTBOOT_DRY_RUN:-}" ]; then
+    usermod -aG eira "$user"
+    systemctl disable getty@tty1.service >/dev/null 2>&1 || true
+    systemctl enable greetd.service
+    install -d -m 0755 "$(dirname "$STAMP")"
+    touch "$STAMP"
+    systemctl disable eira-firstboot.service >/dev/null 2>&1 || true
+    systemctl stop getty@tty1.service >/dev/null 2>&1 || true
+    systemctl start --no-block greetd.service
+fi
+echo "eira-firstboot: EiraOS-session bundet til $user"

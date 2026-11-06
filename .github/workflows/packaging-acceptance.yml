@@ -7,6 +7,7 @@ on:
     paths:
       - "scripts/build_deb.sh"
       - "scripts/build_iso.sh"
+      - "scripts/fetch_ubuntu_iso.sh"
       - "packaging/**"
       - "systemd/**"
       - "ui/**"
@@ -72,10 +73,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build-live-iso:
+  build-installer-iso:
     needs: build-deb
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,32 +87,50 @@ jobs:
           name: eira-deb-ubuntu-24.04
           path: dist
 
-      - name: Install live-build dependencies
+      - name: Install ISO tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build xorriso squashfs-tools isolinux syslinux-common
+          sudo apt-get install -y xorriso gnupg curl
 
-      - name: Build amd64 Ubuntu 24.04 live ISO
+      - name: Restore Ubuntu base ISO cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/ubuntu-iso
+          key: ubuntu-24.04-live-server-${{ github.run_id }}
+          restore-keys: ubuntu-24.04-live-server-
+
+      - name: Fetch and verify Ubuntu 24.04 live-server ISO
+        id: base
+        run: echo "iso=$(scripts/fetch_ubuntu_iso.sh .cache/ubuntu-iso)" >> "$GITHUB_OUTPUT"
+
+      - name: Build installable EiraOS ISO
         run: |
-          sudo --preserve-env=EIRA_ISO_OUTPUT_DIR scripts/build_iso.sh \
+          scripts/build_iso.sh \
+            --base-iso "${{ steps.base.outputs.iso }}" \
             --deb dist/eira-os-core.deb \
-            --output-dir "$GITHUB_WORKSPACE/dist" \
-            --keep-work
+            --output-dir dist
 
-      - name: Verify ISO and record SHA3-256
+      - name: Verify ISO layout and boot records
         run: |
-          test -s dist/EiraOS-1.0-RC1-amd64.iso
-          test -s dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
-          cat dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
-          file dist/EiraOS-1.0-RC1-amd64.iso
-          xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -toc
+          ISO=dist/EiraOS-1.0-RC1-amd64.iso
+          test -s "$ISO"
+          cat "$ISO.sha3-256"
+          xorriso -indev "$ISO" -report_el_torito plain 2>/dev/null | tee dist/el-torito.txt
+          grep -qi "El Torito boot img" dist/el-torito.txt
+          xorriso -indev "$ISO" -report_system_area plain 2>/dev/null | tee dist/system-area.txt
+          grep -q "GPT" dist/system-area.txt
+          xorriso -indev "$ISO" -find / -type f 2>/dev/null > dist/iso-files.txt
+          for f in /autoinstall.yaml /eira/eira-os-core.deb /eira/eira-postinstall.sh /eira/eira-firstboot /casper/vmlinuz; do
+            grep -q "'$f'" dist/iso-files.txt || { echo "missing $f"; exit 1; }
+          done
 
-      - name: Upload ISO and checksum
+      - name: Upload ISO and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: eira-live-iso-ubuntu-24.04-amd64
+          name: eira-installer-iso-ubuntu-24.04-amd64
           path: |
             dist/EiraOS-1.0-RC1-amd64.iso
             dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
+            dist/EiraOS-1.0-RC1-amd64.iso.build-info.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7

@@ -34,13 +34,18 @@ def test_legacy_session_unit_is_not_shipped():
     assert not (REPO / "packaging" / "systemd" / "eira-session.service").exists()
 
 
-def test_build_iso_installs_session_stack_and_enables_greetd():
-    script = _read("scripts/build_iso.sh")
-    assert "labwc" in script
-    assert "greetd" in script
-    assert "systemctl enable greetd.service" in script
-    assert "systemctl enable eira-session.service" not in script
-    assert "gdm3" not in script
+def test_installer_installs_session_stack_and_enables_greetd():
+    autoinstall = _read("packaging/installer/autoinstall.yaml")
+    assert "- labwc" in autoinstall
+    assert "- greetd" in autoinstall
+    postinstall = _read("packaging/installer/eira-postinstall.sh")
+    assert "/etc/greetd/config.toml" in postinstall
+    assert "/etc/labwc/autostart" in postinstall
+    firstboot = _read("packaging/installer/eira-firstboot")
+    assert "systemctl enable greetd.service" in firstboot
+    for text in (autoinstall, postinstall, firstboot, _read("scripts/build_iso.sh")):
+        assert "systemctl enable eira-session.service" not in text
+        assert "gdm3" not in text
 
 
 def test_ubuntu_installer_uses_supported_deb_package():

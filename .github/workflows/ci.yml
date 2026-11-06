@@ -33,7 +33,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest ruff alembic
+        pip install pytest ruff alembic pyyaml
 
     - name: Run Ruff linter
       run: |
@@ -42,7 +42,7 @@ jobs:
     - name: Install AppArmor parser for packaging validation
       run: |
         sudo apt-get update
-        sudo apt-get install -y apparmor-utils
+        sudo apt-get install -y apparmor-utils xorriso
 
     - name: Run database migrations (Alembic)
       run: |
