@@ -5,7 +5,6 @@ import {
   type ProposalRecord,
 } from "./components/SpatialCanvas";
 import { IntentBar } from "./components/IntentBar";
-import { PowerMenu } from "./components/PowerMenu";
 import { SituationUI } from "./components/SituationUI";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { VeritasHUD, type VeritasResult } from "./components/VeritasHUD";
@@ -20,8 +19,30 @@ export default function App() {
   const [reloadKey, setReloadKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
 
-  // Ctrl+Alt+T opens or closes the terminal, as on Ubuntu.
+  // Builder Mode (terminal, files, legacy apps) is policy-gated and owned by
+  // intentd. Explorer is the default and the fallback whenever the mode
+  // cannot be confirmed. The backend checks again before opening a shell.
+  const [builderMode, setBuilderMode] = useState(false);
   useEffect(() => {
+    let cancelled = false;
+    sendIpcRequest<{ mode?: string }>("intentd", "presentation.mode_get", {})
+      .then((state) => {
+        if (!cancelled) setBuilderMode(state?.mode === "builder");
+      })
+      .catch(() => {
+        if (!cancelled) setBuilderMode(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Ctrl+Alt+T opens or closes the terminal — only in Builder Mode.
+  useEffect(() => {
+    if (!builderMode) {
+      setTerminalOpen(false);
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "t") {
         event.preventDefault();
@@ -30,7 +51,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [builderMode]);
 
   const handleSelect = useCallback(async (node: CanvasNode | null) => {
     setSelected(node);
@@ -85,20 +106,21 @@ export default function App() {
           <span className="header-context">Spatial Workspace</span>
         </div>
         <div className="header-actions">
-          <button
-            type="button"
-            className="header-button"
-            aria-pressed={terminalOpen}
-            onClick={() => setTerminalOpen((open) => !open)}
-            title="Terminal (Ctrl+Alt+T)"
-          >
-            Terminal
-          </button>
+          {builderMode && (
+            <button
+              type="button"
+              className="header-button"
+              aria-pressed={terminalOpen}
+              onClick={() => setTerminalOpen((open) => !open)}
+              title="Terminal (Ctrl+Alt+T)"
+            >
+              Terminal
+            </button>
+          )}
           <div className="runtime-status">
             <span aria-hidden />
             Lokal Unix IPC
           </div>
-          <PowerMenu />
         </div>
       </header>
       <IntentBar onExecuted={refreshAfterIntent} />
@@ -112,7 +134,7 @@ export default function App() {
         />
         <SituationUI proposals={proposals} onActivate={handleProposal} />
       </main>
-      {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
+      {builderMode && terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
     </div>
   );
 }

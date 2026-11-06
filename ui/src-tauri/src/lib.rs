@@ -97,6 +97,31 @@ mod terminal_commands {
             .set(TerminalManager::new(Arc::new(WindowSink(app.clone()))));
     }
 
+    /// The terminal belongs to Builder Mode (Desktop Architecture v1.0).
+    /// The backend asks intentd for the session's mode, so a UI that skips
+    /// its own check still cannot open a shell in Explorer. Fails closed when
+    /// the daemon is unreachable or answers with anything but "builder".
+    async fn require_builder_mode() -> Result<(), String> {
+        let state = crate::ipc::send_ipc_request(
+            "intentd".into(),
+            "presentation.mode_get".into(),
+            serde_json::json!({}),
+        )
+        .await
+        .map_err(|_| {
+            "Terminalen kræver Builder Mode, og tilstanden kunne ikke bekræftes".to_string()
+        })?;
+        if builder_mode_from(&state) {
+            Ok(())
+        } else {
+            Err("Terminalen findes kun i Builder Mode".into())
+        }
+    }
+
+    pub(crate) fn builder_mode_from(state: &serde_json::Value) -> bool {
+        state.get("mode").and_then(|mode| mode.as_str()) == Some("builder")
+    }
+
     #[tauri::command]
     pub async fn terminal_create(
         window: WebviewWindow,
@@ -104,6 +129,7 @@ mod terminal_commands {
         cols: u16,
         rows: u16,
     ) -> Result<SessionInfo, String> {
+        require_builder_mode().await?;
         let profile = ShellProfile::for_current_user().map_err(|error| error.to_string())?;
         state
             .manager()?
@@ -209,4 +235,25 @@ pub fn run() {
     builder
         .run(tauri::generate_context!())
         .expect("failed to run EiraOS desktop application");
+}
+
+#[cfg(all(test, unix))]
+mod builder_gate_tests {
+    use super::terminal_commands::builder_mode_from;
+    use serde_json::json;
+
+    #[test]
+    fn only_an_explicit_builder_answer_opens_the_terminal() {
+        assert!(builder_mode_from(&json!({"mode": "builder"})));
+        for state in [
+            json!({"mode": "explorer"}),
+            json!({"mode": "normal"}),
+            json!({"mode": "BUILDER"}),
+            json!({"mode": true}),
+            json!({}),
+            json!(null),
+        ] {
+            assert!(!builder_mode_from(&state), "{state} must not open a shell");
+        }
+    }
 }

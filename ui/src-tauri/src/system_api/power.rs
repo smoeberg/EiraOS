@@ -146,6 +146,9 @@ pub trait PowerAdapter: Send + Sync {
     fn perform(&self, action: PowerAction) -> BoxFuture<'_, Result<(), EiraError>>;
 }
 
+/// Executor for power actions. Not reachable from the UI: it is kept for the
+/// Gate-driven executor that will call it after consent and authorization.
+#[cfg_attr(not(test), allow(dead_code))]
 pub async fn request_action(
     adapter: &dyn PowerAdapter,
     input: PowerActionInput,

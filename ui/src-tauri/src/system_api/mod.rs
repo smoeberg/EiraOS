@@ -58,7 +58,9 @@ pub struct EiraRequest {
     pub api_version: String,
     pub request_id: String,
     pub operation: String,
+    /// Part of the v1 contract; no operation currently exposed takes input.
     #[serde(default)]
+    #[allow(dead_code)]
     pub input: Value,
 }
 
@@ -74,11 +76,7 @@ pub struct EiraResponse {
 }
 
 /// Operations this build implements. Anything else fails closed.
-pub const OPERATIONS: &[&str] = &[
-    "system.capabilities",
-    "power.get_status",
-    "power.request_action",
-];
+pub const OPERATIONS: &[&str] = &["system.capabilities", "power.get_status"];
 
 static NEXT_OPERATION: AtomicU64 = AtomicU64::new(1);
 
@@ -132,16 +130,13 @@ impl SystemApi {
                 "operations": OPERATIONS,
             })),
             "power.get_status" => to_value(self.power.status().await),
-            "power.request_action" => {
-                let input: power::PowerActionInput = serde_json::from_value(request.input.clone())
-                    .map_err(|_| {
-                        EiraError::new(
-                            ErrorCode::InvalidArgument,
-                            "Ugyldig handling; forventede poweroff, reboot eller suspend",
-                        )
-                    })?;
-                to_value(power::request_action(self.power.as_ref(), input).await)
-            }
+            // Turning the machine off is a protected action. It must arrive as
+            // an intention through the Gate (Gate Kernel 1.0) and never as a
+            // direct UI call. Until the Gate exists this fails closed.
+            "power.request_action" => Err(EiraError::new(
+                ErrorCode::Unsupported,
+                "Sluk, genstart og dvale udføres kun via en bekræftet intention gennem Gaten",
+            )),
             other => Err(EiraError::new(
                 ErrorCode::Unsupported,
                 format!("Operationen {other:?} findes ikke i EiraSystemAPI v1"),
@@ -182,7 +177,7 @@ impl power::PowerAdapter for UnavailablePower {
 
 #[cfg(test)]
 mod tests {
-    use super::power::{Availability, mock_power};
+    use super::power::{mock_power, Availability};
     use super::*;
     use serde_json::json;
 
@@ -214,7 +209,7 @@ mod tests {
             .await;
         assert!(err.result.is_none());
         let error = err.error.unwrap();
-        assert_eq!(error.code, ErrorCode::ConfirmationRequired);
+        assert_eq!(error.code, ErrorCode::Unsupported);
         assert_eq!(error.operation_id, err.operation_id);
     }
 
@@ -238,7 +233,7 @@ mod tests {
                 json!({"action": "format_disk", "confirmed": true}),
             ))
             .await;
-        assert_eq!(bad.error.unwrap().code, ErrorCode::InvalidArgument);
+        assert_eq!(bad.error.unwrap().code, ErrorCode::Unsupported);
 
         let extra = api()
             .handle(request(
@@ -246,7 +241,21 @@ mod tests {
                 json!({"action": "poweroff", "confirmed": true, "force": true}),
             ))
             .await;
-        assert_eq!(extra.error.unwrap().code, ErrorCode::InvalidArgument);
+        assert_eq!(extra.error.unwrap().code, ErrorCode::Unsupported);
+    }
+
+    #[tokio::test]
+    async fn power_actions_never_execute_from_a_direct_call() {
+        // Even a fully confirmed, well-formed request must not reach logind
+        // without the Gate.
+        let response = api()
+            .handle(request(
+                "power.request_action",
+                json!({"action": "poweroff", "confirmed": true}),
+            ))
+            .await;
+        assert_eq!(response.error.unwrap().code, ErrorCode::Unsupported);
+        assert!(!OPERATIONS.contains(&"power.request_action"));
     }
 
     #[tokio::test]
