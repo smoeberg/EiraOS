@@ -2,6 +2,9 @@
 
 pub mod ffi;
 
+#[cfg(all(feature = "ipc", target_os = "linux"))]
+pub mod ipc;
+
 use serde_json::{Map, Value};
 use sha3::{Digest, Sha3_256};
 use std::collections::HashSet;
