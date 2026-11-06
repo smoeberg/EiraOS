@@ -154,8 +154,8 @@ else
 fi
 if [[ $CI_UNATTENDED -eq 1 ]]; then
     sed -i -E 's/^set timeout=.*/set timeout=1/' "$STAGE/grub.cfg"
-    sed -i -E '0,/^([[:space:]]*linux[[:space:]].*) ---/s//\1 autoinstall ---/' "$STAGE/grub.cfg"
-    grep -q ' autoinstall ---' "$STAGE/grub.cfg" || {
+    sed -i -E '0,/^([[:space:]]*linux[[:space:]].*) ---/s//\1 autoinstall console=tty0 console=ttyS0,115200 ---/' "$STAGE/grub.cfg"
+    grep -q ' autoinstall console=tty0 console=ttyS0,115200 ---' "$STAGE/grub.cfg" || {
         echo "Could not add 'autoinstall' to the kernel command line" >&2
         exit 65
     }

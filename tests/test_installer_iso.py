@@ -208,7 +208,7 @@ def test_build_iso_ci_variant_is_unattended_and_separately_named(tmp_path):
     assert "interactive-sections: []" in autoinstall
     assert "set timeout=1" in grub
     # Only the default entry boots straight into the unattended install.
-    assert grub.count(" autoinstall ---") == 1
+    assert grub.count(" autoinstall console=tty0 console=ttyS0,115200 ---") == 1
 
 
 def test_build_iso_requires_a_base_iso(tmp_path):

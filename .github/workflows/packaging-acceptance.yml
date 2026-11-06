@@ -174,7 +174,7 @@ jobs:
       - name: Install QEMU and enable KVM
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf socat netpbm
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -185,7 +185,12 @@ jobs:
         run: |
           cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
           qemu-img create -f qcow2 disk.qcow2 40G
-          timeout 75m qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 8192 \
+          mkdir -p screens
+          # A screenshot every 5 minutes shows where an install stalls.
+          ( for n in $(seq -w 1 15); do sleep 300; [ -S qemu-mon.sock ] || break
+              echo "screendump screens/install-$n.ppm" | socat - UNIX-CONNECT:qemu-mon.sock >/dev/null 2>&1
+            done ) &
+          timeout 75m qemu-system-x86_64 -enable-kvm -monitor unix:qemu-mon.sock,server,nowait -machine q35 -cpu host -smp 4 -m 8192 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
             -drive file=disk.qcow2,if=virtio,format=qcow2 \
@@ -194,6 +199,7 @@ jobs:
             -serial file:install-serial.log -no-reboot || status=$?
           echo "installer VM exited with ${status:-0} (124 = timeout)"
           tail -c 20000 install-serial.log | tr -d '\r' || true
+          for f in screens/*.ppm; do [ -f "$f" ] && pnmtopng "$f" > "${f%.ppm}.png" && rm "$f"; done
           [ "${status:-0}" -eq 0 ]
           ! grep -aq "EIRA-CI INSTALL FAILED" install-serial.log
 
@@ -217,5 +223,6 @@ jobs:
             install-serial.log
             boot-serial.log
             acceptance.txt
+            screens/*.png
           if-no-files-found: ignore
           retention-days: 14
