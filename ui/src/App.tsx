@@ -5,6 +5,7 @@ import {
   type ProposalRecord,
 } from "./components/SpatialCanvas";
 import { IntentBar } from "./components/IntentBar";
+import { PowerMenu } from "./components/PowerMenu";
 import { SituationUI } from "./components/SituationUI";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { VeritasHUD, type VeritasResult } from "./components/VeritasHUD";
@@ -97,6 +98,7 @@ export default function App() {
             <span aria-hidden />
             Lokal Unix IPC
           </div>
+          <PowerMenu />
         </div>
       </header>
       <IntentBar onExecuted={refreshAfterIntent} />

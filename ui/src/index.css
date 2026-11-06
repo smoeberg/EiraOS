@@ -645,3 +645,73 @@ button {
     box-shadow: none;
   }
 }
+
+/* Power menu (EiraSystemAPI: UPower + systemd-logind) */
+.power-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.battery-status {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.power-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  z-index: 30;
+}
+
+.power-popover > button,
+.power-confirm button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #e6edf3;
+  font: inherit;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.power-popover > button:hover:not(:disabled),
+.power-popover > button:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--blue-soft);
+}
+
+.power-popover > button:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.power-confirm p,
+.power-note {
+  margin: 4px 6px 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.power-confirm div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.power-confirm button.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
