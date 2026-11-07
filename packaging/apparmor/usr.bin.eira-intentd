@@ -19,6 +19,22 @@
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
 
+  # Gate 1.1 power executor: fixed busctl call to systemd-logind only.
+  /usr/bin/busctl ix,
+  /run/dbus/system_bus_socket rw,
+  /etc/machine-id r,
+  /var/lib/dbus/machine-id r,
+  @{PROC}/@{pid}/{cmdline,comm,stat,status,cgroup,sessionid,loginuid} r,
+  dbus send bus=system path=/org/freedesktop/DBus interface=org.freedesktop.DBus
+       member={Hello,AddMatch,RemoveMatch,GetNameOwner,NameHasOwner,StartServiceByName}
+       peer=(name=org.freedesktop.DBus),
+  dbus send bus=system path=/org/freedesktop/login1
+       interface=org.freedesktop.login1.Manager
+       member={CanPowerOff,CanReboot,CanSuspend,PowerOff,Reboot,Suspend}
+       peer=(name=org.freedesktop.login1),
+  # Replies come from unique bus names; dbus-daemon and logind are unconfined.
+  dbus receive bus=system peer=(label=unconfined),
+
   network unix stream,
   deny network inet,
   deny network inet6,

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-GATE_VERSION = "1.0"
+GATE_VERSION = "1.1"  # 1.1: EiraSystemAPI family (ADR-0002)
 
 
 class Decision(str, Enum):

@@ -23,9 +23,9 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
-from app.gate import edp
+from app.gate import edp, system
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
-from app.gate.executors import ExecutorRegistry, default_registry
+from app.gate.executors import ExecutorRegistry, ExecutorUnavailable, default_registry
 from app.gate.policy import (
     POLICY_VERSION,
     ActionPolicy,
@@ -242,19 +242,31 @@ class Gate:
     def _layers_1_to_4(
         self, raw: str | bytes | None, origin: Origin, actor: dict[str, Any] | None
     ) -> tuple[dict[str, Any], ActionPolicy]:
-        envelope = edp.layer1_syntax(raw)
-        edp.layer2_schema(envelope)
-        edp.layer3_semantics(envelope, self.store)
+        """Lag 1–4 for begge handlingsfamilier (ADR-0002).
+
+        Returns the action in the gate's common shape: an EDP envelope as is,
+        or an EiraSystemAPI request as its view. Everything after this point
+        is the same code for both families.
+        """
+        obj = edp.parse_json(raw)
+        if system.is_system_request(obj):
+            system.syntax(obj)
+            system.schema(obj)
+            action = system.view(obj, actor["identity"] if actor else "")
+        else:
+            action = edp.edp_syntax(obj)
+            edp.layer2_schema(action)
+        edp.layer3_semantics(action, self.store)
         # Layer 4 — security policy. Degraded transport changes nothing here.
-        policy = policy_for(envelope["action"]["type"])
+        policy = policy_for(action["action"]["type"])
         if origin not in policy.allowed_origins:
             raise LayerFailure(
                 GateCode.E_POLICY, f"{policy.action_type} may not be proposed by {origin.value}"
             )
-        check_limits(policy, envelope["action"]["content"])
-        if actor is None or not self.store.is_member(envelope["conversation_id"], actor["identity"]):
-            raise LayerFailure(GateCode.E_POLICY, "conversation is outside the user's domain")
-        return envelope, policy
+        check_limits(policy, action["action"]["content"])
+        if actor is None or not self.store.is_member(action["conversation_id"], actor["identity"]):
+            raise LayerFailure(GateCode.E_POLICY, "outside the user's domain")
+        return action, policy
 
     def _layer_5_consent(
         self, policy: ActionPolicy, record: dict[str, Any], session_id: str | None, *, at_proposal: bool
@@ -347,6 +359,15 @@ class Gate:
         executor = self._registry.executor(action_type)
         try:
             outcome = self._registry.call(ticket, envelope, content_hash)
+        except ExecutorUnavailable as error:
+            # Checked before any side effect: nothing happened, so pending again.
+            self.store.release(action_id, execution_id)
+            return self._fail(
+                "confirm",
+                record["raw"],
+                LayerFailure(GateCode.E_EXECUTOR_UNAVAILABLE, str(error)),
+                actor,
+            )
         except Exception as error:  # noqa: BLE001 - outcome is unknown, never "success"
             self.store.finish(action_id, execution_id, "unknown", {"error": type(error).__name__})
             return self._partial(record, execution_id, "unknown", "executor failed; outcome unknown", actor)

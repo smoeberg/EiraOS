@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from app.gate import system
 from app.gate.policy import Reversibility, policy_for
 
 RENDERER_VERSION = "1"
@@ -298,6 +299,14 @@ def render(envelope: dict[str, Any], actor_identity: str, lang: str) -> Renderin
     t = _T[lang]
     action = envelope["action"]
     action_type = action["type"]
+    if action_type.startswith(system.TYPE_PREFIX):
+        # EiraSystemAPI family: no conversation and no recipients; the
+        # operation acts on this device for the session's own user.
+        operation = action_type[len(system.TYPE_PREFIX) :]
+        lines = system.sentence(operation, action["content"], lang)
+        lines.append(t[policy_for(action_type).reversibility.value])
+        text = "\n".join(lines)
+        return Rendering(text, lang, RENDERER_VERSION, rendering_hash(text, lang, RENDERER_VERSION))
     head = f"{_sentence(action_type, action['content'], lang)} {t['in'].format(conversation=_ref(envelope['conversation_id']))}."
     others = [p for p in envelope["participants"] if p["identity"] != actor_identity]
     lines = [head]

@@ -47,6 +47,8 @@ override_dh_auto_install:
 		debian/eira-os-core/usr/lib/eira/eira-session-policy
 	install -m 0644 packaging/session/eira-session-policy.service \
 		debian/eira-os-core/usr/lib/systemd/system/eira-session-policy.service
+	install -D -m 0644 packaging/polkit/50-eira-power.rules \
+		debian/eira-os-core/usr/share/polkit-1/rules.d/50-eira-power.rules
 	install -d debian/eira-os-core/etc/apparmor.d
 	install -m 0644 packaging/apparmor/usr.bin.eira-* \
 		debian/eira-os-core/etc/apparmor.d/

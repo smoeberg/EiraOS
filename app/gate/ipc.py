@@ -98,6 +98,21 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             raise JsonRpcError(-32004, "unknown action")
         return found
 
+    def capabilities(_params: dict[str, Any]) -> dict[str, Any]:
+        """Read-only: which families and system operations the gate accepts,
+        and whether logind would allow each power action right now."""
+        from app.gate.executors import POWER_METHODS, PowerExecutor
+        from app.gate.system import OPERATIONS
+
+        power = active._registry.executor("system:power.request_action")
+        probe = power if isinstance(power, PowerExecutor) else None
+        return {
+            "families": ["edp", "eira_system"],
+            "system_operations": sorted(OPERATIONS),
+            "power": {action: probe.availability(action) if probe else "error" for action in POWER_METHODS},
+        }
+
+    server.register("gate.capabilities", capabilities)
     server.register("gate.propose", propose)
     server.register("gate.consent", consent)
     server.register("gate.confirm", confirm)

@@ -25,6 +25,10 @@ class DirectCallRejected(PermissionError):
     """An executor was called without a valid, unused gate ticket."""
 
 
+class ExecutorUnavailable(RuntimeError):
+    """The executor checked, before any side effect, that it cannot act now."""
+
+
 @dataclass(frozen=True)
 class GateTicket:
     action_id: str
@@ -201,6 +205,80 @@ class ConversationOutboxExecutor(Executor):
         )
 
 
+# --- EiraSystemAPI executors (Gate 1.1) --------------------------------------
+#
+# EiraOS does not replace Ubuntu's services (Platform Principles): power goes
+# to systemd-logind over the system D-Bus. The call is a fixed argv to
+# busctl — no shell, no command assembled from input — and non-interactive,
+# so logind's own polkit check decides. The package grants the eira service
+# user exactly the login1 power actions (packaging/polkit/50-eira-power.rules).
+
+Runner = Callable[[list[str]], tuple[int, str]]
+
+LOGIN1 = ["org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager"]
+POWER_METHODS = {
+    "poweroff": ("CanPowerOff", "PowerOff"),
+    "reboot": ("CanReboot", "Reboot"),
+    "suspend": ("CanSuspend", "Suspend"),
+}
+
+
+def busctl_runner(argv: list[str]) -> tuple[int, str]:
+    import subprocess
+
+    completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        ["/usr/bin/busctl", "--system", "--timeout=10", *argv],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+        check=False,
+    )
+    return completed.returncode, completed.stdout.strip()
+
+
+class PowerExecutor(Executor):
+    action_type = "system:power.request_action"
+    success_transitions = frozenset({("executing", "requested")})
+
+    def __init__(self, runner: Runner = busctl_runner) -> None:
+        self._runner = runner
+
+    def availability(self, action: str) -> str:
+        """logind's answer: yes | challenge | no | na, or error."""
+        can, _ = POWER_METHODS[action]
+        try:
+            code, out = self._runner(["call", *LOGIN1, can])
+        except Exception:  # noqa: BLE001 - any failure means "cannot tell"
+            return "error"
+        if code != 0:
+            return "error"
+        # busctl prints: s "yes"
+        answer = out.split(" ", 1)[1].strip('"') if out.startswith('s "') else "error"
+        return answer if answer in {"yes", "challenge", "no", "na"} else "error"
+
+    def run(self, envelope: dict[str, Any], execution_id: str) -> ExecutorResult:
+        action = envelope["action"]["content"]["action"]
+        answer = self.availability(action)
+        if answer != "yes":
+            # "challenge" would need interactive polkit auth, which a daemon
+            # never triggers; anything else means logind refuses or is absent.
+            raise ExecutorUnavailable(f"logind answers {answer!r} to {action}")
+        _, method = POWER_METHODS[action]
+        code, _ = self._runner(["call", *LOGIN1, method, "b", "false"])
+        if code != 0:
+            return ExecutorResult(
+                "failed", ("executing", "failed"), {"operation": "power.request_action", "action": action}
+            )
+        # logind accepted the request; the machine now goes down. Honest
+        # state: requested, not "done".
+        return ExecutorResult(
+            "succeeded",
+            ("executing", "requested"),
+            {"operation": "power.request_action", "action": action, "visible_state": "requested"},
+        )
+
+
 def default_registry(db_path: str) -> ExecutorRegistry:
     def connect() -> sqlite3.Connection:
         return sqlite3.connect(db_path, timeout=10)
@@ -208,4 +286,5 @@ def default_registry(db_path: str) -> ExecutorRegistry:
     registry = ExecutorRegistry()
     for action_type in VISIBLE_STATE:
         registry.register(ConversationOutboxExecutor(action_type, connect))
+    registry.register(PowerExecutor())
     return registry

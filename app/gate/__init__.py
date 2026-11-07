@@ -1,4 +1,4 @@
-"""Gate Kernel 1.0 — EiraOS' autoritative sikkerhedsgrænse.
+"""Gate Kernel 1.1 — EiraOS' autoritative sikkerhedsgrænse.
 
 Normativ tekst: ``specs/GATE-KERNEL-1.0.md``. "AI'en foreslår. Gaten afgør.
 Systemet udfører." Intet modeloutput, ingen adapter og ingen daemon må udføre

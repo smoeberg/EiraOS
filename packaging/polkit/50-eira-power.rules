@@ -1,0 +1,20 @@
+// EiraOS: the intentd service user may ask logind for exactly the power
+// actions the Gate executes (Gate 1.1, ADR-0002: least privilege). Nothing
+// else is granted, and not the *-ignore-inhibit variants: an application
+// that inhibits shutdown (unsaved work, updates) still wins.
+// The decision to power off is the user's, through gate.consent and
+// gate.confirm; this rule only lets the executor carry it out.
+polkit.addRule(function (action, subject) {
+    var allowed = [
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.suspend",
+        "org.freedesktop.login1.suspend-multiple-sessions"
+    ];
+    if (subject.user === "eira" && allowed.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

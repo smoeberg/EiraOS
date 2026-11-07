@@ -87,6 +87,17 @@ REGISTRY: dict[str, ActionPolicy] = {
         ),
         # Emitted only by an authoritative payment provider, never proposed.
         ActionPolicy("value_transfer_confirmed", Reversibility.IRREVERSIBLE, frozenset()),
+        # --- EiraSystemAPI family (Gate 1.1, ADR-0002) ---------------------
+        # Shutting down or restarting loses unsaved work in open programs,
+        # and even suspend cannot be taken back: irreversible, so the user
+        # consents to exactly this, and the right must be granted for the
+        # device (no model can grant it).
+        ActionPolicy(
+            "system:power.request_action",
+            Reversibility.IRREVERSIBLE,
+            _BOTH,
+            required_assurance="eid_low",
+        ),
     )
 }
 
