@@ -42,7 +42,7 @@ def test_socket_mode_is_0660(isolated_runner: Path) -> None:
     # Minimal dev/CI images may lack the eira group or permission to chown to it.
     # In that case socket setup falls back to the current GID (root's GID in dev).
     try:
-        eira_gid = grp.getgrnam("eira").gr_gid
+        eira_gid = grp.getgrnam("eira-clients").gr_gid
     except KeyError:
         eira_gid = os.getgid()
     assert info.st_gid in {eira_gid, os.getgid()}

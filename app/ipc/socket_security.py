@@ -109,8 +109,15 @@ def secure_socket_path(socket_path: str) -> None:
         os.chmod(socket_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
+# Socket access group. The desktop user is a member of this group, never of
+# "eira" (the daemons' own group, which owns their data): a user who may talk
+# to the daemons must not be able to write the gate's state (ADR-0003,
+# "substratet beskytter Eira-laget").
+SOCKET_GROUP = "eira-clients"
+
+
 def setup_unix_socket(
-    socket_path: str, mode: int = 0o660, group: str = "eira"
+    socket_path: str, mode: int = 0o660, group: str = SOCKET_GROUP
 ) -> socket.socket:
     """Create a Unix socket with deterministic mode and group ownership.
 
@@ -181,9 +188,10 @@ def validate_peer_credentials(
         allowed_uids = _parse_id_allowlist("EIRA_IPC_ALLOWED_UIDS", {os.getuid()})
     if allowed_gids is None:
         default_gids = {os.getgid()}
-        eira_gid = resolve_group_gid("eira")
-        if eira_gid is not None:
-            default_gids.add(eira_gid)
+        for name in (SOCKET_GROUP, "eira"):
+            gid = resolve_group_gid(name)
+            if gid is not None:
+                default_gids.add(gid)
         allowed_gids = _parse_id_allowlist("EIRA_IPC_ALLOWED_GIDS", default_gids)
 
     if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):

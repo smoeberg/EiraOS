@@ -31,7 +31,7 @@ describe("IntentBar", () => {
       if (daemon === "intentd" && method === "intent.execute") {
         throw new Error(
           JSON.stringify({
-            code: -32010,
+            code: -32040,
             message: "E_GATE_REQUIRED",
             data: {
               method: "intent.execute",

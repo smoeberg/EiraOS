@@ -10,6 +10,8 @@ After=eira-stated.service
 Type=simple
 User=eira
 Group=eira
+# May hand its socket to the client group (not a data group).
+SupplementaryGroups=eira-clients
 WorkingDirectory=/usr/lib/eira-os
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
@@ -20,7 +22,7 @@ ExecStart=/usr/bin/eira-intentd
 Restart=always
 RestartSec=2s
 RuntimeDirectory=eira
-RuntimeDirectoryMode=0770
+RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes
 StateDirectory=eira
 StateDirectoryMode=0770
