@@ -279,9 +279,14 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
 
 **Mutationstjek:** Hver af disse kontroller er fjernet én ad gangen, og testsuiten fejlede hver gang: samtykke, hash-binding, autorisation lige før udførelse, idempotens, policy-fingeraftryk, verifikation af tilstandsovergangen og rettigheder.
 
-**Kendte begrænsninger (åbne):**
-1. **Den gamle vej `intent.confirm` → `app/executor.py`** findes stadig uden om gaten. Den er en prototype uden eksterne effekter, men bryder §2, indtil den er migreret til gaten. Det er næste PR.
-2. **Audit ligger i en append-only, hash-kædet SQLite-tabel** (`gate_audit`), ikke som temporale kanter i `graphd`, fordi `graphd` endnu ikke har et skrive-API.
-3. **Gaten kan ikke skelne processer fra hinanden.** En IPC-kalder angiver selv `origin` (`user`/`model`). At skelne UI-processen fra modelprocessen kræver identitet pr. proces (peer-credentials), og indtil da er beskyttelsen policyen pr. origin plus session og assurance.
-4. **Identitetsbinding, medlemskab og rettigheder** (`gate_identities`, `gate_members`, `gate_grants`) har endnu intet administrations-API. De skal provisioneres af `identityd`.
-5. **Den eneste executor er conversation-outboxen** for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
+**Kendte begrænsninger (åbne), ordnet efter alvor:**
+
+> **Trusselsmodel i dag:** Lag 5–6 beskytter mod *fejl* (en model, der foreslår forkert, en UI-bug, en forældet plan), ikke mod en *kompromitteret lokal proces*. Grunden er, at kalderens identitet endnu ikke kommer fra forbindelsen.
+
+1. **Kalderens identitet er påstået, ikke bevist.** Både `session_id` og `origin` (`user`/`model`) sendes af IPC-kalderen. En proces i gruppen `eira`, der kender et session-id, kan derfor handle som brugeren, og den kan kalde sig `user`. Løsningen er, at identiteten kommer fra forbindelsen: `SO_PEERCRED` plus en signeret sessionstoken, som UI'en får ved login, og som modelprocessen aldrig ser. Det skal løses sammen med punkt 4, fordi `identityd` har samme behov. Det sker i PR'en efter executors.
+2. **Audit-kæden mangler et eksternt anker.** `gate_audit` er hash-kædet og append-only i en SQLite-fil, som `intentd` selv skriver. Kæden afslører ændringer foretaget af andre, men ikke at daemonen selv genskriver hele kæden. Kædens head-hash skal derfor jævnligt skrives et sted, processen ikke ejer: journald med Forward Secure Sealing, en append-only fil ejet af en anden UID, TPM eller `graphd`, når den får et skrive-API.
+3. **Der findes ingen kanonisk, menneskelæsbar gengivelse af det, brugeren samtykker til.** Gaten kender kun konvolutten og dens hash. Hvis samtykkeskærmen viser modellens prosa, samtykker brugeren til en parafrase. Løsningen er en deterministisk renderer i gaten, der kun læser konvolutten, aldrig modellen, og hvis tekst er det, brugeren ser. Rendererens version og tekst skal indgå i det, samtykket binder til.
+4. **Identitet, medlemskab og rettigheder** (`gate_identities`, `gate_members`, `gate_grants`) har intet administrations-API. De skal provisioneres af `identityd`, og det kræver procesidentitet (punkt 1).
+5. **Den gamle vej `intent.confirm` → `app/executor.py`** findes stadig uden om gaten. Den er en prototype, der kun skriver til `audit_events` og ikke rører omverdenen, men den bryder §2. Den skal *omdirigeres*, ikke slettes: den returnerer `E_GATE_REQUIRED` med et pejl til `gate.propose`, og en test beviser, at stien ikke kan nå `execute_intent`. Det er næste PR.
+
+**Executor-status:** Den eneste executor er conversation-outboxen for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
