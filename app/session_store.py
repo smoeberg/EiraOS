@@ -8,7 +8,9 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 def get_db_path() -> str:
-    path = os.environ.get("EIRA_DB_PATH", "data/eira.db")
+    # EIRA_APP_DB is what the installed units set (/data/eira-app.db, allowed
+    # by AppArmor); the relative default is only for a development checkout.
+    path = os.environ.get("EIRA_DB_PATH") or os.environ.get("EIRA_APP_DB") or "data/eira.db"
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     return path
 
