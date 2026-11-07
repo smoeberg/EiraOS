@@ -322,3 +322,40 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
 6. Lav audit-ankeret (journald FSS og fleet-vidne).
 
 **Executor-status:** Den eneste executor er conversation-outboxen for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
+
+
+---
+
+## Bilag B — Gate 1.1: to handlingsfamilier (ADR-0002)
+
+**Version:** `gate` i audit-loggen er `"1.1"`. Det er en minor-ændring (§10), fordi valideringsrækkefølgen og beslutningsmodellen er uændrede.
+
+| Familie | Genkendes på | Lag 1–2 | Omfang |
+|---|---|---|---|
+| EDP | `"edp": "1.0"` | EDP 1.0-schemaet (§3.1–3.2) | `conversation_id` |
+| EiraSystemAPI | `"eira_system": "1"` | `app/gate/system.py`: felterne `id`, `operation`, `input` og `created_at`. Listen over operationer er lukket, input har et typet skema, og ekstra felter afvises | `device:local` |
+
+**Afvisninger i lag 1–2:** En handling med begge nøgler afvises med `E_SYNTAX`, og det samme gør en handling med ingen af dem. En ukendt operation eller et felt som `rights` eller `reversibility` i forslaget afvises med `E_SCHEMA`.
+
+**Fra lag 3 er koden den samme for begge familier.** Systemforespørgslen omsættes til gatens fælles form: den handlende er sessionens bruger og aldrig et felt i forespørgslen. Indholdshashet binder derfor handlingen til den bruger, der foreslog den. Samme policy-registry, med nøgler som `system:power.request_action`. Samme samtykke, renderer, autorisation, atomare claim, recovery og audit-kæde.
+
+**Operationer i 1.1:**
+
+| Operation | Input | Reversibilitet | Assurance | Executor |
+|---|---|---|---|---|
+| `power.request_action` | `{"action": "poweroff" \| "reboot" \| "suspend"}` | irreversible | `eid_low` | `PowerExecutor` |
+
+`PowerExecutor` kalder systemd-logind over system-D-Bus med et fast argv til `busctl` (ingen shell) og `interactive=false`. Før handlingen spørger den `Can<Action>`, og svarer logind ikke `"yes"`, afvises handlingen med `E_EXECUTOR_UNAVAILABLE` og står igen som `pending`. Lykkes kaldet, er den ærlige tilstand `requested`. Ved et crash bliver tilstanden `unknown`, og handlingen prøves aldrig automatisk igen.
+
+**Mindst mulige rettigheder:**
+- `packaging/polkit/50-eira-power.rules` giver servicebrugeren `eira` netop de seks login1-power-handlinger og ikke `*-ignore-inhibit`. Programmer, der blokerer nedlukning, vinder altså stadig.
+- AppArmor-profilen for `intentd` tillader kun `busctl` og D-Bus-kald til `login1.Manager`-metoderne `Can*`, `PowerOff`, `Reboot` og `Suspend`.
+- Retten `system:power.request_action` på `device:local` skal tildeles af policy eller `identityd`. Et forslag kan ikke bære rettigheder.
+
+**Tauri `eira_system`:** `power.request_action` fejler lukket med `UNSUPPORTED`. Det bevises af Rust-testen `power_actions_never_execute_from_a_direct_call`. Tauri beholder kun læseoperationer.
+
+**`gate.capabilities`** er en læseoperation. Den viser familierne, systemoperationerne og logind's svar på `Can*`. VM-acceptancetesten kræver `poweroff` og `reboot` = `"yes"` på den installerede maskine, hvilket beviser, at AppArmor, polkit og logind spiller sammen. Selve nedlukningen køres ikke i CI.
+
+**Åbent:**
+1. Ingen tildeler i dag retten til `device:local` på en installeret maskine. Gaten fejler lukket, indtil `identityd` provisionerer den (bilag A, punkt 4).
+2. CEL-constraints fra den tidligere `intent.execute` er endnu ikke foldet ind i lag 4.

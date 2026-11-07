@@ -475,7 +475,9 @@ def test_every_decision_is_audited_and_pass_only_after_the_result(world):
         ("confirm", "PASS", None),
     ]
     assert entries[-1]["layer"] == 8 and entries[-1]["participant"] == ANNE
-    assert all(e["gate"] == "1.0" and e["policy_version"] == gate_policy.POLICY_VERSION for e in entries)
+    from app.gate.errors import GATE_VERSION
+
+    assert all(e["gate"] == GATE_VERSION and e["policy_version"] == gate_policy.POLICY_VERSION for e in entries)
     assert world.store.verify_audit_chain()
 
 

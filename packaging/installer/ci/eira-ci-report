@@ -70,6 +70,25 @@ reply = json.loads(s.makefile().readline())
 result = reply["result"]
 assert result["decision"] == "REJECT" and result["error"] == "E_SYNTAX", reply
 PY
+# Gate 1.1 power executor on the installed system: AppArmor lets intentd run
+# busctl, polkit grants the eira user the login1 power actions, and logind
+# answers "yes". Read-only (CanPowerOff etc.); nothing is shut down.
+check gate-power-capability python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.capabilities",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+power = reply["result"]["power"]
+print("gate power capability:", power)
+assert power["poweroff"] == "yes" and power["reboot"] == "yes", reply
+PY
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
 # Explorer has no escape hatch: EiraOS is the only selectable session.
 check only-eira-session sh -c '[ "$(ls /usr/share/wayland-sessions /usr/share/xsessions 2>/dev/null | grep "\.desktop$")" = "eira-session.desktop" ]'

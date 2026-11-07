@@ -49,8 +49,8 @@ def _reject_constant(name: str) -> None:
     raise ValueError(f"non-standard JSON constant {name}")
 
 
-def layer1_syntax(raw: str | bytes | None) -> dict[str, Any]:
-    """Lag 1: gyldig JSON, EDP-version og obligatoriske felter."""
+def parse_json(raw: str | bytes | None) -> dict[str, Any]:
+    """Lag 1, fælles for begge handlingsfamilier: gyldig JSON-objekt."""
     if raw is None:
         raise LayerFailure(GateCode.E_SYNTAX, "no input (model runtime unavailable?)")
     if isinstance(raw, str):
@@ -67,7 +67,16 @@ def layer1_syntax(raw: str | bytes | None) -> dict[str, Any]:
     except (UnicodeDecodeError, ValueError) as error:
         raise LayerFailure(GateCode.E_SYNTAX, f"invalid JSON: {error}") from None
     if not isinstance(envelope, dict):
-        raise LayerFailure(GateCode.E_SYNTAX, "EDP event must be a JSON object")
+        raise LayerFailure(GateCode.E_SYNTAX, "a gate action must be a JSON object")
+    return envelope
+
+
+def layer1_syntax(raw: str | bytes | None) -> dict[str, Any]:
+    """Lag 1: gyldig JSON, EDP-version og obligatoriske felter."""
+    return edp_syntax(parse_json(raw))
+
+
+def edp_syntax(envelope: dict[str, Any]) -> dict[str, Any]:
     if envelope.get("edp") != "1.0":
         raise LayerFailure(GateCode.E_SYNTAX, 'edp must be "1.0"')
     for name in ("id", "conversation_id", "participants", "action"):
