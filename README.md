@@ -1,4 +1,4 @@
-# 🐧 EiraOS — The Cognitive Overlay for Ubuntu 24.04 LTS
+# 🐧 EiraOS — The Cognitive Overlay for Ubuntu 26.04 LTS
 
 EiraOS er udviklet specifikt som det **kognitive og intent-drevne lag oven på Ubuntu Linux**:
 
@@ -10,7 +10,7 @@ EiraOS er udviklet specifikt som det **kognitive og intent-drevne lag oven på U
 │                      EiraOS Core System Daemons                         │
 │  (stated, identityd, fleetd, veritasd, intentd, graphd + 3 prototyper)  │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                   Ubuntu 24.04 LTS Substrate / Kernel                   │
+│                   Ubuntu 26.04 LTS Substrate / Kernel                   │
 │   (Linux Kernel, Systemd, AppArmor, Hardware Drivers, APT / Snap)       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -54,7 +54,7 @@ Tauri-shellen læser også `EIRA_SOCKET_DIR`).
 
 ## Krav
 
-- Linux med Unix domain sockets (målplatform: Ubuntu 24.04 LTS). Daemon-IPC'en kræver `SO_PEERCRED`
+- Linux med Unix domain sockets (målplatform: Ubuntu Desktop 26.04 LTS; installationen er verificeret i en VM, ikke endnu på reference-hardware). Daemon-IPC'en kræver `SO_PEERCRED`
   og virker derfor ikke på Windows i øjeblikket.
 - Python 3.11+
 - Node.js 20+ og Rust (stable) til Tauri-shellen

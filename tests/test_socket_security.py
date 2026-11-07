@@ -84,6 +84,10 @@ def test_default_peer_validation_rejects_unlisted_uid_and_gid():
         validate_peer_credentials(fake)
 
 
+@pytest.mark.skipif(
+    hasattr(os, "getuid") and os.getuid() == 0,
+    reason="root is an explicitly privileged peer by design; run as non-root",
+)
 def test_explicit_allowlist_cannot_be_bypassed_by_current_uid():
     peer = PeerCredentials(pid=2_000_000_000, uid=os.getuid(), gid=os.getgid())
     assert not socket_access_allowed(

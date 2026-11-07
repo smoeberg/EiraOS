@@ -1,0 +1,33 @@
+# EiraOS CI acceptance — fully unattended install in a throwaway VM.
+#
+# ONLY for the CI variant of the ISO (scripts/build_iso.sh --ci-unattended).
+# It wipes the first disk without asking. Never ship this file on a real ISO.
+# Test account: tester / tester (the hash below is not a secret).
+autoinstall:
+  version: 1
+  interactive-sections: []
+  locale: da_DK.UTF-8
+  keyboard:
+    layout: dk
+  timezone: Europe/Copenhagen
+  source:
+    id: ubuntu-desktop-minimal
+  identity:
+    hostname: eira-ci
+    realname: EiraOS CI
+    username: tester
+    password: "$6$eiraciacceptance$Z1xh8X2NnQIRHA//bfmuxT3kma85iFD4u2lrsJzOXhiHYd7SD1OPKJuef5Rm.u0KIaPpfGii1njAEITu3syP6."
+  storage:
+    layout:
+      name: direct
+  updates: security
+  packages:
+    - labwc
+    - xwayland
+  late-commands:
+    - mkdir -p /target/var/lib/eira-install
+    - cp -r /cdrom/eira/. /target/var/lib/eira-install/
+    - curtin in-target --target=/target -- sh /var/lib/eira-install/eira-postinstall.sh
+  error-commands:
+    - sh -c 'echo EIRA-CI INSTALL FAILED > /dev/ttyS0; echo "---- eira-postinstall.log" > /dev/ttyS0; tail -n 150 /target/var/log/eira-postinstall.log > /dev/ttyS0 2>&1; echo "---- end eira-postinstall.log" > /dev/ttyS0; tail -n 60 /var/log/installer/subiquity-server-debug.log > /dev/ttyS0 2>&1; poweroff -f || true'
+  shutdown: poweroff

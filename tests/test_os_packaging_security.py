@@ -170,26 +170,32 @@ def test_debian_manifest_is_complete_and_offline_install_safe() -> None:
     assert '"sha3_256"' in deb_builder
 
 
-def test_iso_builder_targets_noble_and_embeds_local_deb() -> None:
+def test_iso_builder_remasters_ubuntu_installer_and_embeds_local_deb() -> None:
     script = (REPO_ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
-    assert "--distribution noble" in script
-    assert "--mode ubuntu" in script
-    assert "config/packages.chroot/eira-os-core.deb" in script
-    assert "config/includes.chroot/etc/greetd/config.toml" in script
-    assert "config/includes.chroot/etc/labwc/rc.xml" in script
-    assert "config/includes.chroot/etc/labwc/autostart" in script
-    assert '"${REPO_ROOT}/packaging/session/config/greetd/config.toml"' in script
-    assert "install -m 0644 packaging/session/config/greetd/config.toml" not in script
-    assert "ubuntu-desktop-minimal" in script
-    assert "systemctl enable eira.target" in script
-    assert "systemctl enable greetd.service" in script
-    assert "systemctl enable eira-session.service" not in script
-    assert "group_file.write_text" in script
+    # Remaster the official installer; keep Ubuntu's boot records unchanged.
+    assert "-boot_image any replay" in script
+    assert "--base-iso" in script
+    assert '-map "$STAGE/eira" /eira' in script
+    assert '-map "$STAGE/autoinstall.yaml" /autoinstall.yaml' in script
+    assert '"$INSTALLER/eira-firstboot"' in script
+    assert "--ci-unattended" in script
+    assert '"$INSTALLER/eira-postinstall.sh"' in script
+    assert "lb config" not in script
     assert "package_commit_matches_iso_source" in script
-    assert "--mirror-bootstrap https://archive.ubuntu.com/ubuntu" in script
-    assert "--mirror-chroot https://archive.ubuntu.com/ubuntu" in script
     assert "EIRA_SOURCE_COMMIT" in script
     assert "build-info.json" in script
+
+    fetch = (REPO_ROOT / "scripts" / "fetch_ubuntu_iso.sh").read_text(encoding="utf-8")
+    assert "843938DF228D22F7B3742BC0D94AA3F0EFE21092" in fetch
+    assert "VALIDSIG" in fetch
+    assert "sha256sum --check" in fetch
+
+    postinstall = (REPO_ROOT / "packaging" / "installer" / "eira-postinstall.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'apt-get install -y "$SRC/eira-os-core.deb"' in postinstall
+    assert "systemctl enable eira.target" in postinstall
+    assert "systemctl enable eira-firstboot.service" in postinstall
 
 
 def test_session_and_systemd_boot_integration_are_hardened() -> None:
@@ -228,6 +234,9 @@ def test_packaging_scripts_are_executable_shell_files() -> None:
     scripts = (
         REPO_ROOT / "scripts" / "build_deb.sh",
         REPO_ROOT / "scripts" / "build_iso.sh",
+        REPO_ROOT / "scripts" / "fetch_ubuntu_iso.sh",
+        REPO_ROOT / "packaging" / "installer" / "eira-postinstall.sh",
+        REPO_ROOT / "packaging" / "installer" / "eira-firstboot",
         REPO_ROOT / "packaging" / "debian" / "rules",
         REPO_ROOT / "packaging" / "debian" / "postinst",
         REPO_ROOT / "packaging" / "bin" / "eira-daemon",

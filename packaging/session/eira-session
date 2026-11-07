@@ -18,6 +18,9 @@ export EIRA_RUN_DIR
 # WM-valg: labwc (standard, Builder-toggle muligt) eller cage (single-app).
 WM=${EIRA_SESSION_WM:-labwc}
 SHELL_BIN=${EIRA_SHELL_BIN:-/usr/bin/eira-spatial-desktop}
+# labwc reads ~/.config/labwc or /etc/xdg/labwc by default; EiraOS ships its own
+# configuration (rc.xml + autostart that launches eira-shell) and passes it explicitly.
+LABWC_CONFIG=${EIRA_LABWC_CONFIG:-/usr/share/eira-os/labwc}
 
 if [ "$(id -u)" = "0" ]; then
     echo "eira-session: afviser at køre som root" >&2
@@ -51,4 +54,4 @@ if [ "$WM" = "cage" ]; then
     exec cage -- "$SHELL_BIN"
 fi
 
-exec labwc
+exec labwc -C "$LABWC_CONFIG"

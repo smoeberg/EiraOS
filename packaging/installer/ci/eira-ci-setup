@@ -1,0 +1,19 @@
+#!/bin/sh
+# CI-only: prepare the installed system for the boot acceptance check.
+# Runs inside the target from eira-postinstall.sh. Enables GDM autologin for
+# the test account and installs eira-ci-report, which runs once, writes its
+# results to the serial console and powers the VM off.
+set -eu
+
+CI_DIR=$1
+
+install -d -m 0755 /etc/gdm3
+cat > /etc/gdm3/custom.conf <<'EOF'
+[daemon]
+AutomaticLoginEnable=true
+AutomaticLogin=tester
+EOF
+
+install -D -m 0755 "$CI_DIR/eira-ci-report" /usr/lib/eira/eira-ci-report
+install -m 0644 "$CI_DIR/eira-ci-report.service" /etc/systemd/system/eira-ci-report.service
+systemctl enable eira-ci-report.service

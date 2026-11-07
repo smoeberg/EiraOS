@@ -34,13 +34,29 @@ def test_legacy_session_unit_is_not_shipped():
     assert not (REPO / "packaging" / "systemd" / "eira-session.service").exists()
 
 
-def test_build_iso_installs_session_stack_and_enables_greetd():
-    script = _read("scripts/build_iso.sh")
-    assert "labwc" in script
-    assert "greetd" in script
-    assert "systemctl enable greetd.service" in script
-    assert "systemctl enable eira-session.service" not in script
-    assert "gdm3" not in script
+def test_installer_puts_eira_session_on_ubuntu_desktop():
+    autoinstall = _read("packaging/installer/autoinstall.yaml")
+    assert "id: ubuntu-desktop-minimal" in autoinstall
+    assert "- labwc" in autoinstall
+    firstboot = _read("packaging/installer/eira-firstboot")
+    assert "SESSION=eira-session" in firstboot
+    assert "AccountsService" in firstboot
+    rules = _read("packaging/debian/rules")
+    assert "usr/share/wayland-sessions/eira-session.desktop" in rules
+    assert "usr/share/xsessions" not in rules
+    assert "usr/share/eira-os/labwc/autostart" in rules
+    session = _read("packaging/session/eira-session")
+    assert 'exec labwc -C "$LABWC_CONFIG"' in session
+    assert "/usr/share/eira-os/labwc" in session
+    for rel in (
+        "packaging/installer/autoinstall.yaml",
+        "packaging/installer/eira-postinstall.sh",
+        "packaging/installer/eira-firstboot",
+        "scripts/build_iso.sh",
+    ):
+        text = _read(rel)
+        assert "systemctl enable eira-session.service" not in text
+        assert "greetd" not in text
 
 
 def test_ubuntu_installer_uses_supported_deb_package():
