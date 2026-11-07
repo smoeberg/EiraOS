@@ -26,6 +26,8 @@
   /etc/machine-id r,
   /var/lib/dbus/machine-id r,
   @{PROC}/@{pid}/{cmdline,comm,stat,status,cgroup,sessionid,loginuid} r,
+  # Gate consent validity: CLOCK_BOOTTIME within this boot (bilag A pkt. 6).
+  @{PROC}/sys/kernel/random/boot_id r,
   dbus send bus=system path=/org/freedesktop/DBus interface=org.freedesktop.DBus
        member={Hello,AddMatch,RemoveMatch,GetNameOwner,NameHasOwner,StartServiceByName}
        peer=(name=org.freedesktop.DBus),

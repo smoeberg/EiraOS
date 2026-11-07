@@ -304,7 +304,11 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
    - `test_former_bypasses_answer_gate_required_and_never_execute` kører over den rigtige JSON-RPC-server og viser, at hverken `execute_intent`, `stated`-appenderen eller journey-lageret nås.
    - `test_every_intentd_method_is_classified` har en tom `KNOWN_BYPASSES`.
    - Mutationstjek: at gen-eksponere `intent.execute` får testen til at fejle.
-6. **Samtykkets udløb regnes på vægur-tid.** `DEFAULT_CONSENT_TTL` (10 min.) sammenlignes med `utc_now`. Den, der kan stille uret tilbage, kan forlænge et samtykke. Samme fejlklasse som rettighedssættets TTL (EIRA-RIGHTS-SET-1.0 §4.1). Rettelsen er mindre end dér, fordi et samtykke aldrig skal overleve en genstart: gem `(boot_id, CLOCK_BOOTTIME)` ved samtykket, og afvis det, hvis `boot_id` er et andet, eller hvis der er gået mere end TTL'en i `CLOCK_BOOTTIME`. Vægur-tiden bruges da kun til visning og audit.
+6. ~~**Samtykkets udløb regnes på vægur-tid.**~~ **Lukket** med `app/gate/clock.py`. Ved samtykket gemmes `(boot_id, CLOCK_BOOTTIME)`. Lag 5 godtager kun et samtykke fra samme boot, og kun hvis der er gået mindre end TTL'en (10 min.) på `CLOCK_BOOTTIME`, som også tæller tid i suspend. Vægur-tiden (`expires_at`) bruges kun til visning og audit.
+   - Et tilbagestillet ur forlænger ikke samtykket, og et vægur-spring frem (NTP, tidszone) afbryder det ikke.
+   - En genstart af maskinen afslutter samtykket. En genstart af daemonen i samme boot gør ikke.
+   - Rækker uden boot-tidspunkt (fra før migrationen) er aldrig gyldige.
+   - Uden kernens `boot_id` (udviklingsmaskiner uden Linux) er "boot" lig processen. Det er strengere, aldrig løsere.
 
 **Rettet efter review af #136:**
 - *Crash-recovery.* Et crash mellem claim og registreret resultat efterlader handlingen i `executing`. `Gate.recover()` kører ved opstart og lader executorens egen varige tilstand afgøre udfaldet: outbox-rækken findes → `executed`, den findes ikke → `pending` igen, kan ikke afgøres → `unknown`. Executoren køres aldrig igen, og tests dræber processen før og efter outbox-skrivningen.
