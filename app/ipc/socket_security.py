@@ -151,16 +151,17 @@ def setup_unix_socket(
     The target group is used when it exists and can be applied. Minimal
     development/CI environments fall back to the process's current GID.
     """
-    remove_unix_socket(socket_path)
-    os.makedirs(os.path.dirname(socket_path) or ".", exist_ok=True)
-
     target_gid = resolve_group_gid(group)
     if target_gid is None and _strict_socket_group(socket_path):
         # In an installed system a missing group is a broken substrate (or an
         # AppArmor profile that cannot read /etc/group), not a dev setup.
+        # Checked before touching the filesystem.
         raise PermissionError(
             f"Socket group '{group}' cannot be resolved; refusing to create '{socket_path}'"
         )
+    remove_unix_socket(socket_path)
+    os.makedirs(os.path.dirname(socket_path) or ".", exist_ok=True)
+
     fallback_gid = os.getgid()
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old_umask = os.umask(0o117)
