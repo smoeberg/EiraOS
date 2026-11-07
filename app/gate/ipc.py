@@ -63,7 +63,7 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
         ).to_dict()
 
     def status(params: dict[str, Any]) -> dict[str, Any]:
-        found = active.status(_text(params, "action_id"))
+        found = active.status(_text(params, "action_id"), params.get("session_id"))
         if found is None:
             raise JsonRpcError(-32004, "unknown action")
         return found

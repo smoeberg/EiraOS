@@ -293,7 +293,20 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
    - **Et vidne uden for maskinen (fleet).** Head-hashen indgår som tilstand i den eksisterende Merkle-sync (`app/fleet/merkle_sync.py`, `fleetd` `push_blocks`) til en anden enhed. En omskrivning kræver så, at to maskiner lyver ens. *Dækker ikke:* en enkeltstående pc uden fleet-peer. Den har kun det lokale værn, og det skal fremgå af dens parity-status.
 3. **Der findes ingen kanonisk, menneskelæsbar gengivelse af det, brugeren samtykker til.** Gaten kender kun konvolutten og dens hash. Hvis samtykkeskærmen viser modellens prosa, samtykker brugeren til en parafrase. Løsningen er en deterministisk renderer i gaten, der kun læser konvolutten, aldrig modellen. **Bindingen:** ved `propose` gemmes den konkrete gengivelse sammen med handlingen, dvs. teksten og dens hash plus renderer-version og sprog. Samtykke og bekræftelse binder til `(content_hash, rendering_hash)`, og samme konvolut på to sprog er to forskellige samtykker. Gaten binder aldrig til "den nuværende renderer", fordi en `pending` handling kan leve længere end en renderer-version. Revision genskaber præcis den tekst, brugeren så. **Rendereren er en blokering for den første executor med eksterne effekter.** Den kommer *før* den executor, ikke efter.
 4. **Identitet, medlemskab og rettigheder** (`gate_identities`, `gate_members`, `gate_grants`) har intet administrations-API. De skal provisioneres af `identityd`, og det kræver procesidentitet (punkt 1). **Fundet i VM-testen:** Den installerede `identityd` har hverken database-sti eller skriveadgang (ingen `/data` i unit eller AppArmor). Sessioner, som `identityd` opretter, deles derfor ikke med `intentd` på en installeret maskine. Gaten fejler lukket (ukendt session giver `REJECT`), men flowet virker først installeret, når denne PR er lavet.
-5. **Den gamle vej `intent.confirm` → `app/executor.py`** findes stadig uden om gaten. Den er en prototype, der kun skriver til `audit_events` og ikke rører omverdenen, men den bryder §2. Den skal *omdirigeres*, ikke slettes: den returnerer `E_GATE_REQUIRED` med et pejl til `gate.propose`, og en test beviser, at stien ikke kan nå `execute_intent`. Det er næste PR.
+5. **Tre gamle skriveveje går uden om gaten** i den samme `intentd`:
+   - `intent.confirm` → `execute_intent`, som kun skriver til `audit_events`.
+   - `intent.execute`, som ændrer systemtilstanden i `stated` efter et CEL-tjek, uden samtykke og uden bekræftelse.
+   - `journey.advance`.
+
+   De bryder §2. De skal *omdirigeres*, ikke slettes: de returnerer `E_GATE_REQUIRED` med et pejl til `gate.propose`. `tests/test_gate_ipc.py::test_every_intentd_method_is_classified` lister hver metode, som `intentd` faktisk eksponerer. En ny, uklassificeret metode får testen til at fejle, og `KNOWN_BYPASSES` skal være tom, før gaten er en sikkerhedsgrænse. Det er næste PR.
+
+**Rettet efter review af #136:**
+- *Crash-recovery.* Et crash mellem claim og registreret resultat efterlader handlingen i `executing`. `Gate.recover()` kører ved opstart og lader executorens egen varige tilstand afgøre udfaldet: outbox-rækken findes → `executed`, den findes ikke → `pending` igen, kan ikke afgøres → `unknown`. Executoren køres aldrig igen, og tests dræber processen før og efter outbox-skrivningen.
+- *Genautorisation lige før udførelse* bruger den session, der bekræfter, ikke den, der foreslog.
+- *`gate.status`* er sessionsbundet: kun den handlende bruger og samtalens medlemmer får svar. Alle andre får samme svar som ved et ukendt id.
+- *Database-sti på den installerede maskine.* VM-testen fangede, at `intentd` crash-loopede. Rettet, og VM-testen kalder nu gaten over socket'en.
+
+**Note til punkt 1:** Alle daemons kører i dag som samme systembruger (`eira`). `SO_PEERCRED` kan derfor kun skelne modelprocessen fra UI'en, hvis modellen kører under sin egen UID og ikke er medlem af gruppen, der har adgang til gatens kommandosocket. Socket-adgang skal gives pr. socket, ikke til hele `/run/eira`.
 
 **Rækkefølge (besluttet efter review, november 2026):**
 1. Merge Gate Kernel 1.0.

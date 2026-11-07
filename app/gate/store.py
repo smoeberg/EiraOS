@@ -139,6 +139,11 @@ class GateStore:
             )
         return execution_id if cursor.rowcount == 1 else None
 
+    def executing(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM gate_actions WHERE state = 'executing'").fetchall()
+        return [dict(r) for r in rows]
+
     def release(self, action_id: str, execution_id: str) -> None:
         """Undo a claim when the gate rejects after claiming (no side effect yet)."""
         with self._connect() as conn:

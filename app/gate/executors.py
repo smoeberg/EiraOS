@@ -54,6 +54,14 @@ class Executor:
     def run(self, envelope: dict[str, Any], execution_id: str) -> ExecutorResult:  # pragma: no cover
         raise NotImplementedError
 
+    def reconcile(self, action_id: str, execution_id: str) -> bool | None:
+        """After a crash: did this execution take effect? ``True``/``False``
+        only if the executor's durable state proves it; ``None`` = cannot tell."""
+        return None
+
+    def recorded_result(self, action_id: str) -> dict[str, Any]:
+        return {"recovered": True}
+
 
 class ExecutorRegistry:
     def __init__(self) -> None:
@@ -84,6 +92,13 @@ class ExecutorRegistry:
         )
         self._issued.add(ticket.mac)
         return ticket
+
+    def reconcile(self, action_type: str, action_id: str, execution_id: str) -> bool | None:
+        executor = self._executors.get(action_type)
+        return executor.reconcile(action_id, execution_id) if executor else None
+
+    def recorded_result(self, action_type: str, action_id: str) -> dict[str, Any]:
+        return self._executors[action_type].recorded_result(action_id)
 
     def call(self, ticket: Any, envelope: dict[str, Any], content_hash: str) -> ExecutorResult:
         """The only way to run an executor."""
@@ -136,6 +151,29 @@ class ConversationOutboxExecutor(Executor):
         self._connect = connect
         with closing(self._connect()) as conn:
             conn.executescript(OUTBOX_SCHEMA)
+
+    def reconcile(self, action_id: str, execution_id: str) -> bool | None:
+        # The outbox row is written in one transaction with the execution id,
+        # so its presence proves the effect and its absence proves none.
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT execution_id FROM conversation_outbox WHERE event_id = ?", (action_id,)
+            ).fetchone()
+        if row is None:
+            return False
+        return row[0] == execution_id or None
+
+    def recorded_result(self, action_id: str) -> dict[str, Any]:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT conversation_id FROM conversation_outbox WHERE event_id = ?", (action_id,)
+            ).fetchone()
+        return {
+            "conversation_id": row[0] if row else None,
+            "visible_state": VISIBLE_STATE.get(self.action_type, "recorded_not_delivered"),
+            "delivery": "pending",
+            "recovered": True,
+        }
 
     def run(self, envelope: dict[str, Any], execution_id: str) -> ExecutorResult:
         with closing(self._connect()) as conn:

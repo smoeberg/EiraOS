@@ -117,7 +117,7 @@ def test_a_proposed_meeting_is_recorded_as_proposed_not_as_delivered(world):
     assert result.result["visible_state"] == "proposed"
     assert result.result["delivery"] == "pending"
     assert outbox(world) == [("dlg-0001", "pending")]
-    assert world.gate.status("dlg-0001")["state"] == "executed"
+    assert world.gate.status("dlg-0001", "s-anne")["state"] == "executed"
 
 
 def test_propose_alone_never_executes(world):
@@ -289,7 +289,7 @@ def test_right_revoked_after_planning_is_rejected(world):
     result = world.gate.confirm(env["id"], digest, "s-anne")
     assert (result.code, result.layer) == (GateCode.E_UNAUTHORIZED, 6)
     assert outbox(world) == []
-    assert world.gate.status(env["id"])["state"] == "pending"
+    assert world.gate.status(env["id"], "s-anne")["state"] == "pending"
 
 
 def test_right_revoked_between_claim_and_execution_is_rejected(world, monkeypatch):
@@ -305,7 +305,7 @@ def test_right_revoked_between_claim_and_execution_is_rejected(world, monkeypatc
     result = world.gate.confirm(env["id"], digest, "s-anne")
     assert result.code is GateCode.E_UNAUTHORIZED
     assert outbox(world) == []
-    assert world.gate.status(env["id"])["state"] == "pending"
+    assert world.gate.status(env["id"], "s-anne")["state"] == "pending"
 
 
 def test_executor_cannot_be_called_directly(world):
@@ -342,7 +342,7 @@ def test_partial_failure_is_reported_with_its_state(world):
     env, digest = propose_and_consent(world)
     result = world.gate.confirm(env["id"], digest, "s-anne")
     assert (result.decision, result.code, result.state) == (Decision.REJECT, GateCode.E_PARTIAL, "partial")
-    assert world.gate.status(env["id"])["state"] == "partial"
+    assert world.gate.status(env["id"], "s-anne")["state"] == "partial"
     # Not retried automatically.
     again = world.gate.confirm(env["id"], digest, "s-anne")
     assert again.code is GateCode.E_PARTIAL and again.execution_id == result.execution_id
@@ -367,7 +367,7 @@ def test_missing_executor_is_reported_and_nothing_changes(world):
     env, digest = propose_and_consent(world, env)
     result = world.gate.confirm(env["id"], digest, "s-anne")
     assert (result.code, result.layer) == (GateCode.E_EXECUTOR_UNAVAILABLE, 8)
-    assert world.gate.status(env["id"])["state"] == "pending"
+    assert world.gate.status(env["id"], "s-anne")["state"] == "pending"
 
 
 def test_correct_schema_without_permission_is_unauthorized(world):
@@ -523,3 +523,94 @@ def _registry_with(world, executor):
     registry = ExecutorRegistry()
     registry.register(executor)
     return registry
+
+
+# --- review of #136: recovery, confirming session, status access --------------
+
+
+def test_crash_between_outbox_and_gate_result_is_recovered_once(world, monkeypatch):
+    env, digest = propose_and_consent(world)
+    original_finish = world.store.finish
+
+    def crash(*args):
+        raise SystemExit("power cut after the outbox write")
+
+    monkeypatch.setattr(world.store, "finish", crash)
+    with pytest.raises(SystemExit):
+        world.gate.confirm(env["id"], digest, "s-anne")
+    monkeypatch.setattr(world.store, "finish", original_finish)
+    assert world.gate.status(env["id"], "s-anne")["state"] == "executing"
+    # Restart: a new gate recovers from the executor's durable state.
+    restarted = Gate(world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock)
+    assert restarted.gate_state(env["id"]) == "executed"
+    again = restarted.confirm(env["id"], digest, "s-anne")
+    assert again.decision is Decision.PASS and again.result["recovered"] is True
+    assert len(outbox(world)) == 1  # the event was not created twice
+
+
+def test_crash_before_the_outbox_write_returns_the_action_to_pending(world, monkeypatch):
+    env, digest = propose_and_consent(world)
+    executor = world.gate._registry.executor("commitment_proposed")
+
+    def crash(*args):
+        raise SystemExit("power cut before the outbox write")
+
+    monkeypatch.setattr(executor, "run", crash)
+    with pytest.raises(SystemExit):
+        world.gate.confirm(env["id"], digest, "s-anne")
+    monkeypatch.undo()
+    restarted = Gate(world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock)
+    assert restarted.gate_state(env["id"]) == "pending"
+    assert restarted.confirm(env["id"], digest, "s-anne").decision is Decision.PASS
+    assert len(outbox(world)) == 1
+
+
+def test_recovery_without_proof_is_unknown_never_success(world, monkeypatch):
+    world.gate._registry = _registry_with(world, _PartialExecutor())
+    env, digest = propose_and_consent(world)
+    monkeypatch.setattr(world.store, "finish", lambda *a: (_ for _ in ()).throw(SystemExit()))
+    with pytest.raises(SystemExit):
+        world.gate.confirm(env["id"], digest, "s-anne")
+    monkeypatch.undo()
+    restarted = Gate(world.store, _registry_with(world, _PartialExecutor()), sessions=world.sessions.get)
+    assert restarted.gate_state(env["id"]) == "unknown"
+
+
+def test_reauthorization_uses_the_confirming_session(world, monkeypatch):
+    # Anne proposes and consents in one session, confirms in another, and the
+    # confirming session loses its assurance between claim and execution.
+    world.sessions["s-anne-2"] = {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}
+    env = envelope("presence_changed", {"state": "busy"}, id="dlg-p2")
+    world.gate._registry.register(_RecordingExecutor("presence_changed"))
+    monkeypatch.setitem(
+        gate_policy.REGISTRY,
+        "presence_changed",
+        gate_policy.ActionPolicy(
+            "presence_changed",
+            gate_policy.Reversibility.IDEMPOTENT,
+            frozenset({Origin.USER}),
+            required_assurance="eid_low",
+        ),
+    )
+    proposal = world.gate.propose(raw(env), "s-anne", Origin.USER)
+    original_claim = world.store.claim
+
+    def claim_then_downgrade(*args):
+        execution_id = original_claim(*args)
+        world.sessions["s-anne-2"]["assurance_level"] = "none"
+        return execution_id
+
+    monkeypatch.setattr(world.store, "claim", claim_then_downgrade)
+    result = world.gate.confirm("dlg-p2", proposal.content_hash, "s-anne-2")
+    assert result.code is GateCode.E_STEP_UP_REQUIRED
+    assert world.gate.status("dlg-p2", "s-anne")["state"] == "pending"
+
+
+def test_status_is_only_visible_to_the_actor_and_conversation_members(world):
+    world.gate.propose(raw(envelope()), "s-anne", Origin.MODEL)
+    assert world.gate.status("dlg-0001", "s-anne") is not None
+    assert world.gate.status("dlg-0001", "s-bo") is None  # not a member
+    assert world.gate.status("dlg-0001", None) is None
+    assert world.gate.status("dlg-0001", "s-forged") is None
+    world.store.add_member(CONV, BO)
+    assert world.gate.status("dlg-0001", "s-bo") is not None

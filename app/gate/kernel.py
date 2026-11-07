@@ -59,6 +59,46 @@ class Gate:
         self._sessions = sessions
         self._clock = clock
         self._consent_ttl = consent_ttl
+        self.recover()
+
+    # --- recovery --------------------------------------------------------------
+
+    def recover(self) -> dict[str, int]:
+        """Resolve actions left in ``executing`` by a crash between the claim
+        and the recorded result. The executor's own durable state decides:
+        found → ``executed``; provably not done → back to ``pending`` (the user
+        can confirm again, nothing happens twice); cannot tell → ``unknown``.
+        Never re-runs an executor."""
+        counts = {"executed": 0, "pending": 0, "unknown": 0}
+        for record in self.store.executing():
+            action_type = record["action_type"]
+            found = self._registry.reconcile(action_type, record["action_id"], record["execution_id"])
+            if found is True:
+                state, result = "executed", self._registry.recorded_result(action_type, record["action_id"])
+                self.store.finish(record["action_id"], record["execution_id"], state, result)
+            elif found is False:
+                state = "pending"
+                self.store.release(record["action_id"], record["execution_id"])
+            else:
+                state = "unknown"
+                self.store.finish(record["action_id"], record["execution_id"], state, {"recovered": True})
+            counts[state] += 1
+            self.store.append_audit(
+                {
+                    "gate": GATE_VERSION,
+                    "step": "recover",
+                    "action_id": record["action_id"],
+                    "decision": None,
+                    "layer": 7,
+                    "error": None,
+                    "state": state,
+                    "participant": record["actor_identity"] or None,
+                    "timestamp": iso(self._clock()),
+                    "input_hash": None,
+                    "policy_version": POLICY_VERSION,
+                }
+            )
+        return counts
 
     # --- public API ----------------------------------------------------------
 
@@ -148,9 +188,22 @@ class Gate:
             return self._fail("confirm", raw, failure, actor)
         return self._layer_8_execute(envelope, record, content_hash, execution_id, actor)
 
-    def status(self, action_id: str) -> dict[str, Any] | None:
+    def gate_state(self, action_id: str) -> str | None:
+        """Internal state for tests and recovery; not exposed over IPC."""
+        record = self.store.find(action_id)
+        return record["state"] if record else None
+
+    def status(self, action_id: str, session_id: str | None) -> dict[str, Any] | None:
+        """Only the acting user or a member of the conversation may see an
+        action; anyone else gets the same answer as for an unknown id."""
         record = self.store.find(action_id)
         if record is None:
+            return None
+        actor = self._actor(session_id)
+        if actor is None or (
+            actor["identity"] != record["actor_identity"]
+            and not self.store.is_member(record["conversation_id"], actor["identity"])
+        ):
             return None
         return {
             "action_id": record["action_id"],
@@ -249,9 +302,10 @@ class Gate:
     ) -> GateResult:
         action_id = record["action_id"]
         action_type = envelope["action"]["type"]
-        # Authorization again, immediately before the side effect (§3.6).
+        # Authorization again, immediately before the side effect (§3.6), for
+        # the session that is confirming now — not the one that proposed.
         try:
-            current = self._actor(record["session_id"])
+            current = self._actor(actor["session_id"]) if actor else None
             self._layer_6_authorization(envelope, policy_for(action_type), current)
         except LayerFailure as failure:
             self.store.release(action_id, execution_id)
