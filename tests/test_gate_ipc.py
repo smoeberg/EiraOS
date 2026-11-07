@@ -1,0 +1,98 @@
+"""Gate Kernel over intentd's JSON-RPC: the only IPC way to execute is gate.confirm."""
+
+import json
+
+import pytest
+
+from app.gate.executors import default_registry
+from app.gate.ipc import register_gate_handlers
+from app.gate.kernel import Gate
+from app.gate.store import GateStore
+from app.ipc.jsonrpc import JsonRpcError
+from tests.test_gate_kernel import ANNE, CONV, envelope
+
+
+class FakeServer:
+    def __init__(self):
+        self.methods = {}
+
+    def register(self, name, handler):
+        self.methods[name] = handler
+
+
+@pytest.fixture
+def rpc(tmp_path):
+    db = str(tmp_path / "gate.db")
+    store = GateStore(db)
+    store.bind_identity("anne@kommune.dk", ANNE)
+    store.add_member(CONV, ANNE)
+    store.grant_right(ANNE, CONV, "*")
+    sessions = {"s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}}
+    server = FakeServer()
+    register_gate_handlers(server, Gate(store, default_registry(db), sessions=sessions.get))
+    return server.methods
+
+
+def test_full_flow_over_ipc(rpc):
+    proposal = rpc["gate.propose"]({"session_id": "s-anne", "edp": envelope(), "origin": "model"})
+    assert proposal["error"] == "E_NEED_CONSENT" and proposal["state"] == "pending"
+    args = {"session_id": "s-anne", "action_id": "dlg-0001", "content_hash": proposal["content_hash"]}
+    assert rpc["gate.consent"](args)["detail"] == "consent recorded"
+    done = rpc["gate.confirm"](args)
+    assert done["decision"] == "PASS" and done["result"]["visible_state"] == "proposed"
+    assert rpc["gate.status"]({"action_id": "dlg-0001", "session_id": "s-anne"})["state"] == "executed"
+    json.dumps(done)  # serialisable for the wire
+
+
+def test_no_ipc_method_reaches_an_executor_directly(rpc):
+    assert set(rpc) == {"gate.propose", "gate.consent", "gate.confirm", "gate.status"}
+
+
+def test_bad_parameters(rpc):
+    assert rpc["gate.propose"]({"session_id": "s-anne"})["error"] == "E_SYNTAX"
+    with pytest.raises(JsonRpcError):
+        rpc["gate.propose"]({"session_id": "s-anne", "edp": envelope(), "origin": "admin"})
+    with pytest.raises(JsonRpcError):
+        rpc["gate.confirm"]({"session_id": "s-anne"})
+    with pytest.raises(JsonRpcError):
+        rpc["gate.status"]({"action_id": "nope"})
+
+
+def test_intentd_registers_the_gate():
+    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+
+    server = FakeServer()
+    register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
+    assert {"gate.propose", "gate.consent", "gate.confirm", "gate.status"} <= set(server.methods)
+
+
+# Every method intentd exposes, classified. A new method fails this test until
+# someone decides which class it belongs to. KNOWN_BYPASSES are write paths
+# that do not go through the gate yet (spec Bilag A, limitation 5); the next
+# PR redirects them to E_GATE_REQUIRED and empties this set.
+GATE_METHODS = {"gate.propose", "gate.consent", "gate.confirm", "gate.status"}
+READ_ONLY = {
+    "health",
+    "dashboard.get",
+    "intent.parse",
+    "intent.plan",
+    "journey.list",
+    "journey.get",
+    "capability.list",
+    "presentation.mode_get",
+}
+POLICY_GATED_SETTINGS = {"presentation.mode_set"}  # Builder needs device policy
+KNOWN_BYPASSES = {"intent.confirm", "intent.execute", "journey.advance"}
+
+
+def test_every_intentd_method_is_classified():
+    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+
+    server = FakeServer()
+    register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
+    exposed = set(server.methods)
+    classified = GATE_METHODS | READ_ONLY | POLICY_GATED_SETTINGS | KNOWN_BYPASSES
+    assert exposed == classified, {
+        "unclassified": sorted(exposed - classified),
+        "gone": sorted(classified - exposed),
+    }

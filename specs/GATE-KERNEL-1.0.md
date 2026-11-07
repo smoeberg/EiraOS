@@ -239,3 +239,81 @@ Audit-loggen må ikke kunne ændres af modeller eller adaptere.
 1. Skal `CLARIFY` kunne føre til en ny EDP-handling (`utterance`), eller skal det være en separat UI-tilstand? **Anbefaling:** separat UI-tilstand, så gaten ikke bliver en dialogmotor.
 2. Skal `policy_version` kunne tvinge en `REJECT`, hvis en handling er planlagt under en ældre policy? **Anbefaling:** ja, hvis policyen er ændret på en måde, der påvirker handlingen.
 3. Hvordan håndteres executor-timeout? **Anbefaling:** `E_PARTIAL` med `state: unknown`, og en efterfølgende verifikationshandling.
+
+---
+
+## Bilag A — Implementering (november 2026)
+
+**Kode:** `app/gate/` (`kernel.py`, `edp.py`, `policy.py`, `store.py`, `executors.py`, `ipc.py`). Gaten kører i `intentd` og eksponeres som `gate.propose`, `gate.consent`, `gate.confirm` og `gate.status`. Ingen IPC-metode kalder en executor direkte.
+
+**Flow:**
+1. `propose` kører lag 1–4, gemmer handlingen som `pending`, bundet til et indholdshash, og rapporterer bagefter, hvad lag 5–6 mangler.
+2. `consent` registrerer brugerens samtykke til netop det hash. Samtykket udløber efter 10 minutter.
+3. `confirm` validerer igen fra lag 1 ud fra den gemte rå input. Derefter følger hash-binding, atomar claim, ny autorisation lige før udførelse og executoren med en engangsbillet.
+
+**Indholdshashet** dækker `id`, `conversation_id`, `participants`, `action` og `valid_from`. `transport` og `veritas` er ikke med: de beriges efter brugerens beslutning og må ikke ændre handlingen.
+
+**Afklaringer af §11:**
+1. `CLARIFY` er en separat UI-tilstand, og gaten fører ingen dialog.
+2. En ændret policy for handlingstypen siden forslaget giver `REJECT (E_POLICY)`. Det afgøres via et fingeraftryk af policy-posten.
+3. Timeout eller crash i executoren giver `E_PARTIAL` med `state: unknown`, og handlingen prøves ikke automatisk igen.
+
+**§7-tests → `tests/test_gate_kernel.py`:**
+
+| §7-krav | Test |
+|---|---|
+| Ugyldig JSON | `test_invalid_json_is_rejected_as_syntax` |
+| Ukendt `action.type` | `test_unknown_action_type_is_rejected_as_schema` |
+| Manglende obligatorisk felt | `test_missing_content_field_is_rejected_as_schema` |
+| Forbudt handling eller parameter | `test_forbidden_action_and_parameters_are_rejected_as_policy` |
+| Manglende samtykke | `test_missing_consent_for_irreversible_action_is_rejected` |
+| Ændrede parametre | `test_changed_parameters_after_confirmation_are_rejected` |
+| Dobbelt eksekvering | `test_double_execution_returns_the_existing_result`, `test_concurrent_confirmations_execute_once` |
+| Rettighed tilbagekaldt | `test_right_revoked_after_planning_is_rejected`, `test_right_revoked_between_claim_and_execution_is_rejected` |
+| Direkte executor-kald | `test_executor_cannot_be_called_directly` |
+| Model-runtime utilgængelig | `test_unavailable_model_runtime_is_a_safe_reject` |
+| Delvis fejl | `test_partial_failure_is_reported_with_its_state` |
+| Korrekt schema uden tilladelse | `test_correct_schema_without_permission_is_unauthorized` |
+
+Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input (afvises af schemaet), degraded transport, udløbet samtykke, manipuleret lagret input, step-up til betaling, ukendt session, at handle på en andens vegne, et append-only og hash-kædet audit-log samt at en PASS først logges efter executorens resultat.
+
+**Mutationstjek:** Hver af disse kontroller er fjernet én ad gangen, og testsuiten fejlede hver gang: samtykke, hash-binding, autorisation lige før udførelse, idempotens, policy-fingeraftryk, verifikation af tilstandsovergangen og rettigheder.
+
+**Kendte begrænsninger (åbne), ordnet efter alvor:**
+
+> **Trusselsmodel i dag:** Lag 5–6 beskytter mod *fejl* (en model, der foreslår forkert, en UI-bug, en forældet plan), ikke mod en *kompromitteret lokal proces*. Grunden er, at kalderens identitet endnu ikke kommer fra forbindelsen.
+
+1. **Kalderens identitet er påstået, ikke bevist.** Både `session_id` og `origin` (`user`/`model`) sendes af IPC-kalderen. En proces i gruppen `eira`, der kender et session-id, kan derfor handle som brugeren, og den kan kalde sig `user`. Løsningen er, at identiteten kommer fra forbindelsen: `SO_PEERCRED` plus en signeret sessionstoken, som UI'en får ved login, og som modelprocessen aldrig ser. Det skal løses sammen med punkt 4, fordi `identityd` har samme behov. Det sker i PR'en efter executors.
+2. **Audit-kæden mangler et eksternt anker.** `gate_audit` er hash-kædet og append-only i en SQLite-fil, som `intentd` selv skriver. Kæden afslører ændringer foretaget af andre, men ikke at daemonen selv genskriver hele kæden. To værn, der dækker hver sin trussel:
+   - **journald med Forward Secure Sealing (lokalt).** `intentd` skriver jævnligt kædens head-hash til journalen. *Dækker:* senere omskrivning eller sletning af poster fra før seneste forsegling. *Dækker ikke:* at en kompromitteret `intentd` skriver en falsk head-hash, for den bliver forseglet lige så pænt som en ægte. Og ændringer inden for det aktuelle forseglingsinterval kan ikke opdages. Drift:
+     - Forseglingen sker periodisk, 15 minutter som standard (`journalctl --setup-keys --interval`).
+     - Sealing-nøglen bliver på maskinen. Verifikationen kræver *verifikationsnøglen*, som skal opbevares uden for maskinen (`journalctl --verify --verify-key=…`).
+     - Rotation giver flere journalfiler at verificere.
+     - Verifikationen skal køre planlagt, og et udeblevet eller fejlet resultat skal alarmere. Ellers opdager ingen, at ankeret er holdt op med at virke.
+   - **Et vidne uden for maskinen (fleet).** Head-hashen indgår som tilstand i den eksisterende Merkle-sync (`app/fleet/merkle_sync.py`, `fleetd` `push_blocks`) til en anden enhed. En omskrivning kræver så, at to maskiner lyver ens. *Dækker ikke:* en enkeltstående pc uden fleet-peer. Den har kun det lokale værn, og det skal fremgå af dens parity-status.
+3. **Der findes ingen kanonisk, menneskelæsbar gengivelse af det, brugeren samtykker til.** Gaten kender kun konvolutten og dens hash. Hvis samtykkeskærmen viser modellens prosa, samtykker brugeren til en parafrase. Løsningen er en deterministisk renderer i gaten, der kun læser konvolutten, aldrig modellen. **Bindingen:** ved `propose` gemmes den konkrete gengivelse sammen med handlingen, dvs. teksten og dens hash plus renderer-version og sprog. Samtykke og bekræftelse binder til `(content_hash, rendering_hash)`, og samme konvolut på to sprog er to forskellige samtykker. Gaten binder aldrig til "den nuværende renderer", fordi en `pending` handling kan leve længere end en renderer-version. Revision genskaber præcis den tekst, brugeren så. **Rendereren er en blokering for den første executor med eksterne effekter.** Den kommer *før* den executor, ikke efter.
+4. **Identitet, medlemskab og rettigheder** (`gate_identities`, `gate_members`, `gate_grants`) har intet administrations-API. De skal provisioneres af `identityd`, og det kræver procesidentitet (punkt 1). **Fundet i VM-testen:** Den installerede `identityd` har hverken database-sti eller skriveadgang (ingen `/data` i unit eller AppArmor). Sessioner, som `identityd` opretter, deles derfor ikke med `intentd` på en installeret maskine. Gaten fejler lukket (ukendt session giver `REJECT`), men flowet virker først installeret, når denne PR er lavet.
+5. **Tre gamle skriveveje går uden om gaten** i den samme `intentd`:
+   - `intent.confirm` → `execute_intent`, som kun skriver til `audit_events`.
+   - `intent.execute`, som ændrer systemtilstanden i `stated` efter et CEL-tjek, uden samtykke og uden bekræftelse.
+   - `journey.advance`.
+
+   De bryder §2. De skal *omdirigeres*, ikke slettes: de returnerer `E_GATE_REQUIRED` med et pejl til `gate.propose`. `tests/test_gate_ipc.py::test_every_intentd_method_is_classified` lister hver metode, som `intentd` faktisk eksponerer. En ny, uklassificeret metode får testen til at fejle, og `KNOWN_BYPASSES` skal være tom, før gaten er en sikkerhedsgrænse. Det er næste PR.
+
+**Rettet efter review af #136:**
+- *Crash-recovery.* Et crash mellem claim og registreret resultat efterlader handlingen i `executing`. `Gate.recover()` kører ved opstart og lader executorens egen varige tilstand afgøre udfaldet: outbox-rækken findes → `executed`, den findes ikke → `pending` igen, kan ikke afgøres → `unknown`. Executoren køres aldrig igen, og tests dræber processen før og efter outbox-skrivningen.
+- *Genautorisation lige før udførelse* bruger den session, der bekræfter, ikke den, der foreslog.
+- *`gate.status`* er sessionsbundet: kun den handlende bruger og samtalens medlemmer får svar. Alle andre får samme svar som ved et ukendt id.
+- *Database-sti på den installerede maskine.* VM-testen fangede, at `intentd` crash-loopede. Rettet, og VM-testen kalder nu gaten over socket'en.
+
+**Note til punkt 1:** Alle daemons kører i dag som samme systembruger (`eira`). `SO_PEERCRED` kan derfor kun skelne modelprocessen fra UI'en, hvis modellen kører under sin egen UID og ikke er medlem af gruppen, der har adgang til gatens kommandosocket. Socket-adgang skal gives pr. socket, ikke til hele `/run/eira`.
+
+**Rækkefølge (besluttet efter review, november 2026):**
+1. Merge Gate Kernel 1.0.
+2. Omdirigér den gamle vej.
+3. Lav rendereren, fordi den blokerer punkt 4.
+4. Flyt den første executor, der ændrer maskinens tilstand, ind under gaten: `SystemExecutor` med EiraSystemAPI's strøm-operationer og en test, der beviser, at det direkte Tauri-kald fejler.
+5. Lav procesidentitet og `identityd`'s admin-API.
+6. Lav audit-ankeret (journald FSS og fleet-vidne).
+
+**Executor-status:** Den eneste executor er conversation-outboxen for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
