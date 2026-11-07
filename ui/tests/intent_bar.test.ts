@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App";
@@ -26,10 +26,20 @@ function installIpcMock(handler: (daemon: string, method: string) => unknown) {
 }
 
 describe("IntentBar", () => {
-  it("eksekverer en intention via intentd og opfrisker canvasset", async () => {
+  it("udfører intet direkte: intentd henviser til Gaten, og brugeren får besked", async () => {
     const ipc = installIpcMock((daemon, method) => {
       if (daemon === "intentd" && method === "intent.execute") {
-        return { state: { id: "state-2" }, knowledge: { proof_type: "CEL_CONSTRAINT" } };
+        throw new Error(
+          JSON.stringify({
+            code: -32010,
+            message: "E_GATE_REQUIRED",
+            data: {
+              method: "intent.execute",
+              use: "gate.propose",
+              user_message: "Handlingen skal foreslås og bekræftes gennem Gaten, før den udføres.",
+            },
+          }),
+        );
       }
       throw new Error(`Unexpected IPC call: ${daemon}.${method}`);
     });
@@ -40,16 +50,12 @@ describe("IntentBar", () => {
     fireEvent.change(input, { target: { value: "Godkend byggetilladelsen" } });
     fireEvent.click(screen.getByText("Eksekvér"));
 
-    await waitFor(() =>
-      expect(ipc).toHaveBeenCalledWith("intentd", "intent.execute", {
-        intent: "Godkend byggetilladelsen",
-      }),
-    );
-    expect(await screen.findByText("Intentionen er eksekveret.")).toBeVisible();
-    await waitFor(() =>
-      expect(ipc).toHaveBeenCalledWith("stated", "state.list", { limit: 2000 }),
-    );
-    expect(input).toHaveValue("");
+    expect(
+      await screen.findByText("Handlingen skal foreslås og bekræftes gennem Gaten, før den udføres."),
+    ).toBeVisible();
+    expect(screen.queryByText("Intentionen er eksekveret.")).not.toBeInTheDocument();
+    // The user's words are kept so nothing is lost.
+    expect(input).toHaveValue("Godkend byggetilladelsen");
   });
 
   it("viser constraint-violation-brugerbesked", async () => {

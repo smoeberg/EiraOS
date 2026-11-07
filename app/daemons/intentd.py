@@ -224,8 +224,11 @@ def register_intent_handlers(
     except ImportError:
         pass
     active = service or default_service()
-    server.register("intent.execute", active.execute)
-    from app.gate.ipc import register_gate_handlers
+    from app.gate.ipc import gate_required, register_gate_handlers
+
+    # IntentDaemonService.execute appends to stated after a CEL check but
+    # without consent or confirmation: not reachable over IPC any more.
+    server.register("intent.execute", gate_required("intent.execute"))
 
     register_gate_handlers(server)
     server.register("health", lambda _: {"daemon": "eira-intentd", "ok": True})

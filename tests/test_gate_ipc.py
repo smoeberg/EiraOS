@@ -82,7 +82,9 @@ READ_ONLY = {
     "presentation.mode_get",
 }
 POLICY_GATED_SETTINGS = {"presentation.mode_set"}  # Builder needs device policy
-KNOWN_BYPASSES = {"intent.confirm", "intent.execute", "journey.advance"}
+# Former bypasses, now answering E_GATE_REQUIRED (proved below).
+REDIRECTED = {"intent.confirm", "intent.execute", "journey.advance"}
+KNOWN_BYPASSES: set[str] = set()
 
 
 def test_every_intentd_method_is_classified():
@@ -91,8 +93,37 @@ def test_every_intentd_method_is_classified():
     server = FakeServer()
     register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
     exposed = set(server.methods)
-    classified = GATE_METHODS | READ_ONLY | POLICY_GATED_SETTINGS | KNOWN_BYPASSES
+    classified = GATE_METHODS | READ_ONLY | POLICY_GATED_SETTINGS | REDIRECTED | KNOWN_BYPASSES
     assert exposed == classified, {
         "unclassified": sorted(exposed - classified),
         "gone": sorted(classified - exposed),
     }
+
+
+def test_former_bypasses_answer_gate_required_and_never_execute(monkeypatch, tmp_path):
+    """Over the real JSON-RPC server: no former write path can reach
+    execute_intent, the stated appender or the journey store."""
+    from app.daemons import intent_engine
+    from app.daemons.base import JsonRpcServer
+    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+    from app.gate.ipc import GATE_REQUIRED
+
+    touched = []
+    monkeypatch.setattr(intent_engine, "execute_intent", lambda *a, **k: touched.append("execute_intent"))
+    monkeypatch.setattr(intent_engine, "advance_journey", lambda *a, **k: touched.append("advance_journey"))
+    service = IntentDaemonService.__new__(IntentDaemonService)
+    monkeypatch.setattr(service, "execute", lambda *a, **k: touched.append("stated_append"), raising=False)
+    server = JsonRpcServer(name="intent-test", daemon="intentd")
+    register_intent_handlers(server, service)
+    payloads = {
+        "intent.confirm": {"intent_id": "i-1", "session_id": "s-1"},
+        "intent.execute": {"intent": "Godkend bevilling på 175.000 kr"},
+        "journey.advance": {"journey_id": "j-1"},
+    }
+    for method, params in payloads.items():
+        request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+        response = json.loads(server.handle_line(json.dumps(request)))
+        assert response["error"]["code"] == GATE_REQUIRED, method
+        assert response["error"]["data"]["use"] == "gate.propose"
+        assert response["error"]["data"]["user_message"]
+    assert touched == []

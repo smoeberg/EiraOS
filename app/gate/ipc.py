@@ -15,6 +15,27 @@ from app.ipc.jsonrpc import JsonRpcError
 
 _GATE: Gate | None = None
 
+# Former write paths that bypassed the gate. They are not deleted (a deleted
+# path tends to reappear as a copy elsewhere); they answer E_GATE_REQUIRED
+# and point to the only way in.
+GATE_REQUIRED = -32010
+REDIRECTED_METHODS = ("intent.confirm", "intent.execute", "journey.advance")
+
+
+def gate_required(method: str):
+    def handler(_params: dict[str, Any]) -> dict[str, Any]:
+        raise JsonRpcError(
+            GATE_REQUIRED,
+            "E_GATE_REQUIRED",
+            {
+                "method": method,
+                "use": "gate.propose",
+                "user_message": "Handlingen skal foreslås og bekræftes gennem Gaten, før den udføres.",
+            },
+        )
+
+    return handler
+
 
 def default_gate() -> Gate:
     global _GATE
