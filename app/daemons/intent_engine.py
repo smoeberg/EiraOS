@@ -217,10 +217,13 @@ def register_intent_handlers(server) -> None:
     server.register("dashboard.get", dashboard_get)
     server.register("intent.parse", intent_parse)
     server.register("intent.plan", intent_plan)
-    server.register("intent.confirm", intent_confirm)
+    # Protected writes go through Gate Kernel only (specs/GATE-KERNEL-1.0.md §2).
+    from app.gate.ipc import gate_required
+
+    server.register("intent.confirm", gate_required("intent.confirm"))
     server.register("journey.list", journey_list)
     server.register("journey.get", journey_get)
-    server.register("journey.advance", journey_advance)
+    server.register("journey.advance", gate_required("journey.advance"))
     server.register("capability.list", capability_list)
     server.register("presentation.mode_get", presentation_mode_get)
     server.register("presentation.mode_set", presentation_mode_set)

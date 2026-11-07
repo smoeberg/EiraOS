@@ -162,7 +162,10 @@ def test_intent_step_up_escalation() -> None:
     assert store.count() == 0
 
 
-def test_intent_execute_jsonrpc_contract_does_not_persist_rejection() -> None:
+def test_intent_execute_over_jsonrpc_is_redirected_to_the_gate() -> None:
+    """intent.execute is no longer an IPC write path (Gate Kernel §2): it
+    answers E_GATE_REQUIRED and nothing is appended. The CEL constraints are
+    still exercised directly through IntentDaemonService above."""
     service, store, _, _ = _service()
     server = JsonRpcServer(name="intent-test", daemon="intentd")
     register_intent_handlers(server, service)
@@ -176,8 +179,8 @@ def test_intent_execute_jsonrpc_contract_does_not_persist_rejection() -> None:
         },
     }
     response = json.loads(server.handle_line(json.dumps(request)))
-    assert response["error"]["code"] == CONSTRAINT_VIOLATION
-    assert response["error"]["data"]["rule_id"] == "grant_amount_limit"
+    assert response["error"]["message"] == "E_GATE_REQUIRED"
+    assert response["error"]["data"]["use"] == "gate.propose"
     assert store.count() == 0
 
 
