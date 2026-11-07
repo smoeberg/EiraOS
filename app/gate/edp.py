@@ -111,6 +111,10 @@ def layer2_schema(envelope: dict[str, Any]) -> None:
     for participant in envelope["participants"]:
         if not IDENTITY.match(participant["identity"]):
             raise LayerFailure(GateCode.E_SCHEMA, f"unsupported identity syntax: {participant['identity']!r}")
+    content = envelope["action"]["content"]
+    for name in ("when", "until"):
+        if name in content:
+            parse_time(content[name], f"action.content.{name}")
     temporal = envelope["temporal"]
     parse_time(temporal["created_at"], "temporal.created_at")
     if temporal.get("valid_from") is not None:

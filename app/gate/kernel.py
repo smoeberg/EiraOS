@@ -34,6 +34,7 @@ from app.gate.policy import (
     check_limits,
     policy_for,
 )
+from app.gate.render import LANGUAGES, RenderError, render, rendering_hash
 from app.gate.store import GateStore, iso, utc_now
 
 FINISHED_STATES = {"executed", "partial", "failed", "unknown"}
@@ -102,12 +103,22 @@ class Gate:
 
     # --- public API ----------------------------------------------------------
 
-    def propose(self, raw: str | bytes | None, session_id: str | None, origin: Origin) -> GateResult:
+    def propose(
+        self, raw: str | bytes | None, session_id: str | None, origin: Origin, lang: str = "da"
+    ) -> GateResult:
         actor = self._actor(session_id)
+        record: dict[str, Any] | None = None
         try:
             envelope, policy = self._layers_1_to_4(raw, origin, actor)
+            if lang not in LANGUAGES:
+                raise LayerFailure(GateCode.E_POLICY, f"no rendering for language {lang!r}")
             digest = edp.content_hash(envelope)
-            record = self._store_pending(raw, envelope, digest, policy, origin, session_id, actor)
+            # What the user will see is fixed now, from the envelope alone.
+            try:
+                rendering = render(envelope, actor["identity"], lang)
+            except RenderError as error:
+                raise LayerFailure(GateCode.E_POLICY, str(error)) from None
+            record = self._store_pending(raw, envelope, digest, policy, origin, session_id, actor, rendering)
             if record["state"] != "pending":
                 return self._existing(record)
             self._layer_5_consent(policy, record, session_id, at_proposal=True)
@@ -116,6 +127,9 @@ class Gate:
             if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6:
                 # Only reached after this user's own pending record was stored.
                 self.store.cancel(envelope["id"])
+            elif record is not None and record["state"] == "pending":
+                # Consent or step-up is needed: the UI shows exactly this text.
+                failure.data.setdefault("rendering", _rendering(record))
             return self._fail("propose", raw, failure, actor)
         result = GateResult(
             decision=None,
@@ -123,7 +137,7 @@ class Gate:
             state="pending",
             content_hash=digest,
             detail="ready for confirmation",
-            data={"reversibility": policy.reversibility.value},
+            data={"reversibility": policy.reversibility.value, "rendering": _rendering(record)},
         )
         self._audit("propose", result, raw, actor)
         return result
@@ -139,8 +153,11 @@ class Gate:
             raw = None
         return self.propose(raw, session_id, Origin.MODEL)
 
-    def grant_consent(self, action_id: str, content_hash: str, session_id: str | None) -> GateResult:
-        """The user's explicit consent to exactly this action and parameters."""
+    def grant_consent(
+        self, action_id: str, content_hash: str, rendering_hash_: str, session_id: str | None
+    ) -> GateResult:
+        """The user's explicit consent to exactly this action, these parameters
+        and this rendering (the text the user was shown)."""
         actor = self._actor(session_id)
         record = self.store.find(action_id)
         try:
@@ -150,10 +167,12 @@ class Gate:
                 raise LayerFailure(GateCode.E_UNAUTHORIZED, "only the proposing user can consent")
             if content_hash != record["content_hash"]:
                 raise LayerFailure(GateCode.E_CONSENT, "consent does not cover these parameters")
+            if rendering_hash_ != record["rendering_hash"] or not _rendering_intact(record):
+                raise LayerFailure(GateCode.E_CONSENT, "consent does not cover the text that was shown")
         except LayerFailure as failure:
             return self._fail("consent", None, failure, actor, action_id=action_id)
         consent_id = self.store.grant_consent(
-            action_id, content_hash, session_id or "", self._clock() + self._consent_ttl
+            action_id, content_hash, rendering_hash_, session_id or "", self._clock() + self._consent_ttl
         )
         result = GateResult(
             decision=None,
@@ -166,7 +185,9 @@ class Gate:
         self._audit("consent", result, None, actor)
         return result
 
-    def confirm(self, action_id: str, content_hash: str, session_id: str | None) -> GateResult:
+    def confirm(
+        self, action_id: str, content_hash: str, rendering_hash_: str, session_id: str | None
+    ) -> GateResult:
         actor = self._actor(session_id)
         record = self.store.find(action_id)
         if record is None:
@@ -181,7 +202,7 @@ class Gate:
                 raise LayerFailure(GateCode.E_POLICY, "gate policy changed since the proposal")
             self._layer_5_consent(policy, record, session_id, at_proposal=False)
             self._layer_6_authorization(envelope, policy, actor)
-            execution_id = self._layer_7_state(record, envelope, content_hash)
+            execution_id = self._layer_7_state(record, envelope, content_hash, rendering_hash_)
             if isinstance(execution_id, GateResult):
                 return execution_id
         except LayerFailure as failure:
@@ -213,6 +234,7 @@ class Gate:
             "content_hash": record["content_hash"],
             "execution_id": record["execution_id"],
             "result": json.loads(record["result"]) if record["result"] else None,
+            "rendering": _rendering(record),
         }
 
     # --- layers --------------------------------------------------------------
@@ -244,6 +266,7 @@ class Gate:
         for consent in consents:
             if (
                 consent["content_hash"] == record["content_hash"]
+                and consent["rendering_hash"] == record["rendering_hash"]
                 and consent["session_id"] == session_id
                 and consent["revoked_at"] is None
                 and datetime.fromisoformat(consent["expires_at"]) > now
@@ -276,7 +299,7 @@ class Gate:
             )
 
     def _layer_7_state(
-        self, record: dict[str, Any], envelope: dict[str, Any], content_hash: str
+        self, record: dict[str, Any], envelope: dict[str, Any], content_hash: str, rendering_hash_: str
     ) -> str | GateResult:
         if record["state"] in FINISHED_STATES:
             return self._existing(record)  # idempotency: never execute twice
@@ -284,6 +307,8 @@ class Gate:
             raise LayerFailure(GateCode.E_STATE, f"action is {record['state']}")
         if content_hash != record["content_hash"] or edp.content_hash(envelope) != record["content_hash"]:
             raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to these parameters")
+        if rendering_hash_ != record["rendering_hash"] or not _rendering_intact(record):
+            raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to the text that was shown")
         execution_id = self.store.claim(record["action_id"], content_hash)
         if execution_id is None:
             latest = self.store.find(record["action_id"])
@@ -375,6 +400,7 @@ class Gate:
         origin: Origin,
         session_id: str | None,
         actor: dict[str, Any] | None,
+        rendering: Any,
     ) -> dict[str, Any]:
         text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
         inserted = self.store.insert_pending(
@@ -389,6 +415,10 @@ class Gate:
                 "content_hash": digest,
                 "policy_version": POLICY_VERSION,
                 "policy_fingerprint": policy.fingerprint(),
+                "rendering_text": rendering.text,
+                "rendering_hash": rendering.hash,
+                "renderer_version": rendering.version,
+                "render_lang": rendering.lang,
             }
         )
         record = self.store.find(envelope["id"])
@@ -396,6 +426,7 @@ class Gate:
         if not inserted and (
             record["content_hash"] != digest
             or record["actor_identity"] != (actor["identity"] if actor else "")
+            or record["render_lang"] != rendering.lang
         ):
             raise LayerFailure(GateCode.E_STATE, "action id already used with other parameters")
         return record
@@ -473,6 +504,10 @@ class Gate:
         self._audit(step, result, raw, actor)
         return result
 
+    def _rendering_hash_of(self, action_id: str | None) -> str | None:
+        record = self.store.find(action_id) if action_id else None
+        return record.get("rendering_hash") if record else None
+
     def _audit(
         self, step: str, result: GateResult, raw: str | bytes | None, actor: dict[str, Any] | None
     ) -> None:
@@ -488,6 +523,7 @@ class Gate:
                 "participant": actor["identity"] if actor else None,
                 "timestamp": iso(self._clock()),
                 "input_hash": edp.input_hash(raw) if raw is not None else None,
+                "rendering_hash": self._rendering_hash_of(result.action_id),
                 "policy_version": POLICY_VERSION,
             }
         )
@@ -501,3 +537,23 @@ def _safe_id(raw: str | bytes | None) -> str | None:
         return None
     value = data.get("id") if isinstance(data, dict) else None
     return value if isinstance(value, str) and 0 < len(value) <= 200 else None
+
+
+def _rendering(record: dict[str, Any]) -> dict[str, Any] | None:
+    if not record.get("rendering_hash"):
+        return None
+    return {
+        "text": record["rendering_text"],
+        "hash": record["rendering_hash"],
+        "lang": record["render_lang"],
+        "version": record["renderer_version"],
+    }
+
+
+def _rendering_intact(record: dict[str, Any]) -> bool:
+    """The stored text still hashes to the stored rendering hash. The text is
+    never re-rendered: a newer renderer must not change what was consented to."""
+    if not record.get("rendering_hash") or record.get("rendering_text") is None:
+        return False
+    expected = rendering_hash(record["rendering_text"], record["render_lang"], record["renderer_version"])
+    return expected == record["rendering_hash"]

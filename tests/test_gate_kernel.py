@@ -57,6 +57,12 @@ def envelope(action_type="commitment_proposed", content=None, **overrides):
     return env
 
 
+def rh(world, action_id) -> str:
+    """The rendering hash the user was shown at propose (read from the gate)."""
+    record = world.store.find(action_id)
+    return record["rendering_hash"] if record and record["rendering_hash"] else "sha256:none"
+
+
 def raw(env) -> str:
     return json.dumps(env, ensure_ascii=False)
 
@@ -96,7 +102,7 @@ def propose_and_consent(world, env=None, session="s-anne", origin=Origin.MODEL):
     env = env or envelope()
     proposal = world.gate.propose(raw(env), session, origin)
     assert proposal.code is GateCode.E_NEED_CONSENT, proposal
-    consent = world.gate.grant_consent(env["id"], proposal.content_hash, session)
+    consent = world.gate.grant_consent(env["id"], proposal.content_hash, rh(world, env["id"]), session)
     assert consent.code is None, consent
     return env, proposal.content_hash
 
@@ -111,7 +117,7 @@ def outbox(world):
 
 def test_a_proposed_meeting_is_recorded_as_proposed_not_as_delivered(world):
     env, digest = propose_and_consent(world)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert result.decision is Decision.PASS
     assert result.state == "executed"
     assert result.result["visible_state"] == "proposed"
@@ -133,7 +139,12 @@ def test_idempotent_actions_need_no_consent_but_still_confirmation(world):
     world.gate._registry.register(_RecordingExecutor("presence_changed"))
     proposal = world.gate.propose(raw(env), "s-anne", Origin.USER)
     assert proposal.decision is None and proposal.state == "pending"
-    assert world.gate.confirm("dlg-presence", proposal.content_hash, "s-anne").decision is Decision.PASS
+    assert (
+        world.gate.confirm(
+            "dlg-presence", proposal.content_hash, rh(world, "dlg-presence"), "s-anne"
+        ).decision
+        is Decision.PASS
+    )
 
 
 # --- §7 acceptance table ------------------------------------------------------------
@@ -218,7 +229,7 @@ def test_degraded_transport_does_not_skip_validation(world):
 
 def test_missing_consent_for_irreversible_action_is_rejected(world):
     proposal = world.gate.propose(raw(envelope()), "s-anne", Origin.MODEL)
-    result = world.gate.confirm("dlg-0001", proposal.content_hash, "s-anne")
+    result = world.gate.confirm("dlg-0001", proposal.content_hash, rh(world, "dlg-0001"), "s-anne")
     assert (result.decision, result.code, result.layer) == (Decision.REJECT, GateCode.E_CONSENT, 5)
     assert outbox(world) == []
 
@@ -226,7 +237,7 @@ def test_missing_consent_for_irreversible_action_is_rejected(world):
 def test_consent_expires(world):
     env, digest = propose_and_consent(world)
     world.clock.now += timedelta(minutes=11)
-    assert world.gate.confirm(env["id"], digest, "s-anne").code is GateCode.E_CONSENT
+    assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").code is GateCode.E_CONSENT
 
 
 def test_changed_parameters_after_confirmation_are_rejected(world):
@@ -238,10 +249,13 @@ def test_changed_parameters_after_confirmation_are_rejected(world):
     assert (reuse.code, reuse.layer) == (GateCode.E_STATE, 7)
     # A confirmation bound to other parameters is rejected too.
     other = world.gate.propose(raw(changed | {"id": "dlg-0002"}), "s-anne", Origin.MODEL)
-    assert world.gate.confirm(env["id"], other.content_hash, "s-anne").code is GateCode.E_STATE
+    assert (
+        world.gate.confirm(env["id"], other.content_hash, rh(world, env["id"]), "s-anne").code
+        is GateCode.E_STATE
+    )
     # Consent for the original does not cover the changed one.
-    world.gate.grant_consent("dlg-0002", other.content_hash, "s-anne")
-    assert world.gate.confirm("dlg-0002", digest, "s-anne").code is GateCode.E_STATE
+    world.gate.grant_consent("dlg-0002", other.content_hash, rh(world, "dlg-0002"), "s-anne")
+    assert world.gate.confirm("dlg-0002", digest, rh(world, "dlg-0002"), "s-anne").code is GateCode.E_STATE
     assert outbox(world) == []
 
 
@@ -251,13 +265,13 @@ def test_tampered_stored_input_is_rejected(world):
     tampered["action"]["content"]["what"] = "Overfør 10.000 kr"
     with sqlite3.connect(world.db) as conn:
         conn.execute("UPDATE gate_actions SET raw = ? WHERE action_id = ?", (raw(tampered), env["id"]))
-    assert world.gate.confirm(env["id"], digest, "s-anne").code is GateCode.E_STATE
+    assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").code is GateCode.E_STATE
 
 
 def test_double_execution_returns_the_existing_result(world):
     env, digest = propose_and_consent(world)
-    first = world.gate.confirm(env["id"], digest, "s-anne")
-    second = world.gate.confirm(env["id"], digest, "s-anne")
+    first = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
+    second = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert first.decision is second.decision is Decision.PASS
     assert first.execution_id == second.execution_id
     assert len(outbox(world)) == 1
@@ -270,7 +284,7 @@ def test_concurrent_confirmations_execute_once(world):
 
     def go():
         barrier.wait()
-        results.append(world.gate.confirm(env["id"], digest, "s-anne"))
+        results.append(world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne"))
 
     threads = [threading.Thread(target=go) for _ in range(8)]
     for t in threads:
@@ -286,7 +300,7 @@ def test_concurrent_confirmations_execute_once(world):
 def test_right_revoked_after_planning_is_rejected(world):
     env, digest = propose_and_consent(world)
     world.store.revoke_right(world.grant)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.code, result.layer) == (GateCode.E_UNAUTHORIZED, 6)
     assert outbox(world) == []
     assert world.gate.status(env["id"], "s-anne")["state"] == "pending"
@@ -302,7 +316,7 @@ def test_right_revoked_between_claim_and_execution_is_rejected(world, monkeypatc
         return execution_id
 
     monkeypatch.setattr(world.store, "claim", claim_then_revoke)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert result.code is GateCode.E_UNAUTHORIZED
     assert outbox(world) == []
     assert world.gate.status(env["id"], "s-anne")["state"] == "pending"
@@ -340,32 +354,32 @@ def test_unavailable_model_runtime_is_a_safe_reject(world):
 def test_partial_failure_is_reported_with_its_state(world):
     world.gate._registry = _registry_with(world, _PartialExecutor())
     env, digest = propose_and_consent(world)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.decision, result.code, result.state) == (Decision.REJECT, GateCode.E_PARTIAL, "partial")
     assert world.gate.status(env["id"], "s-anne")["state"] == "partial"
     # Not retried automatically.
-    again = world.gate.confirm(env["id"], digest, "s-anne")
+    again = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert again.code is GateCode.E_PARTIAL and again.execution_id == result.execution_id
 
 
 def test_executor_crash_is_unknown_never_success(world):
     world.gate._registry = _registry_with(world, _CrashingExecutor())
     env, digest = propose_and_consent(world)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.code, result.state) == (GateCode.E_PARTIAL, "unknown")
 
 
 def test_invalid_state_transition_from_executor_is_not_success(world):
     world.gate._registry = _registry_with(world, _LyingExecutor())
     env, digest = propose_and_consent(world)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.code, result.state) == (GateCode.E_PARTIAL, "unknown")
 
 
 def test_missing_executor_is_reported_and_nothing_changes(world):
     env = envelope("artifact_shared", {"artifact_ref": "obj:document:7"}, id="dlg-art")
     env, digest = propose_and_consent(world, env)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.code, result.layer) == (GateCode.E_EXECUTOR_UNAVAILABLE, 8)
     assert world.gate.status(env["id"], "s-anne")["state"] == "pending"
 
@@ -376,8 +390,8 @@ def test_correct_schema_without_permission_is_unauthorized(world):
     env = envelope(participants=[{"identity": BO, "role": "member"}], id="dlg-bo")
     result = world.gate.propose(raw(env), "s-bo", Origin.MODEL)
     assert result.code is GateCode.E_NEED_CONSENT  # consent is checked before rights
-    world.gate.grant_consent("dlg-bo", result.content_hash, "s-bo")
-    result = world.gate.confirm("dlg-bo", result.content_hash, "s-bo")
+    world.gate.grant_consent("dlg-bo", result.content_hash, rh(world, "dlg-bo"), "s-bo")
+    result = world.gate.confirm("dlg-bo", result.content_hash, rh(world, "dlg-bo"), "s-bo")
     assert (result.decision, result.code, result.layer) == (Decision.REJECT, GateCode.E_UNAUTHORIZED, 6)
 
 
@@ -386,8 +400,11 @@ def test_acting_for_someone_else_is_unauthorized(world):
     world.store.add_member(CONV, BO)
     env = envelope(participants=[{"identity": BO, "role": "member"}], id="dlg-spoof")
     proposal = world.gate.propose(raw(env), "s-anne", Origin.MODEL)
-    world.gate.grant_consent("dlg-spoof", proposal.content_hash, "s-anne")
-    assert world.gate.confirm("dlg-spoof", proposal.content_hash, "s-anne").code is GateCode.E_UNAUTHORIZED
+    world.gate.grant_consent("dlg-spoof", proposal.content_hash, rh(world, "dlg-spoof"), "s-anne")
+    assert (
+        world.gate.confirm("dlg-spoof", proposal.content_hash, rh(world, "dlg-spoof"), "s-anne").code
+        is GateCode.E_UNAUTHORIZED
+    )
 
 
 def test_unknown_or_missing_session_cannot_act(world):
@@ -395,8 +412,11 @@ def test_unknown_or_missing_session_cannot_act(world):
         result = world.gate.propose(raw(envelope(id=f"dlg-{session}")), session, Origin.MODEL)
         assert result.decision is Decision.REJECT
     env, digest = propose_and_consent(world)
-    assert world.gate.confirm(env["id"], digest, "s-forged").decision is Decision.REJECT
-    assert world.gate.grant_consent(env["id"], digest, "s-forged").code is GateCode.E_UNAUTHORIZED
+    assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-forged").decision is Decision.REJECT
+    assert (
+        world.gate.grant_consent(env["id"], digest, rh(world, env["id"]), "s-forged").code
+        is GateCode.E_UNAUTHORIZED
+    )
 
 
 def test_step_up_required_for_payments(world):
@@ -404,7 +424,7 @@ def test_step_up_required_for_payments(world):
         "value_transfer_requested", {"amount": {"value": "100.00", "currency": "DKK"}}, id="dlg-pay"
     )
     env, digest = propose_and_consent(world, env, origin=Origin.USER)
-    result = world.gate.confirm(env["id"], digest, "s-anne")
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.code, result.layer) == (GateCode.E_STEP_UP_REQUIRED, 6)
     assert result.data["required_assurance"] == "eid_high"
 
@@ -418,7 +438,7 @@ def test_policy_change_after_proposal_forces_reject(world, monkeypatch):
         required_assurance="eid_high",
     )
     monkeypatch.setitem(gate_policy.REGISTRY, "commitment_proposed", stricter)
-    assert world.gate.confirm(env["id"], digest, "s-anne").code is GateCode.E_POLICY
+    assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").code is GateCode.E_POLICY
 
 
 def test_unknown_policy_entry_is_treated_as_not_allowed(world, monkeypatch):
@@ -429,7 +449,7 @@ def test_unknown_policy_entry_is_treated_as_not_allowed(world, monkeypatch):
 
 def test_accepting_requires_a_proposed_commitment_in_the_same_conversation(world):
     env, digest = propose_and_consent(world)
-    world.gate.confirm(env["id"], digest, "s-anne")
+    world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     accept = envelope("commitment_accepted", {"commitment_id": env["id"]}, id="dlg-acc")
     proposal = world.gate.propose(raw(accept), "s-anne", Origin.USER)
     assert proposal.code is GateCode.E_NEED_CONSENT
@@ -446,7 +466,7 @@ def test_accepting_requires_a_proposed_commitment_in_the_same_conversation(world
 def test_every_decision_is_audited_and_pass_only_after_the_result(world):
     world.gate.propose("{", "s-anne", Origin.MODEL)
     env, digest = propose_and_consent(world)
-    world.gate.confirm(env["id"], digest, "s-anne")
+    world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     entries = [json.loads(row["entry"]) for row in world.store.audit_entries()]
     assert [(e["step"], e["decision"], e["error"]) for e in entries] == [
         ("propose", "REJECT", "E_SYNTAX"),
@@ -537,13 +557,13 @@ def test_crash_between_outbox_and_gate_result_is_recovered_once(world, monkeypat
 
     monkeypatch.setattr(world.store, "finish", crash)
     with pytest.raises(SystemExit):
-        world.gate.confirm(env["id"], digest, "s-anne")
+        world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.setattr(world.store, "finish", original_finish)
     assert world.gate.status(env["id"], "s-anne")["state"] == "executing"
     # Restart: a new gate recovers from the executor's durable state.
     restarted = Gate(world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock)
     assert restarted.gate_state(env["id"]) == "executed"
-    again = restarted.confirm(env["id"], digest, "s-anne")
+    again = restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert again.decision is Decision.PASS and again.result["recovered"] is True
     assert len(outbox(world)) == 1  # the event was not created twice
 
@@ -557,11 +577,11 @@ def test_crash_before_the_outbox_write_returns_the_action_to_pending(world, monk
 
     monkeypatch.setattr(executor, "run", crash)
     with pytest.raises(SystemExit):
-        world.gate.confirm(env["id"], digest, "s-anne")
+        world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.undo()
     restarted = Gate(world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock)
     assert restarted.gate_state(env["id"]) == "pending"
-    assert restarted.confirm(env["id"], digest, "s-anne").decision is Decision.PASS
+    assert restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").decision is Decision.PASS
     assert len(outbox(world)) == 1
 
 
@@ -570,7 +590,7 @@ def test_recovery_without_proof_is_unknown_never_success(world, monkeypatch):
     env, digest = propose_and_consent(world)
     monkeypatch.setattr(world.store, "finish", lambda *a: (_ for _ in ()).throw(SystemExit()))
     with pytest.raises(SystemExit):
-        world.gate.confirm(env["id"], digest, "s-anne")
+        world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.undo()
     restarted = Gate(world.store, _registry_with(world, _PartialExecutor()), sessions=world.sessions.get)
     assert restarted.gate_state(env["id"]) == "unknown"
@@ -601,7 +621,7 @@ def test_reauthorization_uses_the_confirming_session(world, monkeypatch):
         return execution_id
 
     monkeypatch.setattr(world.store, "claim", claim_then_downgrade)
-    result = world.gate.confirm("dlg-p2", proposal.content_hash, "s-anne-2")
+    result = world.gate.confirm("dlg-p2", proposal.content_hash, rh(world, "dlg-p2"), "s-anne-2")
     assert result.code is GateCode.E_STEP_UP_REQUIRED
     assert world.gate.status("dlg-p2", "s-anne")["state"] == "pending"
 
