@@ -1,7 +1,7 @@
 # EIRA Rights Set 1.0 — kontrakt mellem Fleet og endpoint
 
-**Status:** UDKAST til ejerens godkendelse. Ikke bindende, før det er godkendt.
-**Version:** 1.0-draft
+**Status:** Godkendt af ejer 7. november 2026. Normativ.
+**Version:** 1.0
 **Parter:** `eira-fleet-control` (udsteder) og `eira-os` (`eira-governance-agent` anvender, Gate håndhæver)
 **Grundlag:** [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), [GATE-KERNEL bilag A og B](GATE-KERNEL-1.0.md), Fleet Agent Protocol v0.1 (`eira-fleet-control`)
 

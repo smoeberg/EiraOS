@@ -127,7 +127,7 @@ EiraOS redigerer ikke Ubuntu-rettigheder på egen hånd. Det anvender Ubuntu-des
 - **Explorer-brugeren kan skrive gatens database.** *(Rettet i #142, verificeret i VM: `user-not-in-eira`, `user-cannot-write-gate-db`, `user-can-reach-intentd`.)* `eira-firstboot` lægger brugeren i gruppen `eira` for at give adgang til sockets. Men `/data` er `eira:eira 0770`, og daemons' `UMask=0117` giver databasefilen `0660 eira:eira`. Brugeren og alle brugerens programmer kan derfor skrive direkte i `gate_grants`, `gate_consents` og `gate_actions`. Det bryder punkt 1. Rettelsen er at adskille grupperne: `eira-clients` får adgang til sockets og IPC-token, mens `eira` forbliver daemons' egen gruppe, som brugeren ikke er medlem af.
 - **Installerens bruger er sudo-administrator** (Ubuntu-standard). Det er forkert i managed mode (punkt 2). Det skal afgøres, hvordan en ikke-administreret, privat maskine skal håndteres (se åbent punkt).
 
-### Privat tilstand og managed mode (forslag — afventer ejer)
+### Privat tilstand og managed mode (besluttet af ejer, 7. november 2026)
 
 **Privat maskine: én konto med sudo (b), men tilstanden skal være synlig, ikke kun beskrevet.** En separat administratorkonto (a) er ikke en grænse på ejerens egen maskine: ejeren ejer hardwaren og kan altid komme ind via recovery, og en dagligbruger uden sudo ender med at slå begrænsningen fra ved første printer, VPN eller pakkeopdatering. Krav:
 
