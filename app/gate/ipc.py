@@ -18,7 +18,8 @@ _GATE: Gate | None = None
 # Former write paths that bypassed the gate. They are not deleted (a deleted
 # path tends to reappear as a copy elsewhere); they answer E_GATE_REQUIRED
 # and point to the only way in.
-GATE_REQUIRED = -32010
+# -32010 is AUTH_FAILED (app/ipc/auth.py); codes must be unique.
+GATE_REQUIRED = -32040
 REDIRECTED_METHODS = ("intent.confirm", "intent.execute", "journey.advance")
 
 

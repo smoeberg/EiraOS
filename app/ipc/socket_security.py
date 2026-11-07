@@ -24,6 +24,32 @@ class PeerCredentials:
     pid: int
     uid: int
     gid: int
+    # Supplementary groups as the kernel recorded them at connect() time
+    # (SO_PEERGROUPS). None means unknown; then /proc is consulted.
+    groups: frozenset[int] | None = None
+
+
+# Linux 4.13+: SO_PEERGROUPS returns the peer's supplementary GIDs from the
+# credentials captured at connect(). Python does not export the constant.
+SO_PEERGROUPS = getattr(socket, "SO_PEERGROUPS", 59)
+
+
+def peer_groups(sock: Any) -> frozenset[int] | None:
+    """Supplementary GIDs of a connected Unix peer, or None if unavailable."""
+    size = 64 * 4
+    for _ in range(4):
+        try:
+            raw = sock.getsockopt(socket.SOL_SOCKET, SO_PEERGROUPS, size)
+        except OSError as exc:
+            if exc.errno == 34:  # ERANGE: buffer too small
+                size *= 4
+                continue
+            return None
+        except Exception:
+            return None
+        count = len(raw) // 4
+        return frozenset(struct.unpack(f"{count}I", raw[: count * 4]))
+    return None
 
 
 def resolve_group_gid(group_name: str) -> int | None:
@@ -70,7 +96,8 @@ def socket_access_allowed(
         peer_gids = set(gids or ())
     elif isinstance(target, PeerCredentials):
         creds_uid = target.uid
-        peer_gids = {target.gid, *_supplementary_gids(target.pid)}
+        extra = target.groups if target.groups is not None else _supplementary_gids(target.pid)
+        peer_gids = {target.gid, *extra}
     elif isinstance(target, (str, Path)):
         try:
             st = os.stat(target)
@@ -109,18 +136,32 @@ def secure_socket_path(socket_path: str) -> None:
         os.chmod(socket_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
+# Socket access group. The desktop user is a member of this group, never of
+# "eira" (the daemons' own group, which owns their data): a user who may talk
+# to the daemons must not be able to write the gate's state (ADR-0003,
+# "substratet beskytter Eira-laget").
+SOCKET_GROUP = "eira-clients"
+
+
 def setup_unix_socket(
-    socket_path: str, mode: int = 0o660, group: str = "eira"
+    socket_path: str, mode: int = 0o660, group: str = SOCKET_GROUP
 ) -> socket.socket:
     """Create a Unix socket with deterministic mode and group ownership.
 
     The target group is used when it exists and can be applied. Minimal
     development/CI environments fall back to the process's current GID.
     """
+    target_gid = resolve_group_gid(group)
+    if target_gid is None and _strict_socket_group(socket_path):
+        # In an installed system a missing group is a broken substrate (or an
+        # AppArmor profile that cannot read /etc/group), not a dev setup.
+        # Checked before touching the filesystem.
+        raise PermissionError(
+            f"Socket group '{group}' cannot be resolved; refusing to create '{socket_path}'"
+        )
     remove_unix_socket(socket_path)
     os.makedirs(os.path.dirname(socket_path) or ".", exist_ok=True)
 
-    target_gid = resolve_group_gid(group)
     fallback_gid = os.getgid()
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     old_umask = os.umask(0o117)
@@ -130,6 +171,8 @@ def setup_unix_socket(
             try:
                 os.chown(socket_path, -1, target_gid)
             except PermissionError:
+                if _strict_socket_group(socket_path):
+                    raise
                 # The socket is owned by this process, so assigning its current
                 # group is the safe development/CI fallback.
                 logger.warning(
@@ -154,6 +197,16 @@ def setup_unix_socket(
     return sock
 
 
+def _strict_socket_group(socket_path: str = "") -> bool:
+    """Installed daemons must not silently fall back to their own GID."""
+    flag = os.environ.get("EIRA_STRICT_SOCKET_GROUP", "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return True
+    if flag in {"0", "false", "no"}:
+        return False
+    return str(socket_path).startswith("/run/eira/")
+
+
 def remove_unix_socket(socket_path: str) -> None:
     if os.path.exists(socket_path) or os.path.islink(socket_path):
         try:
@@ -173,7 +226,7 @@ def validate_peer_credentials(
     try:
         creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
         pid, uid, gid = struct.unpack("3i", creds)
-        peer = PeerCredentials(pid=pid, uid=uid, gid=gid)
+        peer = PeerCredentials(pid=pid, uid=uid, gid=gid, groups=peer_groups(sock))
     except Exception as exc:
         raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
 
@@ -181,9 +234,10 @@ def validate_peer_credentials(
         allowed_uids = _parse_id_allowlist("EIRA_IPC_ALLOWED_UIDS", {os.getuid()})
     if allowed_gids is None:
         default_gids = {os.getgid()}
-        eira_gid = resolve_group_gid("eira")
-        if eira_gid is not None:
-            default_gids.add(eira_gid)
+        for name in (SOCKET_GROUP, "eira"):
+            gid = resolve_group_gid(name)
+            if gid is not None:
+                default_gids.add(gid)
         allowed_gids = _parse_id_allowlist("EIRA_IPC_ALLOWED_GIDS", default_gids)
 
     if not socket_access_allowed(peer, allowed_uids=allowed_uids, allowed_gids=allowed_gids):

@@ -96,7 +96,32 @@ check gnome-session-hidden sh -c '! ls /usr/share/wayland-sessions/ubuntu*.deskt
 check session-policy-active systemctl is-active --quiet eira-session-policy.service
 check firstboot-done test -e /var/lib/eira/firstboot.done
 check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
-check user-in-eira-group sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
+check user-in-eira-clients sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira-clients"
+# ADR-0003: the desktop user reaches the daemons but cannot touch their state.
+check user-not-in-eira sh -c "! id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
+check user-cannot-write-gate-db sh -c "test -e /data/eira-app.db && ! runuser -u $USER_NAME -- test -w /data/eira-app.db && ! runuser -u $USER_NAME -- test -r /data/eira-app.db"
+# A full round-trip: connect() proves the socket's group/mode, the reply proves
+# the daemon's peer-credential check accepts the user via eira-clients.
+REACH_PY='import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(10)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "health",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+assert reply["result"]["ok"] is True, reply'
+check user-can-reach-intentd runuser -u "$USER_NAME" -- python3 -c "$REACH_PY"
+if [ "$failed" -ne 0 ]; then
+    say "diag run-eira: $(ls -ln /run/eira 2>&1 | tr '\n' ' ')"
+    say "diag user-ids: $(id "$USER_NAME" 2>&1)"
+    say "diag reach: $(runuser -u "$USER_NAME" -- python3 -c "$REACH_PY" 2>&1 | tail -n 2 | tr '\n' ' ')"
+    say "diag intentd-log: $(journalctl -u eira-intentd.service -b --no-pager -n 15 2>&1 | tr '\n' ' ' | cut -c1-1500)"
+    say "diag apparmor: $(journalctl -k -b --no-pager 2>&1 | grep -i 'apparmor=\"DENIED\"' | tail -n 5 | tr '\n' ' ' | cut -c1-1500)"
+fi
 check login-screen wait_for 300 systemctl is-active --quiet display-manager.service
 check labwc-running wait_for 600 pgrep -u "$USER_NAME" -x labwc
 check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop

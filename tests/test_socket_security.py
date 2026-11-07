@@ -29,7 +29,7 @@ def test_setup_unix_socket_uses_mode_and_eira_group_or_dev_fallback(tmp_path):
     old_path.rename(path)
 
     try:
-        eira_gid = grp.getgrnam("eira").gr_gid
+        eira_gid = grp.getgrnam("eira-clients").gr_gid
     except KeyError:
         eira_gid = os.getgid()
 

@@ -2,6 +2,7 @@
 
 /usr/bin/eira-intentd flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
+  #include <abstractions/nameservice>
   #include <abstractions/python>
 
   /usr/bin/eira-intentd rix,
