@@ -1,0 +1,16 @@
+{
+  "name": "unknown-action",
+  "description": "Handlingsnøgle, som den installerede gate ikke kender.",
+  "raw": "{\"denies\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"vikarer\"}}],\"device_id\":\"dev-0001\",\"eira_rights\":\"1\",\"expires_at\":\"2026-11-21T11:00:00Z\",\"grants\":[{\"actions\":[\"system:disk.format\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"laerere\"}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"req-7f3a\",\"fleet\":\"fleet.kk.example\"},\"kind\":\"managed\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-tenant-kk-1\",\"value\":\"_U1oMeTvEymFpudNCDCo-6W8m_WXI9JRP78LnCU5TT1Psz_iZ7zFkk6NTiNmLghWy-3FHKeRXa8pVP-yLXSXAw\"},\"template\":{\"id\":\"skoleforvaltning-laerer\",\"version\":\"3\"},\"tenant_id\":\"kk\",\"version\":42}",
+  "device": {
+    "enrolled": true,
+    "tenant_id": "kk",
+    "device_id": "dev-0001"
+  },
+  "active": null,
+  "now": "2026-11-07T12:00:00Z",
+  "expect": {
+    "ok": false,
+    "reason": "unknown_action"
+  }
+}

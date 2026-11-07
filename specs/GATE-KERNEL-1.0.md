@@ -304,6 +304,7 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
    - `test_former_bypasses_answer_gate_required_and_never_execute` kører over den rigtige JSON-RPC-server og viser, at hverken `execute_intent`, `stated`-appenderen eller journey-lageret nås.
    - `test_every_intentd_method_is_classified` har en tom `KNOWN_BYPASSES`.
    - Mutationstjek: at gen-eksponere `intent.execute` får testen til at fejle.
+6. **Samtykkets udløb regnes på vægur-tid.** `DEFAULT_CONSENT_TTL` (10 min.) sammenlignes med `utc_now`. Den, der kan stille uret tilbage, kan forlænge et samtykke. Samme fejlklasse som rettighedssættets TTL (EIRA-RIGHTS-SET-1.0 §4.1). Rettelsen er mindre end dér, fordi et samtykke aldrig skal overleve en genstart: gem `(boot_id, CLOCK_BOOTTIME)` ved samtykket, og afvis det, hvis `boot_id` er et andet, eller hvis der er gået mere end TTL'en i `CLOCK_BOOTTIME`. Vægur-tiden bruges da kun til visning og audit.
 
 **Rettet efter review af #136:**
 - *Crash-recovery.* Et crash mellem claim og registreret resultat efterlader handlingen i `executing`. `Gate.recover()` kører ved opstart og lader executorens egen varige tilstand afgøre udfaldet: outbox-rækken findes → `executed`, den findes ikke → `pending` igen, kan ikke afgøres → `unknown`. Executoren køres aldrig igen, og tests dræber processen før og efter outbox-skrivningen.
@@ -318,7 +319,7 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
 2. Omdirigér den gamle vej.
 3. Lav rendereren, fordi den blokerer punkt 4.
 4. Flyt den første executor, der ændrer maskinens tilstand, ind under gaten: `SystemExecutor` med EiraSystemAPI's strøm-operationer og en test, der beviser, at det direkte Tauri-kald fejler.
-5. Lav procesidentitet og `identityd`'s admin-API.
+5. Lav procesidentitet. Identitet og grupper kommer fra `identityd`, rettigheder fra Fleet via `eira-governance-agent` (ADR-0003).
 6. Lav audit-ankeret (journald FSS og fleet-vidne).
 
 **Executor-status:** Den eneste executor er conversation-outboxen for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
@@ -350,12 +351,12 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
 **Mindst mulige rettigheder:**
 - `packaging/polkit/50-eira-power.rules` giver servicebrugeren `eira` netop de seks login1-power-handlinger og ikke `*-ignore-inhibit`. Programmer, der blokerer nedlukning, vinder altså stadig.
 - AppArmor-profilen for `intentd` tillader kun `busctl` og D-Bus-kald til `login1.Manager`-metoderne `Can*`, `PowerOff`, `Reboot` og `Suspend`.
-- Retten `system:power.request_action` på `device:local` skal tildeles af policy eller `identityd`. Et forslag kan ikke bære rettigheder.
+- Retten `system:power.request_action` på `device:local` tildeles kun via Fleet's rettigheds-API (ADR-0003). Et forslag kan ikke bære rettigheder.
 
 **Tauri `eira_system`:** `power.request_action` fejler lukket med `UNSUPPORTED`. Det bevises af Rust-testen `power_actions_never_execute_from_a_direct_call`. Tauri beholder kun læseoperationer.
 
 **`gate.capabilities`** er en læseoperation. Den viser familierne, systemoperationerne og logind's svar på `Can*`. VM-acceptancetesten kræver `poweroff` og `reboot` = `"yes"` på den installerede maskine, hvilket beviser, at AppArmor, polkit og logind spiller sammen. Selve nedlukningen køres ikke i CI.
 
 **Åbent:**
-1. Ingen tildeler i dag retten til `device:local` på en installeret maskine. Gaten fejler lukket, indtil `identityd` provisionerer den (bilag A, punkt 4).
+1. Ingen tildeler i dag retten til `device:local` på en installeret maskine. Gaten fejler lukket, indtil `eira-governance-agent` anvender et signeret rettighedssæt fra Fleet (ADR-0003, `specs/EIRA-RIGHTS-SET-1.0.md`).
 2. CEL-constraints fra den tidligere `intent.execute` er endnu ikke foldet ind i lag 4.

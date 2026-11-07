@@ -94,6 +94,69 @@ Login (Entra/OIDC)
 
 Kilden er derfor **altid** Fleet, enten live eller forudsigneret. Endpointet opfinder ikke rettigheder.
 
+## To rettighedslag, én kilde (besluttet af ejer, 7. november 2026)
+
+> **To rettighedslag, én kilde.**
+> (1) Ubuntu-substratrettigheder (konti, sudo, AppArmor, pakker, …) defineres i Fleet som desired state og anvendes af agenten på OS-niveau.
+> (2) EiraOS-rettigheder (intents, skabelon-logik, assurance, adapters) defineres via Fleet's rettigheds-API/skabeloner og håndhæves af EiraOS.
+> Ingen af lagene har endpointet som autoritativ kilde.
+
+| Lag | Eksempler | Defineres i | Anvendes af | Håndhæves af |
+|---|---|---|---|---|
+| Ubuntu-substrat | konti, grupper, sudo, fil-rettigheder, AppArmor, polkit, systemd-units, pakker, diskkryptering | Fleet desired state og bundle | `eira-governance-agent` via Policy Compiler (Glue Layer v0.1: compile → validate → dry-run → snapshot → apply → probe → rollback) | Kernen og Ubuntu |
+| EiraOS | intents, EDP- og systemhandlinger, adapters, assurance og step-up, audit-niveau, skabeloner | Fleet rettigheds-API (`specs/EIRA-RIGHTS-SET-1.0.md`) | `eira-governance-agent` i gatens cache | Gate (lag 4 og 6) |
+
+EiraOS redigerer ikke Ubuntu-rettigheder på egen hånd. Det anvender Ubuntu-desired state fra Fleet og håndhæver sit eget lag.
+
+### Forholdet mellem lagene (normativt)
+
+1. **Substratet beskytter Eira-laget.** Eira-rettigheder virker kun, hvis brugeren og brugerens programmer ikke kan ændre gatens tilstand. Det gælder rettighedscache, samtykker, handlinger og audit-log. Det er en *substrat*-rettighed:
+   - Desktop-brugeren må have adgang til daemons' sockets.
+   - Desktop-brugeren må aldrig have skriveadgang til Eira-daemons' data (`/data`, `/var/lib/eira`).
+2. **Substratet må ikke åbne en vej uden om gaten.**
+   - I managed mode har desktop-brugeren ingen sudo. Administratoradgang gives kun via Fleet: et midlertidigt, auditeret grant til en navngiven IT-konto, aldrig til Explorer-brugeren.
+   - Med root kan man ændre alt, og det kan intet Eira-lag forhindre. Derfor er "ingen lokal root uden om Fleet" et substratkrav.
+3. **Eira-laget kan ikke give mere, end substratet tillader.** Et grant til `system:power.request_action` virker kun, fordi bundlen giver servicebrugeren `eira` netop de polkit-handlinger. Hverken bundlen eller polkit giver *brugeren* noget.
+4. **Ét begreb hører til ét lag.**
+   - "Må denne session godkende budgettet?" hører til Eira-laget.
+   - "Må `intentd` tale med logind?" hører til substratet.
+   - Et begreb må ikke styres to steder.
+
+### Fundet ved gennemgangen (skal rettes)
+
+- **Explorer-brugeren kan skrive gatens database.** *(Rettet i #142, verificeret i VM: `user-not-in-eira`, `user-cannot-write-gate-db`, `user-can-reach-intentd`.)* `eira-firstboot` lægger brugeren i gruppen `eira` for at give adgang til sockets. Men `/data` er `eira:eira 0770`, og daemons' `UMask=0117` giver databasefilen `0660 eira:eira`. Brugeren og alle brugerens programmer kan derfor skrive direkte i `gate_grants`, `gate_consents` og `gate_actions`. Det bryder punkt 1. Rettelsen er at adskille grupperne: `eira-clients` får adgang til sockets og IPC-token, mens `eira` forbliver daemons' egen gruppe, som brugeren ikke er medlem af.
+- **Installerens bruger er sudo-administrator** (Ubuntu-standard). Det er forkert i managed mode (punkt 2). Det skal afgøres, hvordan en ikke-administreret, privat maskine skal håndteres (se åbent punkt).
+
+### Privat tilstand og managed mode (besluttet af ejer, 7. november 2026)
+
+**Privat maskine: én konto med sudo (b), men tilstanden skal være synlig, ikke kun beskrevet.** En separat administratorkonto (a) er ikke en grænse på ejerens egen maskine: ejeren ejer hardwaren og kan altid komme ind via recovery, og en dagligbruger uden sudo ender med at slå begrænsningen fra ved første printer, VPN eller pakkeopdatering. Krav:
+
+1. **Synlig:** Bundlens default-sæt markerer tilstanden (`owner_admin`). Gaten viser den i status og på samtykkeskærmen: *"Ejeren har sudo på denne maskine. Eira beskytter mod fejl og mod programmer, der kører som dig — ikke mod dig."*
+2. **Ærlig assurance:** Gaten registrerer `owner_admin` i audit ved hver beslutning, så en handling på en privat maskine aldrig fremstår med samme garanti som på en managed maskine. Beslutningen (PASS/REJECT) ændres ikke af flaget.
+3. **Ingen påstand stærkere end sandheden:** Ingen tekst i UI eller dokumentation må sige "Eira forhindrer X" om en maskine, hvor ejeren har root.
+
+**Managed mode: ingen stående lokal administratorkonto.** Administratoradgang er kun et midlertidigt, navngivet og auditeret grant fra Fleet til en IT-konto (punkt 2 ovenfor). "En separat administratorkonto" er netop det, der ikke må findes, for så kan IT logge ind uden om både Fleet og gatens audit.
+
+## Infrastruktur som kode (besluttet af ejer, 7. november 2026)
+
+> Terraform må bruges som deklarativ klient mod Fleet API; det erstatter ikke agent, rettigheds-API eller signeret desired state på endpointet.
+
+```
+Git + Terraform  →  Fleet API  →  Agent på PC  →  Ubuntu + EiraOS
+     (IaC)           (control)      (reconcile)      (håndhæv)
+```
+
+- **Terraform er en klient** til Fleet API på linje med Fleet Console og CI. Fleet API er det eneste sted, desired state ændres, og Fleet Agent Protocol er sandheden på endpointet.
+- **Terraform kører aldrig på en pc** og erstatter aldrig agentens pull/apply, mTLS, TTL eller signaturer.
+- **Terraform er valgfrit.** Console og API er nok, og Terraform er et tillæg for IT, der vil arbejde med GitOps.
+- Terraform til Fleet Control's egen infrastruktur (servere, database, netværk) er klassisk IaC og hører til `eira-fleet-control`.
+
+**Krav, når en Terraform-provider bygges** (i `eira-fleet-control`):
+1. **Handlingsnøgler fra gatens registry.** En skabelon i HCL bruger de samme nøgler som rettighedssættet (`edp:commitment_proposed`, `system:power.request_action`), ikke fritekst som `intent.opgave`. Fleet API afviser ukendte nøgler, så en fejl opdages ved `terraform plan` og ikke på pc'en.
+2. **Signeringsnøgler ligger aldrig i Terraform state.** Fleet signerer rettighedssættet server-side. Terraform state indeholder kun skabeloner og tildelinger.
+3. **To skrivere til samme Fleet giver drift.** Hvis IT både bruger Console og Terraform til de samme skabeloner, skal Fleet markere en ressource som "styret af Terraform" og afvise Console-ændringer til den, eller også skal plan vise afvigelsen. Ellers overskriver den ene stille og roligt den anden.
+4. **Audit.** Et Terraform-apply er et almindeligt API-kald med `api_call_id`. Rettighedssættets `issued_by` peger derfor også her tilbage på det kald.
+
 ## Implementeringsrækkefølge (afledt)
 
 1. **Specificér rettighedssættets format** som et fælles kontraktdokument mellem `eira-os` og `eira-fleet-control`. Formatet består af:
