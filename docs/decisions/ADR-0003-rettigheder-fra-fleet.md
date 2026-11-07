@@ -133,6 +133,26 @@ EiraOS redigerer ikke Ubuntu-rettigheder på egen hånd. Det anvender Ubuntu-des
 - **(a)** en separat administrator-konto og en Explorer-bruger uden sudo, eller
 - **(b)** én konto med sudo, hvor begrænsningen beskrives ærligt?
 
+## Infrastruktur som kode (besluttet af ejer, 7. november 2026)
+
+> Terraform må bruges som deklarativ klient mod Fleet API; det erstatter ikke agent, rettigheds-API eller signeret desired state på endpointet.
+
+```
+Git + Terraform  →  Fleet API  →  Agent på PC  →  Ubuntu + EiraOS
+     (IaC)           (control)      (reconcile)      (håndhæv)
+```
+
+- **Terraform er en klient** til Fleet API på linje med Fleet Console og CI. Fleet API er det eneste sted, desired state ændres, og Fleet Agent Protocol er sandheden på endpointet.
+- **Terraform kører aldrig på en pc** og erstatter aldrig agentens pull/apply, mTLS, TTL eller signaturer.
+- **Terraform er valgfrit.** Console og API er nok, og Terraform er et tillæg for IT, der vil arbejde med GitOps.
+- Terraform til Fleet Control's egen infrastruktur (servere, database, netværk) er klassisk IaC og hører til `eira-fleet-control`.
+
+**Krav, når en Terraform-provider bygges** (i `eira-fleet-control`):
+1. **Handlingsnøgler fra gatens registry.** En skabelon i HCL bruger de samme nøgler som rettighedssættet (`edp:commitment_proposed`, `system:power.request_action`), ikke fritekst som `intent.opgave`. Fleet API afviser ukendte nøgler, så en fejl opdages ved `terraform plan` og ikke på pc'en.
+2. **Signeringsnøgler ligger aldrig i Terraform state.** Fleet signerer rettighedssættet server-side. Terraform state indeholder kun skabeloner og tildelinger.
+3. **To skrivere til samme Fleet giver drift.** Hvis IT både bruger Console og Terraform til de samme skabeloner, skal Fleet markere en ressource som "styret af Terraform" og afvise Console-ændringer til den, eller også skal plan vise afvigelsen. Ellers overskriver den ene stille og roligt den anden.
+4. **Audit.** Et Terraform-apply er et almindeligt API-kald med `api_call_id`. Rettighedssættets `issued_by` peger derfor også her tilbage på det kald.
+
 ## Implementeringsrækkefølge (afledt)
 
 1. **Specificér rettighedssættets format** som et fælles kontraktdokument mellem `eira-os` og `eira-fleet-control`. Formatet består af:
