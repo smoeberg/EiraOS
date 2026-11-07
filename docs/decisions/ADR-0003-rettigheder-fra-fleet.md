@@ -124,14 +124,18 @@ EiraOS redigerer ikke Ubuntu-rettigheder på egen hånd. Det anvender Ubuntu-des
 
 ### Fundet ved gennemgangen (skal rettes)
 
-- **Explorer-brugeren kan skrive gatens database.** `eira-firstboot` lægger brugeren i gruppen `eira` for at give adgang til sockets. Men `/data` er `eira:eira 0770`, og daemons' `UMask=0117` giver databasefilen `0660 eira:eira`. Brugeren og alle brugerens programmer kan derfor skrive direkte i `gate_grants`, `gate_consents` og `gate_actions`. Det bryder punkt 1. Rettelsen er at adskille grupperne: `eira-clients` får adgang til sockets og IPC-token, mens `eira` forbliver daemons' egen gruppe, som brugeren ikke er medlem af.
+- **Explorer-brugeren kan skrive gatens database.** *(Rettet i #142, verificeret i VM: `user-not-in-eira`, `user-cannot-write-gate-db`, `user-can-reach-intentd`.)* `eira-firstboot` lægger brugeren i gruppen `eira` for at give adgang til sockets. Men `/data` er `eira:eira 0770`, og daemons' `UMask=0117` giver databasefilen `0660 eira:eira`. Brugeren og alle brugerens programmer kan derfor skrive direkte i `gate_grants`, `gate_consents` og `gate_actions`. Det bryder punkt 1. Rettelsen er at adskille grupperne: `eira-clients` får adgang til sockets og IPC-token, mens `eira` forbliver daemons' egen gruppe, som brugeren ikke er medlem af.
 - **Installerens bruger er sudo-administrator** (Ubuntu-standard). Det er forkert i managed mode (punkt 2). Det skal afgøres, hvordan en ikke-administreret, privat maskine skal håndteres (se åbent punkt).
 
-### Åbent punkt til ejer
+### Privat tilstand og managed mode (forslag — afventer ejer)
 
-**Privat maskine og root.** På en privat, ikke-administreret pc er ejeren typisk administrator af sin egen Ubuntu. Med sudo kan ejeren ændre alt, også Eira-laget. Det kan og skal EiraOS ikke forhindre på ejerens egen maskine. Men så er Eira-håndhævelsen der kun en beskyttelse mod fejl og mod programmer, der kører som brugeren, ikke mod ejeren selv. Skal installeren i privat tilstand oprette:
-- **(a)** en separat administrator-konto og en Explorer-bruger uden sudo, eller
-- **(b)** én konto med sudo, hvor begrænsningen beskrives ærligt?
+**Privat maskine: én konto med sudo (b), men tilstanden skal være synlig, ikke kun beskrevet.** En separat administratorkonto (a) er ikke en grænse på ejerens egen maskine: ejeren ejer hardwaren og kan altid komme ind via recovery, og en dagligbruger uden sudo ender med at slå begrænsningen fra ved første printer, VPN eller pakkeopdatering. Krav:
+
+1. **Synlig:** Bundlens default-sæt markerer tilstanden (`owner_admin`). Gaten viser den i status og på samtykkeskærmen: *"Ejeren har sudo på denne maskine. Eira beskytter mod fejl og mod programmer, der kører som dig — ikke mod dig."*
+2. **Ærlig assurance:** Gaten registrerer `owner_admin` i audit ved hver beslutning, så en handling på en privat maskine aldrig fremstår med samme garanti som på en managed maskine. Beslutningen (PASS/REJECT) ændres ikke af flaget.
+3. **Ingen påstand stærkere end sandheden:** Ingen tekst i UI eller dokumentation må sige "Eira forhindrer X" om en maskine, hvor ejeren har root.
+
+**Managed mode: ingen stående lokal administratorkonto.** Administratoradgang er kun et midlertidigt, navngivet og auditeret grant fra Fleet til en IT-konto (punkt 2 ovenfor). "En separat administratorkonto" er netop det, der ikke må findes, for så kan IT logge ind uden om både Fleet og gatens audit.
 
 ## Infrastruktur som kode (besluttet af ejer, 7. november 2026)
 

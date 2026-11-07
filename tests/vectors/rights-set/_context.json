@@ -1,0 +1,22 @@
+{
+  "note": "TEST KEYS ONLY. Never trust anchors on a real device.",
+  "domain": "EIRAOS-RIGHTS-V1",
+  "max_ttl_seconds": 2592000,
+  "anchors": {
+    "test-tenant-kk-1": {
+      "kind": "managed",
+      "public_key": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc"
+    },
+    "test-release-1": {
+      "kind": "default",
+      "public_key": "oJql9HpnWYAv-VX43C0qFKXJnSO-l_hkEn_5ODRVpPA"
+    }
+  },
+  "registry": [
+    "edp:utterance",
+    "edp:commitment_proposed",
+    "edp:commitment_accepted",
+    "edp:value_transfer_requested",
+    "system:power.request_action"
+  ]
+}

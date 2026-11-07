@@ -7,7 +7,16 @@
 
 > Alle rettigheder i EiraOS sættes via Fleet's rettigheds-API. Endpointet håndhæver dem og er aldrig autoritativ kilde til rettigheder.
 
-Dokumentet ligger under `specs/` (Open Architecture-kontrakter), fordi begge projekter skal implementere det. Fleet Agent Protocol henviser hertil (§9).
+**Kontrakten er eksekverbar.** Teksten her er normativ, men det er disse fire filer tilsammen, der er kontrakten:
+
+| Fil | Rolle |
+|---|---|
+| `specs/EIRA-RIGHTS-SET-1.0.md` | normativ tekst (dette dokument) |
+| `app/rights/eira-rights-set-1.0.schema.json` | struktur (JSON Schema 2020-12); ligger ved verifikatoren, så den følger med i pakken |
+| `app/rights/contract.py` | referenceverifikator: `verify` (§4) og `authorize` (§6) |
+| `tests/vectors/rights-set/*.json` | gyldige og ugyldige sæt med forventet udfald, kørt af `tests/test_rights_set_contract.py` |
+
+Kontrakten ligger i `eira-os`, fordi verifikatoren er her. `eira-fleet-control` tager den som en pinnet, versioneret afhængighed og kører **de samme vektorfiler** mod sin udsteder i CI. Driver de to sider fra hinanden, fejler CI på mindst én af siderne. Vektorerne genereres med `scripts/gen_rights_vectors.py` (testnøgler fra faste seeds; aldrig tillidsankre på en rigtig enhed) og committes.
 
 ---
 
@@ -27,11 +36,13 @@ Grupper giver ingen rettigheder i sig selv. Gaten må aldrig oversætte en grupp
 
 Formatet er JSON (UTF-8), fordi Fleet Agent Protocol er JSON over HTTPS.
 
-**Begrænset profil:**
-- ingen floats og ingen `null` i grants,
-- kun ASCII i nøgler,
-- tekstværdier i Unicode NFC,
+**Begrænset profil** (overtrædelse giver `malformed`):
+- ingen floats (heller ikke `42.0`), ingen `NaN`/`Infinity`, ingen `null`,
+- ingen dobbelte nøgler — ellers kan to parsere se to forskellige sæt bag samme signatur,
+- kun ASCII i nøgler, tekstværdier i Unicode NFC,
 - dokumentet er højst 1 MiB.
+
+Tidspunkter skrives altid som UTC med sekundpræcision: `YYYY-MM-DDTHH:MM:SSZ`. Én skrivemåde pr. tidspunkt, så kanonisk JSON er entydig.
 
 Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det til `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False)`.
 
@@ -81,7 +92,7 @@ Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det ti
 | `kind` | `managed` (tenant og device) eller `default` (bundlens standardsæt, se §5) |
 | `tenant_id`, `device_id` | Skal matche enhedens enroll-identitet. For `default` er `tenant_id` lig `"unmanaged"`, og `device_id` lig `"*"` |
 | `version` | Heltal ≥ 1. Strengt stigende pr. (`tenant_id`, `device_id`) |
-| `issued_at`, `expires_at` | RFC 3339 med tidszone, og `issued_at` < `expires_at`. `expires_at` er TTL'en |
+| `issued_at`, `expires_at` | UTC (`…Z`), `issued_at` < `expires_at`. `expires_at` er TTL'en og sættes af Fleet pr. tenant/skabelon. `expires_at - issued_at` må højst være loftet i §4.2 |
 | `template`, `issued_by` | Obligatoriske. De bruges kun til audit og påvirker aldrig autorisationen |
 | `grants`, `denies` | Lister (må være tomme). Ukendte felter afvises overalt |
 
@@ -102,7 +113,7 @@ Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det ti
 - Algoritmen er Ed25519, og samme signaturkontrakt som Phase 0 genbruges med eget domæne.
 - Det signerede input er:
   ```
-  u8 len(DOMAIN) || DOMAIN="EIRAOS-RIGHTS-V1" || kanonisk JSON af sættet uden "signature"
+  u8 len(DOMAIN) || DOMAIN="EIRAOS-RIGHTS-V1" || kanonisk JSON af sættet, hvor signature.value er fjernet
   ```
   `alg` og `key_id` er en del af det signerede input, fordi de ligger i sættet uden for `signature.value`. Kun `signature.value` fjernes før signering.
 - Tillidsankre:
@@ -114,14 +125,39 @@ Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det ti
 
 Agenten er den eneste skriver til gatens rettighedscache. Gaten har ingen IPC-metode og ingen admin-vej til at tildele rettigheder.
 
-Et nyt sæt anvendes kun, hvis **alle** disse er opfyldt:
-1. Signaturen er gyldig med et kendt anker for sættets `kind`.
-2. `tenant_id` og `device_id` matcher enhedens enroll-identitet. For `default` gælder det kun, når enheden ikke er enrolled.
-3. `version` er højere end det aktive sæts. Samme version med samme indholdshash er en idempotent no-op, men samme version med andet indhold er en fejl.
-4. `issued_at` ≤ nu < `expires_at`, med en tolerance for urforskydning på 5 minutter.
+Et nyt sæt anvendes kun, hvis **alle** disse er opfyldt (i denne rækkefølge; første fejl er årsagen):
+1. Profil (§2) og schema er overholdt.
+2. Signaturen er gyldig med et kendt anker for sættets `kind`. Intet felt bruges, før signaturen er kontrolleret.
+3. `tenant_id` og `device_id` matcher enhedens enroll-identitet. Et `default`-sæt gælder kun, når enheden ikke er enrolled.
+4. `expires_at - issued_at` ≤ loftet (§4.2), og `issued_at` − 5 min. ≤ *nu* < `expires_at`, hvor *nu* er den effektive tid (§4.1). Ingen grant eller deny må have `expires_at` efter sættets.
 5. Alle handlingsnøgler findes i gatens registry for den installerede gate-version.
+6. `version` er højere end det aktive sæts. Samme version med samme indholdshash er en idempotent no-op; samme version med andet indhold er en fejl.
+
+Afvisningsårsagerne er faste strenge (`Reason` i `contract.py`) og rapporteres ordret i `apply-result`.
 
 Sættet anvendes **atomart**: hele cachen erstattes i én transaktion. `rights_set_id`, `version`, `template`, `issued_by` og indholdshashet gemmes. Hvis et af kravene ikke er opfyldt, anvendes intet. Det aktive sæt forbliver aktivt, og fejlen rapporteres via `POST /v1/report/apply-result` og audit-loggen.
+
+### 4.1 Effektiv tid — uret må ikke kunne skrues tilbage
+
+Alle udløb i denne kontrakt — sættets, en grants og gatens samtykke-TTL — er værdiløse, hvis den, der vil forlænge dem, kan stille vægur-tiden tilbage. Agenten og gaten bruger derfor aldrig vægur-tiden alene, men den **effektive tid**:
+
+```
+effektiv_nu = max(vægur_nu, højvandsmærke, issued_at_aktivt + forløbet_siden_apply)
+```
+
+- **Højvandsmærke:** den højeste vægur-tid, agenten har set, gemt periodisk i en fil, som kun servicebrugeren `eira` kan skrive. Er vægur-tiden mere end 5 min. under mærket, auditeres `clock_rollback`, og mærket bruges.
+- **Forløbet siden apply:** summen af `CLOCK_BOOTTIME`-tid siden sættet blev anvendt, akkumuleret på tværs af genstarter. Ved hver skrivning gemmes `(boot_id, boottime)`; ser agenten et nyt `boot_id`, lægges den sidst gemte værdi til summen, og tællingen starter forfra. `CLOCK_BOOTTIME` tæller også tid i suspend, så en lukket bærbar i en taske tæller med.
+- **TPM:** Hvor en TPM 2.0 findes, kan dens `Clock` erstatte summen. Det er en skærpelse, ikke et krav i 1.0.
+
+Det tilbageværende hul er tid, hvor maskinen er **slukket** og uret samtidig er stillet tilbage (fx i BIOS). Det kan kun TPM'en lukke. I privat tilstand (ADR-0003) har ejeren root og kan alligevel ændre alt; dér er §4.1 en beskyttelse mod fejl, ikke mod ejeren.
+
+`contract.py` tager *nu* som parameter og læser aldrig selv et ur. Det er bevidst: kontrakten kan ikke falde tilbage til vægur-tid ved en fejl.
+
+### 4.2 Levetidsloft
+
+Fleet vælger `expires_at` pr. tenant og skabelon — det er Fleet, der kender driftsmønsteret (en elev-pc i tasken fra fredag til mandag, en lærer på ferie). Endpointet afviser ethvert sæt, hvor `expires_at - issued_at` overstiger et **loft kompileret ind i bundlen: 30 dage** (`MAX_TTL`). Endpointet kan aldrig hæve loftet; en ny bundle kan sænke det.
+
+Fleet fornyer sættet ved hver kontakt (ny `version`, nyt `expires_at`), når mindre end halvdelen af levetiden er tilbage. Derfor er `expires_at` i praksis "sidste kontakt + TTL", og der er ikke brug for et særskilt nåde-begreb ved siden af.
 
 ## 5. Kilde pr. situation (ADR-0003)
 
@@ -129,9 +165,17 @@ Sættet anvendes **atomart**: hele cachen erstattes i én transaktion. `rights_s
 |---|---|
 | Managed og online | Seneste `managed`-sæt fra Fleet |
 | Managed og offline | Det aktive `managed`-sæt indtil `expires_at` |
-| Managed, sættet er udløbet eller mangler | **Ingen grants** (se åbent punkt 1) |
+| Managed, sættet er udløbet eller mangler | **Ingen grants** (§5.1) |
 | Unmanaged eller privat | Bundlens `default`-sæt, signeret af Fleet ved release |
 | Unmanaged, som enrolles senere | `managed`-sættet erstatter `default`-sættet og kan ikke gå tilbage |
+
+### 5.1 Udløbet eller manglende sæt
+
+Et udløbet sæt giver **nul rettigheder** for gate-handlinger. Det betyder ikke "ingen maskine":
+
+- Gaten starter, audit kan læses, og status viser *hvorfor* handlinger er låst (`rights_expired`, med `expires_at` og sidste kontakt til Fleet).
+- Det, der skal til for at komme online igen — login, netværk, tidssynkronisering og agentens eget kald til Fleet — er **ikke gate-handlinger**. Det hører til substratet (ADR-0003, "ét begreb hører til ét lag") og afhænger aldrig af rettighedssættet. Det er et krav til `eira-governance-agent`, som skal testes dér.
+- Der er **ingen nødkonvolut** med grants. Et sæt, der giver rettigheder, når der ingen rettigheder er, udvider rettighederne; det kan ikke samtidig "kun formindske". Sluk og genstart sker med tænd/sluk-knappen via logind, ikke via gaten.
 
 **`default`-sættet** er minimalt (fx skabelonen `personal`), versioneret pr. bundle-release og kan ikke udvides lokalt. Det ligger read-only i pakken under `/usr/share/eira-os/rights/default.json`.
 
@@ -140,7 +184,10 @@ Sættet anvendes **atomart**: hele cachen erstattes i én transaktion. `rights_s
 - **Lag 6** tillader en handling for principal *P* på scope *S*, hvis tre ting gælder i det aktive, ikke-udløbne sæt: en grant matcher (*P* eller en af *P*'s grupper fra `identityd`, eller `authenticated`), handlingsnøglen og scope matcher, og ingen deny matcher. Grantens `required_assurance` lægges oven i policyens krav.
 - **Domæne (lag 4):** Medlemskab af en samtale er samtaledata, ikke en rettighed. Det kommer fra samtalelaget. `device:local` kræver mindst én gyldig grant på `device:local`.
 - **Audit:** Hver gate-beslutning registrerer `rights_set_id`, `version`, `template.id` og `issued_by.api_call_id`. Ved en PASS registreres også, hvilken grant der autoriserede handlingen.
-- **Udløb midt i en handling:** Lag 6 tjekkes igen umiddelbart før udførelse (GATE-KERNEL §3.6). Er sættet udløbet, giver det `REJECT`.
+- **TTL ved hver beslutning:** `authorize` kontrollerer sættets og grantens udløb mod den effektive tid ved *hver* beslutning — ved `propose` og igen ved `confirm`, hvor gaten kører lag 1–4 og lag 6 på ny (GATE-KERNEL §3.6). Det er ikke nok, at agenten afviste et udløbet sæt ved apply.
+- **Udløb midt i en handling:**
+  - *Foreslået eller accepteret, ikke bekræftet:* `confirm` giver `REJECT E_UNAUTHORIZED`. Handlingen er aldrig udført, så der er intet at kompensere.
+  - *Billet udstedt, executor i gang:* Udførelsen fuldføres, og resultatet auditeres. Lag 6 kontrolleres sidst *før* billetten udstedes; efter det tidspunkt afbryder et udløb ikke en handling halvvejs. Der indføres ingen kompensationsmekanik for dette tilfælde.
 
 ## 7. Fleet Agent Protocol v0.2 (ændringer i `eira-fleet-control`)
 
@@ -148,20 +195,19 @@ Sættet anvendes **atomart**: hele cachen erstattes i én transaktion. `rights_s
 - `POST /v1/report/apply-result` rapporterer `rights_set_id`, `version` og `result` (`applied`, `rejected:<årsag>` eller `noop`).
 - Heartbeat'en får `rights_version` og `rights_expires_at`, så Fleet Console kan vise enheder, der er ved at udløbe.
 
-## 8. Tests, der skal bestå, før kontrakten er "færdig"
+## 8. Tests
 
-1. Et sæt med forkert signatur, ukendt `key_id`, forkert tenant/device, lavere version, udløbet `expires_at`, en ukendt handlingsnøgle, `*` i `actions`, et ukendt felt eller en float afvises, og det aktive sæt er uændret.
-2. Samme version med andet indhold afvises. Samme version med samme indhold er en no-op.
-3. Deny vinder over grant.
-4. En gruppe uden grant giver ingen rettighed.
-5. `required_assurance` kan skærpe, men ikke lempe.
-6. Et udløbet sæt giver `REJECT` i lag 6, også mellem claim og udførelse.
-7. Et `default`-sæt afvises på en enrolled enhed.
-8. Gaten har ingen IPC-metode, der skriver til rettighedscachen. Det bevises af metodeklassifikationstesten.
-9. Audit-poster indeholder rettighedssættets id og version.
+Vektorerne i `tests/vectors/rights-set/` dækker (`apply-*.json`): gyldigt managed- og default-sæt, udløbet, endnu ikke gyldigt, lavere version, samme version med samme og med andet indhold, forkert device, forkert tenant, gyldig signatur over forkert domæne (`EIRAOS-EVENT-V1`), ændret efter signering, ukendt `key_id`, managed-sæt signeret med release-nøglen, manglende `template`, TTL over loftet, ukendt handlingsnøgle, `*` i `actions`, ukendt felt, float, dobbelt nøgle, grant der overlever sættet, default-sæt på enrolled enhed og managed-sæt på uenrolled enhed. `authorize.json` dækker: gruppe-grant, gruppe uden grant, deny vinder, jokertegn-grænser, midlertidig grant der udløber, skærpet assurance og udløbet sæt.
 
-## 9. Åbne punkter til ejer
+Krav, der testes, når agenten og gatens lag 6 bygges ovenpå (ikke del af vektorerne):
+1. Et afvist sæt efterlader det aktive sæt uændret (atomar apply).
+2. Gaten har ingen IPC-metode, der skriver til rettighedscachen (metodeklassifikationstesten).
+3. Audit-poster indeholder rettighedssættets id og version, og ved PASS den autoriserende grant.
+4. Effektiv tid (§4.1): et tilbagestillet ur forlænger hverken sæt, grant eller samtykke.
+5. Agentens kontakt til Fleet virker med et udløbet sæt (§5.1).
 
-1. **Når et `managed`-sæt udløber:** Udkastet siger *ingen grants*, så beskyttede handlinger låses, mens læsning fortsætter. Alternativet er at falde tilbage til bundlens `default`-sæt. Det er mere brugervenligt, men giver en managed maskine "privat"-rettigheder. Anbefaling: ingen grants.
-2. **TTL:** Fleet MVP har en offline-buffer på højst 72 timer. Skal `expires_at` for `managed` være højst 72 timer, eller være en tenant-indstilling?
-3. **Hvor kontrakten ligger:** Udkastet foreslår `eira-os/specs/`, med henvisning fra `eira-fleet-control`. Alternativet er det modsatte.
+## 9. Afklaret (7. november 2026)
+
+1. **Udløb:** nul rettigheder for gate-handlinger, ingen nødkonvolut; substratet holder maskinen i live (§5.1). TTL håndhæves ved hver beslutning (§6).
+2. **TTL:** Fleet sætter `expires_at` pr. tenant/skabelon under et kompileret loft på 30 dage (§4.2); udløb måles i effektiv tid (§4.1).
+3. **Placering:** `eira-os`: tekst i `specs/`, schema og verifikator i `app/rights/`, vektorer i `tests/vectors/rights-set/`; pinnet og kørt i `eira-fleet-control` (indledning).
