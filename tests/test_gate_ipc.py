@@ -36,7 +36,14 @@ def rpc(tmp_path):
 def test_full_flow_over_ipc(rpc):
     proposal = rpc["gate.propose"]({"session_id": "s-anne", "edp": envelope(), "origin": "model"})
     assert proposal["error"] == "E_NEED_CONSENT" and proposal["state"] == "pending"
-    args = {"session_id": "s-anne", "action_id": "dlg-0001", "content_hash": proposal["content_hash"]}
+    rendering = proposal["data"]["rendering"]
+    assert rendering["lang"] == "da" and rendering["text"].startswith("Foreslå «Møde om budgettet»")
+    args = {
+        "session_id": "s-anne",
+        "action_id": "dlg-0001",
+        "content_hash": proposal["content_hash"],
+        "rendering_hash": rendering["hash"],
+    }
     assert rpc["gate.consent"](args)["detail"] == "consent recorded"
     done = rpc["gate.confirm"](args)
     assert done["decision"] == "PASS" and done["result"]["visible_state"] == "proposed"

@@ -33,12 +33,17 @@ CREATE TABLE IF NOT EXISTS gate_actions (
     execution_id TEXT,
     result TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    rendering_text TEXT,
+    rendering_hash TEXT,
+    renderer_version TEXT,
+    render_lang TEXT
 );
 CREATE TABLE IF NOT EXISTS gate_consents (
     consent_id TEXT PRIMARY KEY,
     action_id TEXT NOT NULL,
     content_hash TEXT NOT NULL,
+    rendering_hash TEXT,
     session_id TEXT NOT NULL,
     granted_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
@@ -78,6 +83,17 @@ CREATE TRIGGER IF NOT EXISTS gate_audit_no_delete
 
 GENESIS = "sha256:" + "0" * 64
 
+# Columns added after Gate Kernel 1.0 shipped (renderer binding).
+MIGRATIONS = {
+    "gate_actions": {
+        "rendering_text": "TEXT",
+        "rendering_hash": "TEXT",
+        "renderer_version": "TEXT",
+        "render_lang": "TEXT",
+    },
+    "gate_consents": {"rendering_hash": "TEXT"},
+}
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -92,6 +108,11 @@ class GateStore:
         self.db_path = db_path or get_db_path()
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            for table, columns in MIGRATIONS.items():
+                existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+                for name, kind in columns.items():
+                    if name not in existing:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -117,10 +138,12 @@ class GateStore:
                 conn.execute(
                     """INSERT INTO gate_actions (action_id, conversation_id, action_type, origin,
                        session_id, actor_identity, raw, content_hash, policy_version,
-                       policy_fingerprint, state, created_at, updated_at)
+                       policy_fingerprint, state, created_at, updated_at, rendering_text,
+                       rendering_hash, renderer_version, render_lang)
                        VALUES (:action_id, :conversation_id, :action_type, :origin, :session_id,
                        :actor_identity, :raw, :content_hash, :policy_version,
-                       :policy_fingerprint, 'pending', :now, :now)""",
+                       :policy_fingerprint, 'pending', :now, :now, :rendering_text,
+                       :rendering_hash, :renderer_version, :render_lang)""",
                     {**record, "now": now},
                 )
             except sqlite3.IntegrityError:
@@ -171,13 +194,23 @@ class GateStore:
 
     # --- consent -----------------------------------------------------------
 
-    def grant_consent(self, action_id: str, content_hash: str, session_id: str, expires_at: datetime) -> str:
+    def grant_consent(
+        self, action_id: str, content_hash: str, rendering_hash: str, session_id: str, expires_at: datetime
+    ) -> str:
         consent_id = str(uuid.uuid4())
         with self._connect() as conn:
             conn.execute(
-                """INSERT INTO gate_consents (consent_id, action_id, content_hash, session_id,
-                   granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)""",
-                (consent_id, action_id, content_hash, session_id, iso(utc_now()), iso(expires_at)),
+                """INSERT INTO gate_consents (consent_id, action_id, content_hash, rendering_hash,
+                   session_id, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    consent_id,
+                    action_id,
+                    content_hash,
+                    rendering_hash,
+                    session_id,
+                    iso(utc_now()),
+                    iso(expires_at),
+                ),
             )
         return consent_id
 

@@ -71,16 +71,25 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
     active = gate or default_gate()
 
     def propose(params: dict[str, Any]) -> dict[str, Any]:
-        return active.propose(_edp_input(params), params.get("session_id"), _origin(params)).to_dict()
+        lang = params.get("lang", "da")
+        if not isinstance(lang, str):
+            raise JsonRpcError(-32602, "lang must be a string")
+        return active.propose(_edp_input(params), params.get("session_id"), _origin(params), lang).to_dict()
 
     def consent(params: dict[str, Any]) -> dict[str, Any]:
         return active.grant_consent(
-            _text(params, "action_id"), _text(params, "content_hash"), params.get("session_id")
+            _text(params, "action_id"),
+            _text(params, "content_hash"),
+            _text(params, "rendering_hash"),
+            params.get("session_id"),
         ).to_dict()
 
     def confirm(params: dict[str, Any]) -> dict[str, Any]:
         return active.confirm(
-            _text(params, "action_id"), _text(params, "content_hash"), params.get("session_id")
+            _text(params, "action_id"),
+            _text(params, "content_hash"),
+            _text(params, "rendering_hash"),
+            params.get("session_id"),
         ).to_dict()
 
     def status(params: dict[str, Any]) -> dict[str, Any]:
