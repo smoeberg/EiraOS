@@ -225,5 +225,8 @@ def register_intent_handlers(
         pass
     active = service or default_service()
     server.register("intent.execute", active.execute)
+    from app.gate.ipc import register_gate_handlers
+
+    register_gate_handlers(server)
     server.register("health", lambda _: {"daemon": "eira-intentd", "ok": True})
     return active

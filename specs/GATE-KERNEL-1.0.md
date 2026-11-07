@@ -239,3 +239,49 @@ Audit-loggen må ikke kunne ændres af modeller eller adaptere.
 1. Skal `CLARIFY` kunne føre til en ny EDP-handling (`utterance`), eller skal det være en separat UI-tilstand? **Anbefaling:** separat UI-tilstand, så gaten ikke bliver en dialogmotor.
 2. Skal `policy_version` kunne tvinge en `REJECT`, hvis en handling er planlagt under en ældre policy? **Anbefaling:** ja, hvis policyen er ændret på en måde, der påvirker handlingen.
 3. Hvordan håndteres executor-timeout? **Anbefaling:** `E_PARTIAL` med `state: unknown`, og en efterfølgende verifikationshandling.
+
+---
+
+## Bilag A — Implementering (november 2026)
+
+**Kode:** `app/gate/` (`kernel.py`, `edp.py`, `policy.py`, `store.py`, `executors.py`, `ipc.py`). Gaten kører i `intentd` og eksponeres som `gate.propose`, `gate.consent`, `gate.confirm` og `gate.status`. Ingen IPC-metode kalder en executor direkte.
+
+**Flow:**
+1. `propose` kører lag 1–4, gemmer handlingen som `pending`, bundet til et indholdshash, og rapporterer bagefter, hvad lag 5–6 mangler.
+2. `consent` registrerer brugerens samtykke til netop det hash. Samtykket udløber efter 10 minutter.
+3. `confirm` validerer igen fra lag 1 ud fra den gemte rå input. Derefter følger hash-binding, atomar claim, ny autorisation lige før udførelse og executoren med en engangsbillet.
+
+**Indholdshashet** dækker `id`, `conversation_id`, `participants`, `action` og `valid_from`. `transport` og `veritas` er ikke med: de beriges efter brugerens beslutning og må ikke ændre handlingen.
+
+**Afklaringer af §11:**
+1. `CLARIFY` er en separat UI-tilstand, og gaten fører ingen dialog.
+2. En ændret policy for handlingstypen siden forslaget giver `REJECT (E_POLICY)`. Det afgøres via et fingeraftryk af policy-posten.
+3. Timeout eller crash i executoren giver `E_PARTIAL` med `state: unknown`, og handlingen prøves ikke automatisk igen.
+
+**§7-tests → `tests/test_gate_kernel.py`:**
+
+| §7-krav | Test |
+|---|---|
+| Ugyldig JSON | `test_invalid_json_is_rejected_as_syntax` |
+| Ukendt `action.type` | `test_unknown_action_type_is_rejected_as_schema` |
+| Manglende obligatorisk felt | `test_missing_content_field_is_rejected_as_schema` |
+| Forbudt handling eller parameter | `test_forbidden_action_and_parameters_are_rejected_as_policy` |
+| Manglende samtykke | `test_missing_consent_for_irreversible_action_is_rejected` |
+| Ændrede parametre | `test_changed_parameters_after_confirmation_are_rejected` |
+| Dobbelt eksekvering | `test_double_execution_returns_the_existing_result`, `test_concurrent_confirmations_execute_once` |
+| Rettighed tilbagekaldt | `test_right_revoked_after_planning_is_rejected`, `test_right_revoked_between_claim_and_execution_is_rejected` |
+| Direkte executor-kald | `test_executor_cannot_be_called_directly` |
+| Model-runtime utilgængelig | `test_unavailable_model_runtime_is_a_safe_reject` |
+| Delvis fejl | `test_partial_failure_is_reported_with_its_state` |
+| Korrekt schema uden tilladelse | `test_correct_schema_without_permission_is_unauthorized` |
+
+Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input (afvises af schemaet), degraded transport, udløbet samtykke, manipuleret lagret input, step-up til betaling, ukendt session, at handle på en andens vegne, et append-only og hash-kædet audit-log samt at en PASS først logges efter executorens resultat.
+
+**Mutationstjek:** Hver af disse kontroller er fjernet én ad gangen, og testsuiten fejlede hver gang: samtykke, hash-binding, autorisation lige før udførelse, idempotens, policy-fingeraftryk, verifikation af tilstandsovergangen og rettigheder.
+
+**Kendte begrænsninger (åbne):**
+1. **Den gamle vej `intent.confirm` → `app/executor.py`** findes stadig uden om gaten. Den er en prototype uden eksterne effekter, men bryder §2, indtil den er migreret til gaten. Det er næste PR.
+2. **Audit ligger i en append-only, hash-kædet SQLite-tabel** (`gate_audit`), ikke som temporale kanter i `graphd`, fordi `graphd` endnu ikke har et skrive-API.
+3. **Gaten kan ikke skelne processer fra hinanden.** En IPC-kalder angiver selv `origin` (`user`/`model`). At skelne UI-processen fra modelprocessen kræver identitet pr. proces (peer-credentials), og indtil da er beskyttelsen policyen pr. origin plus session og assurance.
+4. **Identitetsbinding, medlemskab og rettigheder** (`gate_identities`, `gate_members`, `gate_grants`) har endnu intet administrations-API. De skal provisioneres af `identityd`.
+5. **Den eneste executor er conversation-outboxen** for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
