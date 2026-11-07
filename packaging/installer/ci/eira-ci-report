@@ -96,7 +96,11 @@ check gnome-session-hidden sh -c '! ls /usr/share/wayland-sessions/ubuntu*.deskt
 check session-policy-active systemctl is-active --quiet eira-session-policy.service
 check firstboot-done test -e /var/lib/eira/firstboot.done
 check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
-check user-in-eira-group sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
+check user-in-eira-clients sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira-clients"
+# ADR-0003: the desktop user reaches the daemons but cannot touch their state.
+check user-not-in-eira sh -c "! id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
+check user-cannot-write-gate-db sh -c "test -e /data/eira-app.db && ! runuser -u $USER_NAME -- test -w /data/eira-app.db && ! runuser -u $USER_NAME -- test -r /data/eira-app.db"
+check user-can-reach-intentd runuser -u "$USER_NAME" -- python3 -c "import socket; s=socket.socket(socket.AF_UNIX); s.connect('/run/eira/intentd.sock')"
 check login-screen wait_for 300 systemctl is-active --quiet display-manager.service
 check labwc-running wait_for 600 pgrep -u "$USER_NAME" -x labwc
 check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop

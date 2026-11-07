@@ -3,7 +3,8 @@
 #
 # Kører én gang, før login-skærmen (GDM) starter: finder den første
 # menneskelige bruger, sætter EiraOS som brugerens session i AccountsService
-# og giver brugeren adgang til daemon-sockets (gruppen eira). Andre sessioner
+# og giver brugeren adgang til daemon-sockets (gruppen eira-clients — aldrig
+# eira, som ejer daemons' data). Andre sessioner
 # skjules af eira-session-policy (fra pakken), medmindre IT tillader dem.
 set -eu
 
@@ -38,7 +39,7 @@ fi
 chmod 0600 "$account"
 
 if [ -z "${EIRA_FIRSTBOOT_DRY_RUN:-}" ]; then
-    usermod -aG eira "$user"
+    usermod -aG eira-clients "$user"
     systemctl try-restart accounts-daemon.service >/dev/null 2>&1 || true
     install -d -m 0755 "$(dirname "$STAMP")"
     touch "$STAMP"

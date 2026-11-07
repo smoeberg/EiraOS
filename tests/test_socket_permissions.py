@@ -51,7 +51,7 @@ def _wait_for(path: Path, *, exists: bool, timeout: float = 10.0) -> None:
 
 def _eira_group_available() -> bool:
     try:
-        resolve_group_gid("eira")
+        resolve_group_gid("eira-clients")
     except RuntimeError:
         return False
     return True
@@ -135,7 +135,7 @@ def test_root_is_explicitly_allowed() -> None:
 
 def test_socket_cleanup_on_shutdown(tmp_path: Path) -> None:
     if not _eira_group_available():
-        pytest.skip("EiraOS integration sockets require the configured 'eira' Unix group")
+        pytest.skip("EiraOS integration sockets require the configured 'eira-clients' Unix group")
 
     socket_path = tmp_path / "stated.sock"
     environment = os.environ.copy()
@@ -171,15 +171,15 @@ def test_socket_cleanup_on_shutdown(tmp_path: Path) -> None:
 
 
 def test_unauthorized_user_access_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
-    eira_gid = resolve_group_gid("eira")
+    eira_gid = resolve_group_gid("eira-clients")
     if eira_gid is None:
-        pytest.skip("Socket authorization integration requires the configured 'eira' Unix group")
+        pytest.skip("Socket authorization integration requires the configured 'eira-clients' Unix group")
 
     monkeypatch.setattr(socket_security.os, "chown", lambda *_args: None)
     socket_dir = Path(tempfile.mkdtemp(prefix="eira-socket-test-", dir="/tmp"))
     socket_dir.chmod(0o755)
     socket_path = socket_dir / "stated.sock"
-    server = setup_unix_socket(str(socket_path), group="eira")
+    server = setup_unix_socket(str(socket_path), group="eira-clients")
     server.listen(1)
     try:
         metadata = socket_path.stat()

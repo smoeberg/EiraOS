@@ -271,3 +271,24 @@ def test_packaging_scripts_are_executable_shell_files() -> None:
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_desktop_user_reaches_sockets_but_not_daemon_data() -> None:
+    """ADR-0003: the substrate protects the Eira layer. Desktop users join
+    eira-clients (sockets, IPC token), never eira (owns /data)."""
+    postinst = (REPO_ROOT / "packaging" / "debian" / "postinst").read_text(encoding="utf-8")
+    firstboot = (REPO_ROOT / "packaging" / "installer" / "eira-firstboot").read_text(encoding="utf-8")
+    assert "addgroup --system eira-clients" in postinst
+    assert "adduser --quiet eira eira-clients" in postinst
+    assert 'gpasswd -d "$member" eira' in postinst  # upgrade moves users out of eira
+    assert "chown root:eira-clients /etc/eira/eira.conf" in postinst
+    assert 'usermod -aG eira-clients "$user"' in firstboot
+    assert "-aG eira " not in firstboot and '-aG eira "' not in firstboot
+    for unit in (REPO_ROOT / "systemd").glob("eira-*.service"):
+        text = unit.read_text(encoding="utf-8")
+        assert "SupplementaryGroups=eira-clients" in text, unit.name
+        assert "RuntimeDirectoryMode=0751" in text, unit.name
+        assert "UMask=0117" in text, unit.name  # data files stay eira:eira 0660
+    from app.ipc import socket_security
+
+    assert socket_security.SOCKET_GROUP == "eira-clients"
