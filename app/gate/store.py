@@ -58,15 +58,6 @@ CREATE TABLE IF NOT EXISTS gate_members (
     identity TEXT NOT NULL,
     PRIMARY KEY (conversation_id, identity)
 );
-CREATE TABLE IF NOT EXISTS gate_grants (
-    grant_id TEXT PRIMARY KEY,
-    identity TEXT NOT NULL,
-    conversation_id TEXT NOT NULL,
-    action_type TEXT NOT NULL,
-    granted_at TEXT NOT NULL,
-    expires_at TEXT,
-    revoked_at TEXT
-);
 CREATE TABLE IF NOT EXISTS gate_audit (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     entry TEXT NOT NULL,
@@ -263,40 +254,6 @@ class GateStore:
                 (conversation_id, identity),
             ).fetchone()
         return row is not None
-
-    def grant_right(
-        self, identity: str, conversation_id: str, action_type: str, expires_at: datetime | None = None
-    ) -> str:
-        grant_id = str(uuid.uuid4())
-        with self._connect() as conn:
-            conn.execute(
-                """INSERT INTO gate_grants (grant_id, identity, conversation_id, action_type,
-                   granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    grant_id,
-                    identity,
-                    conversation_id,
-                    action_type,
-                    iso(utc_now()),
-                    iso(expires_at) if expires_at else None,
-                ),
-            )
-        return grant_id
-
-    def revoke_right(self, grant_id: str) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                "UPDATE gate_grants SET revoked_at = ? WHERE grant_id = ?", (iso(utc_now()), grant_id)
-            )
-
-    def has_right(self, identity: str, conversation_id: str, action_type: str, now: datetime) -> bool:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """SELECT expires_at FROM gate_grants WHERE identity = ? AND conversation_id = ?
-                   AND action_type IN (?, '*') AND revoked_at IS NULL""",
-                (identity, conversation_id, action_type),
-            ).fetchall()
-        return any(r["expires_at"] is None or datetime.fromisoformat(r["expires_at"]) > now for r in rows)
 
     # --- audit -------------------------------------------------------------
 

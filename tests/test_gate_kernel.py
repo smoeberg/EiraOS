@@ -28,6 +28,7 @@ from app.gate.executors import (
 )
 from app.gate.policy import Origin
 from app.gate.store import GateStore
+from tests.rights_helpers import TestFleet
 
 CONV = "obj:sag:42"
 ANNE = "did:eira:anne"
@@ -102,17 +103,20 @@ def world(tmp_path):
     store.bind_identity("anne@kommune.dk", ANNE)
     store.bind_identity("bo@kommune.dk", BO)
     store.add_member(CONV, ANNE)
-    grant = store.grant_right(ANNE, CONV, "*")
     clock = Clock()
     boot = BootClock()
-    gate = Gate(store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot)
+    fleet = TestFleet(tmp_path / "rights", clock, boot_clock=boot)
+    fleet.grant(CONV, principal=ANNE).publish()
+    gate = Gate(
+        store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot, rights=fleet.cache
+    )
 
     class World:
         pass
 
     w = World()
-    w.db, w.store, w.sessions, w.grant, w.clock, w.gate = db, store, sessions, grant, clock, gate
-    w.boot = boot
+    w.db, w.store, w.sessions, w.clock, w.gate = db, store, sessions, clock, gate
+    w.boot, w.fleet = boot, fleet
     return w
 
 
@@ -350,7 +354,7 @@ def test_concurrent_confirmations_execute_once(world):
 
 def test_right_revoked_after_planning_is_rejected(world):
     env, digest = propose_and_consent(world)
-    world.store.revoke_right(world.grant)
+    world.fleet.revoke_all().publish()
     result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert (result.code, result.layer) == (GateCode.E_UNAUTHORIZED, 6)
     assert outbox(world) == []
@@ -363,7 +367,7 @@ def test_right_revoked_between_claim_and_execution_is_rejected(world, monkeypatc
 
     def claim_then_revoke(*args):
         execution_id = original_claim(*args)
-        world.store.revoke_right(world.grant)
+        world.fleet.revoke_all().publish()
         return execution_id
 
     monkeypatch.setattr(world.store, "claim", claim_then_revoke)
@@ -617,6 +621,7 @@ def test_crash_between_outbox_and_gate_result_is_recovered_once(world, monkeypat
     restarted = Gate(
         world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
         boot_clock=world.boot,  # daemon restart, same boot
+        rights=world.fleet.cache,
     )
     assert restarted.gate_state(env["id"]) == "executed"
     again = restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
@@ -638,6 +643,7 @@ def test_crash_before_the_outbox_write_returns_the_action_to_pending(world, monk
     restarted = Gate(
         world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
         boot_clock=world.boot,  # daemon restart, same boot
+        rights=world.fleet.cache,
     )
     assert restarted.gate_state(env["id"]) == "pending"
     assert restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").decision is Decision.PASS
@@ -651,7 +657,10 @@ def test_recovery_without_proof_is_unknown_never_success(world, monkeypatch):
     with pytest.raises(SystemExit):
         world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.undo()
-    restarted = Gate(world.store, _registry_with(world, _PartialExecutor()), sessions=world.sessions.get)
+    restarted = Gate(
+        world.store, _registry_with(world, _PartialExecutor()), sessions=world.sessions.get,
+        rights=world.fleet.cache,
+    )
     assert restarted.gate_state(env["id"]) == "unknown"
 
 

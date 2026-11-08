@@ -39,12 +39,13 @@ Fleet Control
 ## Konsekvenser for det eksisterende
 
 **Gate Kernel:**
-- `gate_grants` og `gate_members` er en *cache* af Fleet's signerede rettighedssæt, ikke en kilde. Kun `eira-governance-agent` må skrive dem, og kun ved at anvende et verificeret sæt:
+- Rettighedscachen (`/data/rights`, `app/rights/cache.py`) er en *cache* af Fleet's signerede rettighedssæt, ikke en kilde. Den gamle tabel `gate_grants` er fjernet. Kun `eira-governance-agent` må installere et sæt, og kun et sæt, som `contract.verify` har godkendt:
   - signaturen skal verificeres,
   - tenant og device skal matche,
   - versionen skal være monoton,
   - TTL'en skal være overholdt.
-- Der må ikke findes en IPC-metode eller en admin-vej, der tildeler en rettighed lokalt. Testenes direkte `store.grant_right(...)` er testopsætning, ikke en produktionsvej.
+- Der må ikke findes en IPC-metode eller en admin-vej, der tildeler en rettighed lokalt. Testene signerer deres sæt med en testnøgle og installerer dem gennem den samme verifikation (`tests/rights_helpers.py`).
+- Privat tilstand udledes af sættet: et `default`-sæt betyder `owner_admin`. Det kræver intet ekstra felt, og gaten kan aldrig påstå mere, end sættet siger.
 - Hver gate-beslutning skal i audit-loggen kunne henvise til rettighedssættets version, skabelon og API-kald.
 - Udløbet eller manglende sæt betyder ingen grants og dermed `REJECT` (lag 6). Det gør gaten allerede i dag, fordi intet er provisioneret.
 

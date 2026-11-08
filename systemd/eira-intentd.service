@@ -17,6 +17,8 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/usr/lib/eira-os
 Environment=EIRA_APP_DB=/data/eira-app.db
+# Rights cache (EIRA-RIGHTS-SET-1.0): written by the governance agent, read by the gate.
+Environment=EIRA_RIGHTS_DIR=/data/rights
 EnvironmentFile=-/etc/eira/eira.conf
 ExecStart=/usr/bin/eira-intentd
 Restart=always

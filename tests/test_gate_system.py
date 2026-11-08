@@ -13,8 +13,9 @@ import pytest
 from app.gate import Decision, Gate, GateCode
 from app.gate.executors import ExecutorRegistry, PowerExecutor
 from app.gate.policy import Origin
-from app.gate.store import GateStore
+from app.gate.store import GateStore, utc_now
 from app.gate.system import SYSTEM_SCOPE
+from tests.rights_helpers import TestFleet
 
 ANNE, BO = "did:eira:anne", "did:eira:bo"
 
@@ -54,7 +55,8 @@ def sysworld(tmp_path):
     store.bind_identity("anne@kommune.dk", ANNE)
     store.bind_identity("bo@kommune.dk", BO)
     store.add_member(SYSTEM_SCOPE, ANNE)
-    store.grant_right(ANNE, SYSTEM_SCOPE, "system:power.request_action")
+    fleet = TestFleet(tmp_path / "rights", utc_now)
+    fleet.grant(SYSTEM_SCOPE, ["system:power.request_action"], principal=ANNE).publish()
     sessions = {
         "s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
         "s-bo": {"actor_id": "bo@kommune.dk", "assurance_level": "eid_high"},
@@ -62,7 +64,8 @@ def sysworld(tmp_path):
     bus = FakeBusctl()
     registry = ExecutorRegistry()
     registry.register(PowerExecutor(bus))
-    gate = Gate(store, registry, sessions=sessions.get)
+    gate = Gate(store, registry, sessions=sessions.get, rights=fleet.cache)
+    gate.fleet = fleet  # test handle
     return gate, store, bus, sessions
 
 
@@ -138,7 +141,7 @@ def test_a_user_who_is_not_on_the_device_is_outside_the_domain(sysworld):
 def test_another_user_cannot_confirm_anne_s_poweroff(sysworld):
     gate, store, bus, _ = sysworld
     store.add_member(SYSTEM_SCOPE, BO)
-    store.grant_right(BO, SYSTEM_SCOPE, "system:power.request_action")
+    gate.fleet.grant(SYSTEM_SCOPE, ["system:power.request_action"], principal=BO).publish()
     proposal, rhash = proposed(gate)
     gate.grant_consent(proposal.action_id, proposal.content_hash, rhash, "s-anne")
     # The action is bound to Anne: Bo's view of the same request hashes differently.
@@ -191,7 +194,7 @@ def test_a_crash_during_poweroff_is_unknown_and_never_retried(sysworld, monkeypa
     monkeypatch.undo()
     registry = ExecutorRegistry()
     registry.register(PowerExecutor(bus))
-    restarted = Gate(store, registry, sessions=sessions.get)
+    restarted = Gate(store, registry, sessions=sessions.get, rights=gate.fleet.cache)
     assert restarted.gate_state("sys-0001") == "unknown"
     again = restarted.confirm(proposal.action_id, proposal.content_hash, rhash, "s-anne")
     assert again.code is GateCode.E_PARTIAL
