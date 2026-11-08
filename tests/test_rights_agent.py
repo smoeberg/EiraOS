@@ -135,3 +135,13 @@ def test_clock_set_back_cannot_reapply_an_expired_set(bundle, tmp_path):
 
 def test_cli_usage():
     assert agent.main(["nonsense"]) == 64
+
+
+@pytest.mark.parametrize("module", ["app.rights.agent", "app.rights.cache", "app.gate"])
+def test_entry_points_import_alone(module):
+    """eira-rights-apply starts with nothing imported; a cycle between the
+    gate and the rights cache only shows up then (found in the VM)."""
+    result = subprocess.run(
+        [sys.executable, "-c", f"import {module}"], cwd=ROOT, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr

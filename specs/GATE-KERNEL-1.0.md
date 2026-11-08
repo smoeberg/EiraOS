@@ -307,7 +307,7 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
    - `test_former_bypasses_answer_gate_required_and_never_execute` kører over den rigtige JSON-RPC-server og viser, at hverken `execute_intent`, `stated`-appenderen eller journey-lageret nås.
    - `test_every_intentd_method_is_classified` har en tom `KNOWN_BYPASSES`.
    - Mutationstjek: at gen-eksponere `intent.execute` får testen til at fejle.
-6. ~~**Samtykkets udløb regnes på vægur-tid.**~~ **Lukket** med `app/gate/clock.py`. Ved samtykket gemmes `(boot_id, CLOCK_BOOTTIME)`. Lag 5 godtager kun et samtykke fra samme boot, og kun hvis der er gået mindre end TTL'en (10 min.) på `CLOCK_BOOTTIME`, som også tæller tid i suspend. Vægur-tiden (`expires_at`) bruges kun til visning og audit.
+6. ~~**Samtykkets udløb regnes på vægur-tid.**~~ **Lukket** med `app/clock.py`. Ved samtykket gemmes `(boot_id, CLOCK_BOOTTIME)`. Lag 5 godtager kun et samtykke fra samme boot, og kun hvis der er gået mindre end TTL'en (10 min.) på `CLOCK_BOOTTIME`, som også tæller tid i suspend. Vægur-tiden (`expires_at`) bruges kun til visning og audit.
    - Et tilbagestillet ur forlænger ikke samtykket, og et vægur-spring frem (NTP, tidszone) afbryder det ikke.
    - En genstart af maskinen afslutter samtykket. En genstart af daemonen i samme boot gør ikke.
    - Rækker uden boot-tidspunkt (fra før migrationen) er aldrig gyldige.

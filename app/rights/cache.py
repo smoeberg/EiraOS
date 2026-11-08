@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from app.gate.clock import BootInstant, boot_now
+from app.clock import BootInstant, boot_now
 from app.rights import contract
 
 ROLLBACK_TOLERANCE = timedelta(minutes=5)
