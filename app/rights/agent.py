@@ -8,6 +8,7 @@ This is the apply half of `eira-governance-agent`:
   works, only on that interface; the HTTPS/mTLS transport implements it.
 
     eira-rights-apply apply-default
+    eira-rights-apply sync           (one round against Fleet, then heartbeat)
 
 Exit codes: 0 applied, no-op or not applicable (enrolled device);
 1 rejected (the active set is kept; the reason is logged); 2 bundle missing.
@@ -263,12 +264,50 @@ def heartbeat_fields(cache: RightsCache, wall_now: datetime) -> RightsHeartbeat:
     )
 
 
+SYNC_EXIT = {"applied": 0, "noop": 0, "unchanged": 0, "rejected": 1, "rejected_known": 1, "offline": 3}
+
+
+def sync(client: FleetRightsClient | None = None, cache: RightsCache | None = None) -> int:
+    """One round against the enrolled Fleet, then a heartbeat.
+    Exit: 0 ok, 1 set rejected, 2 not enrolled / misconfigured, 3 offline."""
+    from app.gate.policy import REGISTRY
+
+    try:
+        enrolled = enrollment()
+    except ValueError as exc:
+        _log("rights.sync", result="misconfigured", reason="enrollment_malformed", error=str(exc))
+        return 2
+    if enrolled is None:
+        _log("rights.sync", result="not_enrolled")
+        return 2
+    cache = cache or RightsCache()
+    if client is None:
+        from app.rights.transport import HttpsFleetRightsClient
+
+        try:
+            client = HttpsFleetRightsClient(enrolled)
+        except (OSError, ValueError) as exc:
+            _log("rights.sync", result="misconfigured", reason="fleet_tls_files", error=str(exc))
+            return 2
+    now = datetime.now(timezone.utc)
+    outcome = sync_once(client, enrolled, cache, registry=REGISTRY, wall_now=now)
+    heartbeat = getattr(client, "heartbeat", None)
+    if heartbeat is not None and outcome != "offline":
+        try:
+            heartbeat(heartbeat_fields(cache, datetime.now(timezone.utc)))
+        except FleetError as exc:
+            _log("rights.sync", heartbeat="not_delivered", error=str(exc))
+    return SYNC_EXIT[outcome]
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    if args != ["apply-default"]:
-        print("usage: eira-rights-apply apply-default", file=sys.stderr)
-        return 64
-    return apply_default()
+    if args == ["apply-default"]:
+        return apply_default()
+    if args == ["sync"]:
+        return sync()
+    print("usage: eira-rights-apply apply-default | sync", file=sys.stderr)
+    return 64
 
 
 if __name__ == "__main__":
