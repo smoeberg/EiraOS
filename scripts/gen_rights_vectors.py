@@ -26,9 +26,13 @@ sys.path.insert(0, str(ROOT))
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat  # noqa: E402
 
+from app.rights import keys  # noqa: E402
 from app.rights.contract import DOMAIN, canonical, signing_input  # noqa: E402
 
 OUT = ROOT / "tests" / "vectors" / "rights-set"
+KEYS_OUT = ROOT / "tests" / "vectors" / "rights-keys"
+ROOT_SEEDS = {"test-root-kk": bytes([0x66] * 32), "test-root-kk-expired": bytes([0x77] * 32)}
+ROOT_NOT_AFTER = {"test-root-kk": "2036-01-01T00:00:00Z", "test-root-kk-expired": "2026-11-01T00:00:00Z"}
 
 KEYS = {
     "test-tenant-kk-1": ("managed", bytes([0x11] * 32)),
@@ -241,6 +245,75 @@ def authorize_vectors() -> dict:
     return {"rights_set": doc, "queries": q}
 
 
+def _root_sign(doc: dict, root_id: str, domain_input, *, seed: bytes | None = None) -> dict:
+    doc = copy.deepcopy(doc)
+    doc["signature"] = {"alg": "ed25519", "key_id": root_id, "value": "A" * 86}
+    key = Ed25519PrivateKey.from_private_bytes(seed or ROOT_SEEDS[root_id])
+    doc["signature"]["value"] = b64url(key.sign(domain_input(doc)))
+    return doc
+
+
+def key_vectors() -> list[dict]:
+    ops = public(KEYS["test-tenant-kk-1"][1])
+
+    def cert(**over):
+        doc = {"eira_rights_key": "1", "key_id": "test-tenant-kk-1", "public_key": ops, "tenant_id": "kk",
+               "not_before": "2026-11-01T00:00:00Z", "not_after": "2027-01-15T00:00:00Z"}
+        doc.update(over)
+        return doc
+
+    def rev(seq, revoked, **over):
+        doc = {"eira_rights_revocations": "1", "tenant_id": "kk", "sequence": seq,
+               "issued_at": "2026-11-07T10:00:00Z", "revoked": revoked}
+        doc.update(over)
+        return doc
+
+    c, r = keys.signing_input_certificate, keys.signing_input_revocations
+    v = []
+
+    def case(name, description, kind, doc, expect, previous=None):
+        v.append({"name": name, "description": description, "kind": kind, "raw": text(doc),
+                  "tenant_id": "kk", "now": NOW, "previous": previous, "expect": expect})
+
+    ok = {"ok": True}
+    case("cert-valid", "Driftsnøgle certificeret af roden.", "certificate", _root_sign(cert(), "test-root-kk", c), ok)
+    case("cert-wrong-tenant", "Certifikat til en anden tenant.", "certificate",
+         _root_sign(cert(tenant_id="other"), "test-root-kk", c), {"ok": False, "reason": "wrong_tenant"})
+    case("cert-lifetime-over-cap", "91 dage (loft: 90).", "certificate",
+         _root_sign(cert(not_after="2027-01-31T00:00:00Z"), "test-root-kk", c),
+         {"ok": False, "reason": "lifetime_over_cap"})
+    case("cert-expired", "Certifikatet er udløbet.", "certificate",
+         _root_sign(cert(not_before="2026-08-10T00:00:00Z", not_after="2026-11-01T00:00:00Z"), "test-root-kk", c),
+         {"ok": False, "reason": "expired"})
+    case("cert-root-expired", "Roden udløb før verifikationen.", "certificate",
+         _root_sign(cert(), "test-root-kk-expired", c), {"ok": False, "reason": "root_expired"})
+    case("cert-unknown-root", "Signeret af en nøgle, der ikke er en fastgjort rod.", "certificate",
+         _root_sign(cert(), "test-root-unknown", c, seed=bytes([0x88] * 32)), {"ok": False, "reason": "unknown_root"})
+    case("cert-signed-by-ops-key", "Driftsnøglen udgiver sig for roden.", "certificate",
+         _root_sign(cert(), "test-root-kk", c, seed=KEYS["test-tenant-kk-1"][1]), {"ok": False, "reason": "bad_signature"})
+    case("cert-wrong-domain", "Rodens signatur over sæt-domænet EIRAOS-RIGHTS-V1.", "certificate",
+         _root_sign(cert(), "test-root-kk", signing_input), {"ok": False, "reason": "bad_signature"})
+    case("cert-root-as-key", "En rod kan ikke være driftsnøgle.", "certificate",
+         _root_sign(cert(key_id="test-root-kk"), "test-root-kk", c), {"ok": False, "reason": "malformed"})
+    first = _root_sign(rev(1, ["old-1"]), "test-root-kk", r)
+    prev = {"sequence": 1, "revoked": ["old-1"], "digest": "sha256:" + __import__("hashlib").sha256(r(first)).hexdigest()}
+    case("rev-valid", "Første tilbagekaldelsesliste.", "revocations", first, ok)
+    case("rev-grows", "Højere sekvens, flere nøgler.", "revocations",
+         _root_sign(rev(2, ["old-1", "old-2"]), "test-root-kk", r), ok, previous=prev)
+    case("rev-rollback", "Lavere sekvens.", "revocations",
+         _root_sign(rev(1, ["old-1"], issued_at="2026-11-06T00:00:00Z"), "test-root-kk", r),
+         {"ok": False, "reason": "sequence_rollback"}, previous={**prev, "sequence": 2})
+    case("rev-unrevoke", "Højere sekvens, men old-1 er fjernet.", "revocations",
+         _root_sign(rev(2, []), "test-root-kk", r), {"ok": False, "reason": "sequence_rollback"}, previous=prev)
+    case("rev-conflict", "Samme sekvens, andet indhold.", "revocations",
+         _root_sign(rev(1, ["old-1", "sneaked-in"]), "test-root-kk", r),
+         {"ok": False, "reason": "sequence_conflict"}, previous=prev)
+    case("rev-signed-by-ops-key", "Driftsnøglen kan ikke tilbagekalde.", "revocations",
+         _root_sign(rev(1, ["old-1"]), "test-root-kk", r, seed=KEYS["test-tenant-kk-1"][1]),
+         {"ok": False, "reason": "bad_signature"})
+    return v
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for old in OUT.glob("*.json"):
@@ -261,6 +334,16 @@ def main() -> None:
             json.dumps(vector, indent=2, ensure_ascii=False) + "\n"
         )
     (OUT / "authorize.json").write_text(json.dumps(authorize_vectors(), indent=2, ensure_ascii=False) + "\n")
+    KEYS_OUT.mkdir(parents=True, exist_ok=True)
+    for old in KEYS_OUT.glob("*.json"):
+        old.unlink()
+    (KEYS_OUT / "_context.json").write_text(json.dumps({
+        "note": "TEST KEYS ONLY. Never roots on a real device.",
+        "max_key_lifetime_seconds": int(keys.MAX_KEY_LIFETIME.total_seconds()),
+        "roots": {rid: {"public_key": public(seed), "not_after": ROOT_NOT_AFTER[rid]} for rid, seed in ROOT_SEEDS.items()},
+    }, indent=2) + "\n")
+    for vector in key_vectors():
+        (KEYS_OUT / f"{vector['name']}.json").write_text(json.dumps(vector, indent=2, ensure_ascii=False) + "\n")
 
 
 if __name__ == "__main__":

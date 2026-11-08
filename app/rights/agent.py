@@ -145,6 +145,7 @@ def sync_once(
     except FleetError as exc:
         _log("rights.sync", result="offline", error=str(exc))
         return "offline"
+    _update_key_material(desired, enrolled, cache, wall_now)
     if desired.rights_set is None:
         return "unchanged"
     digest = "sha256:" + hashlib.sha256(desired.rights_set).hexdigest()
@@ -157,7 +158,7 @@ def sync_once(
         return "rejected_known"
     verdict = apply(
         desired.rights_set,
-        anchors=enrolled.rights_anchors,
+        anchors=cache.anchors(enrolled, _effective(cache, wall_now)),
         device=enrolled.device,
         cache=cache,
         registry=registry,
@@ -176,6 +177,50 @@ def sync_once(
     if result == "rejected":
         cache.remember_rejection(digest, verdict.reason or "", reported=delivered)
     return result
+
+
+def _effective(cache: RightsCache, wall_now: datetime) -> datetime:
+    high_water = cache.high_water()
+    return max(wall_now, high_water) if high_water else wall_now
+
+
+def _update_key_material(desired, enrolled: Enrollment, cache: RightsCache, wall_now: datetime) -> None:
+    """Keys first, so a set signed by a newly certified key verifies in the
+    same round, and a revocation takes effect before any set is looked at.
+
+    - Revocation list: kept only if it verifies against a root and is not
+      older than the stored one (it can only grow). Otherwise the stored
+      list stays.
+    - Certificates: Fleet sends the full current list; it replaces the
+      stored one. Invalid certificates are never anchors (keys.py), so a
+      bad list can only remove trust, never add it.
+    """
+    from app.rights import keys
+
+    now = _effective(cache, wall_now)
+    stored_certs, stored_rev = cache.key_material()
+    revocations = stored_rev
+    if desired.rights_revocations is not None and desired.rights_revocations != stored_rev:
+        previous = None
+        if stored_rev is not None:
+            try:
+                previous = keys.verify_revocations(
+                    stored_rev, roots=enrolled.rights_roots, tenant_id=enrolled.tenant_id,
+                    now=now, previous=None,
+                )
+            except keys.KeyRejected:
+                previous = None
+        try:
+            keys.verify_revocations(
+                desired.rights_revocations, roots=enrolled.rights_roots,
+                tenant_id=enrolled.tenant_id, now=now, previous=previous,
+            )
+            revocations = desired.rights_revocations
+        except keys.KeyRejected as exc:
+            _log("rights.keys", revocations="rejected", reason=exc.reason)
+    certificates = list(desired.rights_keys) if desired.rights_keys else stored_certs
+    if certificates != stored_certs or revocations != stored_rev:
+        cache.store_key_material(certificates, revocations)
 
 
 def _deliver(client: FleetRightsClient, report: ApplyReport) -> bool:

@@ -1,0 +1,14 @@
+{
+  "note": "TEST KEYS ONLY. Never roots on a real device.",
+  "max_key_lifetime_seconds": 7776000,
+  "roots": {
+    "test-root-kk": {
+      "public_key": "NLTZBDFWy23PC-sKKUm3VZyUDSvLbb6MU6mzAnjjp0Y",
+      "not_after": "2036-01-01T00:00:00Z"
+    },
+    "test-root-kk-expired": {
+      "public_key": "yFOtDwzSthmuqSzuxP1Wok1kmdWEznklfkXP2BObYKc",
+      "not_after": "2026-11-01T00:00:00Z"
+    }
+  }
+}

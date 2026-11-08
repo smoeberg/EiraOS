@@ -1,0 +1,18 @@
+{
+  "name": "rev-grows",
+  "description": "Højere sekvens, flere nøgler.",
+  "kind": "revocations",
+  "raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-07T10:00:00Z\",\"revoked\":[\"old-1\",\"old-2\"],\"sequence\":2,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"6nmY-rV9LAJIHrfjg5CckkUKMYJW_8bPkJ2KpO2FVJWx9dvBzUqEqQMhG4Gp29UNiNDwQc5moXI-QQzJtfTSCw\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": {
+    "sequence": 1,
+    "revoked": [
+      "old-1"
+    ],
+    "digest": "sha256:841c36030717a37aa5f43a1e297e8bc1bfd59f5f25f2e515e38a743aad4d7c6a"
+  },
+  "expect": {
+    "ok": true
+  }
+}

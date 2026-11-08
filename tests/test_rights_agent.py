@@ -92,9 +92,9 @@ def test_newer_package_supersedes_older(bundle, tmp_path, monkeypatch, capsys):
 def test_enrolled_device_does_not_take_the_default_set(bundle, tmp_path, monkeypatch, capsys):
     enrollment = tmp_path / "enrollment.json"
     enrollment.write_text(json.dumps({
-        "eira_enrollment": "1", "tenant_id": "kk", "device_id": "dev-1",
+        "eira_enrollment": "2", "tenant_id": "kk", "device_id": "dev-1",
         "fleet_url": "https://fleet.kk.example",
-        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}},
+        "rights_roots": {"kk-root-1": {"public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}},
     }))
     monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", enrollment)
     cache = RightsCache(tmp_path / "rights")

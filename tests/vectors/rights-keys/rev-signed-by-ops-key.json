@@ -1,0 +1,13 @@
+{
+  "name": "rev-signed-by-ops-key",
+  "description": "Driftsnøglen kan ikke tilbagekalde.",
+  "kind": "revocations",
+  "raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-07T10:00:00Z\",\"revoked\":[\"old-1\"],\"sequence\":1,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"dILkIG1EEnib0qvX7_GPUZpjFAWMG7uQv0Rh5Lxw3cZsEfHbUxfXte_uJNf8EAh6Dx68pS_tg3q5prw_wqOFAQ\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": null,
+  "expect": {
+    "ok": false,
+    "reason": "bad_signature"
+  }
+}

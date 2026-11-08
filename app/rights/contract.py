@@ -56,15 +56,21 @@ class Reason:
     UNKNOWN_ACTION = "unknown_action"
     GRANT_OUTLIVES_SET = "grant_outlives_set"
     ANCHOR_EXPIRED = "anchor_expired"
+    KEY_REVOKED = "key_revoked"
 
 
 @dataclass(frozen=True)
 class Anchor:
     kind: str                  # "managed" or "default"
     public_key: bytes          # raw 32-byte Ed25519 key
-    # Managed anchors expire (pinned at enroll). Judged on the verifier's
-    # effective time, never on the set's issued_at: a leaked key can backdate.
+    # Managed anchors are operational keys certified by the tenant root
+    # (app/rights/keys.py) and expire with their certificate. Judged on the
+    # verifier's effective time, never on the set's issued_at: a leaked key
+    # can backdate.
     not_after: datetime | None = None
+    # Revoked by the root's revocation list (keys.py). Kept as an anchor so
+    # the rejection says why, instead of "unknown key".
+    revoked: bool = False
 
 
 @dataclass(frozen=True)
@@ -210,6 +216,8 @@ def verify(
             raise _Reject(Reason.UNKNOWN_KEY_ID)
         if anchor.kind != kind:
             raise _Reject(Reason.WRONG_ANCHOR)
+        if anchor.revoked:
+            raise _Reject(Reason.KEY_REVOKED)
         if anchor.not_after is not None and now >= anchor.not_after:
             raise _Reject(Reason.ANCHOR_EXPIRED)
         try:

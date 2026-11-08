@@ -1,7 +1,7 @@
 # EIRA Rights Set 1.0 — kontrakt mellem Fleet og endpoint
 
 **Status:** Godkendt af ejer 7. november 2026. Normativ.
-**Version:** 1.2 (8. november 2026: 1.1 eget levetidsloft for `default`-sæt, §4.2, og standardsættets bygning, §5.2; 1.2 ankre udløber, `anchor_expired`, §3)
+**Version:** 1.2 (8. november 2026: 1.1 eget levetidsloft for `default`-sæt, §4.2, og standardsættets bygning, §5.2; 1.2 ankre udløber, `anchor_expired`, §3; 1.3 rod- og driftsnøgler, tilbagekaldelse, `key_revoked`, §3.1)
 **Parter:** `eira-fleet-control` (udsteder) og `eira-os` (`eira-governance-agent` anvender, Gate håndhæver)
 **Grundlag:** [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), [GATE-KERNEL bilag A og B](GATE-KERNEL-1.0.md), Fleet Agent Protocol v0.1 (`eira-fleet-control`)
 
@@ -117,10 +117,44 @@ Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det ti
   ```
   `alg` og `key_id` er en del af det signerede input, fordi de ligger i sættet uden for `signature.value`. Kun `signature.value` fjernes før signering.
 - Tillidsankre:
-  - **`managed`:** tenantens Fleet-nøgle, leveret ved enroll over mTLS og fastgjort i `/etc/eira/enrollment.json` (EIRA-FLEET-RIGHTS-API-1.0 §5).
+  - **`managed`:** en af tenantens **driftsnøgler**, certificeret af en rodnøgle (§3.1).
   - **`default`:** en engangsnøgle pr. pakke-build; ankeret ligger i samme pakke (§5.2).
-- Nøglerotation sker via `key_id`. Et ukendt `key_id` gør sættet ugyldigt.
-- Et `managed`-anker har en `not_after`. Efter den (målt i verifikatorens effektive tid, §4.1) afvises sæt signeret med ankeret som `anchor_expired`. Udløbet vurderes aldrig mod sættets `issued_at`: den, der har lækket en nøgle, kan tilbagedatere.
+- Et ukendt `key_id` gør sættet ugyldigt (`unknown_key_id`).
+- Et `managed`-anker udløber med sit certifikat. Efter `not_after` (målt i verifikatorens effektive tid, §4.1) afvises sæt signeret med nøglen som `anchor_expired`. Udløbet vurderes aldrig mod sættets `issued_at`: den, der har lækket en nøgle, kan tilbagedatere.
+- En tilbagekaldt driftsnøgle afviser sæt som `key_revoked`.
+
+### 3.1 Rod- og driftsnøgler (`app/rights/keys.py`)
+
+To niveauer, så en lækket signeringsnøgle kan trækkes tilbage uden at røre enheden:
+
+| Nøgle | Fastgjort | Må signere | Levetid |
+|---|---|---|---|
+| **Rod** | ved enroll i `/etc/eira/enrollment.json` (`rights_roots`) | kun driftsnøglecertifikater og tilbagekaldelseslisten, **aldrig** et rettighedssæt | `not_after` i enrollment; skift kræver re-enroll |
+| **Drift** | via rodcertifikat i desired state | rettighedssæt | højst 90 dage (`MAX_KEY_LIFETIME`) |
+
+**Driftsnøglecertifikat** (domæne `EIRAOS-RIGHTS-KEY-V1`, samme signatur- og kanoniseringsregler som sæt):
+
+```json
+{"eira_rights_key": "1", "key_id": "kk-ops-2026-11", "public_key": "<base64url Ed25519>", "tenant_id": "kk",
+ "not_before": "2026-11-01T00:00:00Z", "not_after": "2027-01-15T00:00:00Z",
+ "signature": {"alg": "ed25519", "key_id": "<rod-id>", "value": "<base64url>"}}
+```
+
+Gyldigt, når: udsteder er en fastgjort, ikke udløbet rod; signaturen holder; `tenant_id` er enhedens; levetiden ≤ 90 dage; `not_before` − 5 min. ≤ *nu* < `not_after`; `key_id` er ikke en rods id; ingen ekstra felter.
+
+**Tilbagekaldelsesliste** (domæne `EIRAOS-RIGHTS-REVOKE-V1`), signeret af en rod:
+
+```json
+{"eira_rights_revocations": "1", "tenant_id": "kk", "sequence": 3, "issued_at": "…", "revoked": ["kk-ops-2026-08"],
+ "signature": {"alg": "ed25519", "key_id": "<rod-id>", "value": "<base64url>"}}
+```
+
+- `sequence` stiger; samme sekvens med andet indhold er en konflikt; listen kan kun vokse (en tilbagekaldelse er permanent). En liste, der ikke overholder det, ignoreres, og den gemte gælder.
+- **En tilbagekaldt nøgle tager sine sæts rettigheder med sig:** gaten tjekker ved hver beslutning, at nøglen bag det aktive sæt stadig er certificeret og ikke tilbagekaldt (`signing_key_revoked`, `signing_key_expired`).
+- **Rotation:** roden certificerer en ny driftsnøgle, Fleet signerer med den, og den gamle tilbagekaldes. Enheden følger uden re-enroll.
+- **Kompromittering:** en lækket driftsnøgle tilbagekaldes af roden. En lækket rod kræver re-enroll; derfor holdes roden offline (HSM) og bruges sjældent.
+
+Vektorer: `tests/vectors/rights-keys/` (certifikater og lister, gyldige og ugyldige), kørt af `tests/test_rights_keys.py` og af Fleet's CI.
 
 ## 4. Anvendelse på endpointet (`eira-governance-agent`)
 
@@ -128,7 +162,7 @@ Agenten er den eneste skriver til gatens rettighedscache. Gaten har ingen IPC-me
 
 Et nyt sæt anvendes kun, hvis **alle** disse er opfyldt (i denne rækkefølge; første fejl er årsagen):
 1. Profil (§2) og schema er overholdt.
-2. Signaturen er gyldig med et kendt, ikke udløbet anker for sættets `kind`. Intet felt bruges, før signaturen er kontrolleret.
+2. Signaturen er gyldig med et kendt, ikke udløbet og ikke tilbagekaldt anker for sættets `kind` (§3.1). Intet felt bruges, før signaturen er kontrolleret.
 3. `tenant_id` og `device_id` matcher enhedens enroll-identitet. Et `default`-sæt gælder kun, når enheden ikke er enrolled.
 4. `expires_at - issued_at` ≤ loftet (§4.2), og `issued_at` − 5 min. ≤ *nu* < `expires_at`, hvor *nu* er den effektive tid (§4.1). Ingen grant eller deny må have `expires_at` efter sættets.
 5. Alle handlingsnøgler findes i gatens registry for den installerede gate-version.

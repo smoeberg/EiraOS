@@ -1,0 +1,19 @@
+{
+  "name": "rev-conflict",
+  "description": "Samme sekvens, andet indhold.",
+  "kind": "revocations",
+  "raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-07T10:00:00Z\",\"revoked\":[\"old-1\",\"sneaked-in\"],\"sequence\":1,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"wlhSQZ2_DDAjNM8ng_9jqXlltAcpN5_gxIzNamnhixl4x9t7tLePufkTidnd3i6VUIwYaQQgNELCAloOM9HABg\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": {
+    "sequence": 1,
+    "revoked": [
+      "old-1"
+    ],
+    "digest": "sha256:841c36030717a37aa5f43a1e297e8bc1bfd59f5f25f2e515e38a743aad4d7c6a"
+  },
+  "expect": {
+    "ok": false,
+    "reason": "sequence_conflict"
+  }
+}
