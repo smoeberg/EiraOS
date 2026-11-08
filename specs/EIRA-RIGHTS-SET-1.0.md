@@ -117,8 +117,8 @@ Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det ti
   ```
   `alg` og `key_id` er en del af det signerede input, fordi de ligger i sættet uden for `signature.value`. Kun `signature.value` fjernes før signering.
 - Tillidsankre:
-  - **`managed`:** tenantens Fleet-nøgle, leveret ved enroll over mTLS og fastgjort som Fleet URL pinning (Agent Protocol §2.1).
-  - **`default`:** Fleet's release-nøgle, samme anker som bundles.
+  - **`managed`:** tenantens Fleet-nøgle, leveret ved enroll over mTLS og fastgjort i `/etc/eira/enrollment.json` (EIRA-FLEET-RIGHTS-API-1.0 §5).
+  - **`default`:** en engangsnøgle pr. pakke-build; ankeret ligger i samme pakke (§5.2).
 - Nøglerotation sker via `key_id`. Et ukendt `key_id` gør sættet ugyldigt.
 
 ## 4. Anvendelse på endpointet (`eira-governance-agent`)
@@ -204,11 +204,9 @@ Et udløbet sæt giver **nul rettigheder** for gate-handlinger. Det betyder ikke
   - *Foreslået eller accepteret, ikke bekræftet:* `confirm` giver `REJECT E_UNAUTHORIZED`. Handlingen er aldrig udført, så der er intet at kompensere.
   - *Billet udstedt, executor i gang:* Udførelsen fuldføres, og resultatet auditeres. Lag 6 kontrolleres sidst *før* billetten udstedes; efter det tidspunkt afbryder et udløb ikke en handling halvvejs. Der indføres ingen kompensationsmekanik for dette tilfælde.
 
-## 7. Fleet Agent Protocol v0.2 (ændringer i `eira-fleet-control`)
+## 7. Levering fra Fleet
 
-- `GET /v1/desired-state` får feltet `rights_set`, som indeholder et sæt efter denne kontrakt, eller er udeladt, når intet er ændret.
-- `POST /v1/report/apply-result` rapporterer `rights_set_id`, `version` og `result` (`applied`, `rejected:<årsag>` eller `noop`).
-- Heartbeat'en får `rights_version` og `rights_expires_at`, så Fleet Console kan vise enheder, der er ved at udløbe.
+Hvordan et sæt kommer fra Fleet til enheden, og hvordan resultatet meldes tilbage, er defineret i [EIRA-FLEET-RIGHTS-API-1.0](EIRA-FLEET-RIGHTS-API-1.0.md) (desired state, apply-result, heartbeat og enrollment-filen).
 
 ## 8. Tests
 

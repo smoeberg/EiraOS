@@ -91,11 +91,25 @@ def test_newer_package_supersedes_older(bundle, tmp_path, monkeypatch, capsys):
 
 def test_enrolled_device_does_not_take_the_default_set(bundle, tmp_path, monkeypatch, capsys):
     enrollment = tmp_path / "enrollment.json"
-    enrollment.write_text(json.dumps({"tenant_id": "kk", "device_id": "dev-1"}))
+    enrollment.write_text(json.dumps({
+        "eira_enrollment": "1", "tenant_id": "kk", "device_id": "dev-1",
+        "fleet_url": "https://fleet.kk.example",
+        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43}},
+    }))
     monkeypatch.setattr(agent, "ENROLLMENT", enrollment)
     cache = RightsCache(tmp_path / "rights")
     assert agent.apply_default(bundle, cache) == 0
     assert json.loads(capsys.readouterr().out)["result"] == "not_applicable"
+    assert cache.active_meta() is None
+
+
+def test_malformed_enrollment_never_falls_back_to_private(bundle, tmp_path, monkeypatch, capsys):
+    enrollment = tmp_path / "enrollment.json"
+    enrollment.write_text(json.dumps({"tenant_id": "kk", "device_id": "dev-1"}))  # no anchors
+    monkeypatch.setattr(agent, "ENROLLMENT", enrollment)
+    cache = RightsCache(tmp_path / "rights")
+    assert agent.apply_default(bundle, cache) == 1
+    assert json.loads(capsys.readouterr().out)["reason"] == "enrollment_malformed"
     assert cache.active_meta() is None
 
 

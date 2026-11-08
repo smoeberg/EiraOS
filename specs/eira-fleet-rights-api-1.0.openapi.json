@@ -1,0 +1,157 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EIRA Fleet Rights API",
+    "version": "1.0.0",
+    "description": "The rights part of the endpoint ↔ Fleet boundary, defined by eira-os (specs/EIRA-FLEET-RIGHTS-API-1.0.md). Fleet implements the server. Transport, mTLS and enroll are Fleet Agent Protocol v0.1 §2 and are not repeated here. The rights set itself is EIRA-RIGHTS-SET-1.1; this API only carries it."
+  },
+  "servers": [{"url": "https://{fleet}", "variables": {"fleet": {"default": "fleet.example"}}}],
+  "security": [{"deviceCertificate": []}],
+  "paths": {
+    "/v1/desired-state": {
+      "get": {
+        "operationId": "getDesiredState",
+        "summary": "Desired state for this device, including a newer rights set if one exists.",
+        "parameters": [
+          {
+            "name": "rights_version",
+            "in": "query",
+            "required": false,
+            "description": "Version of the device's active rights set. Omitted when the device has none. Fleet omits rights_set when it has nothing newer.",
+            "schema": {"type": "integer", "minimum": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Desired state. Other fields belong to Fleet Agent Protocol v0.1 §5 and are ignored by the rights agent.",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DesiredState"},
+                "examples": {
+                  "newer": {"$ref": "#/components/examples/DesiredStateNewer"},
+                  "unchanged": {"value": {"policy_revision": "git:abc123"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/report/apply-result": {
+      "post": {
+        "operationId": "reportApplyResult",
+        "summary": "Result of applying a rights set. Sent after every set Fleet delivered.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/RightsApplyResult"},
+              "examples": {
+                "applied": {"value": {"kind": "rights_set", "device_id": "dev-0001", "rights_set_id": "0190f5a0-0000-7000-8000-00000000abcd", "version": 42, "result": "applied", "reason": null}},
+                "rejected": {"value": {"kind": "rights_set", "device_id": "dev-0001", "rights_set_id": null, "version": null, "result": "rejected", "reason": "version_rollback"}}
+              }
+            }
+          }
+        },
+        "responses": {"204": {"description": "Recorded."}}
+      }
+    },
+    "/v1/heartbeat": {
+      "post": {
+        "operationId": "heartbeat",
+        "summary": "Heartbeat (Fleet Agent Protocol v0.1 §4) with the rights fields below added.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["device_id", "rights"],
+                "properties": {
+                  "device_id": {"type": "string"},
+                  "rights": {"$ref": "#/components/schemas/RightsHeartbeat"}
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {"204": {"description": "Recorded."}}
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "deviceCertificate": {"type": "mutualTLS", "description": "Device certificate issued at enroll (Fleet Agent Protocol v0.1 §2.1)."}
+    },
+    "schemas": {
+      "DesiredState": {
+        "type": "object",
+        "properties": {
+          "rights_set": {
+            "description": "base64url (no padding) of the exact signed bytes of an EIRA-RIGHTS-SET-1.1 document. Never embedded as JSON: no parser between signer and verifier may touch it. Absent or null = nothing newer than rights_version.",
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "maxLength": 1398104
+          }
+        },
+        "additionalProperties": true
+      },
+      "RightsApplyResult": {
+        "type": "object",
+        "required": ["kind", "device_id", "rights_set_id", "version", "result", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {"const": "rights_set"},
+          "device_id": {"type": "string"},
+          "rights_set_id": {"type": ["string", "null"], "description": "Only for a verified set; null when rejected (its fields are unverified)."},
+          "version": {"type": ["integer", "null"]},
+          "result": {"enum": ["applied", "noop", "rejected"]},
+          "reason": {
+            "type": ["string", "null"],
+            "description": "A contract.Reason when rejected.",
+            "enum": [null, "malformed", "schema", "unknown_key_id", "wrong_anchor", "bad_signature", "wrong_tenant", "wrong_device", "default_on_enrolled", "ttl_over_cap", "not_yet_valid", "expired", "version_rollback", "version_conflict", "unknown_action", "grant_outlives_set"]
+          }
+        }
+      },
+      "RightsHeartbeat": {
+        "type": "object",
+        "required": ["rights_state", "rights_version", "rights_expires_at", "clock_rollback"],
+        "additionalProperties": false,
+        "properties": {
+          "rights_state": {"enum": ["active", "expired", "missing"]},
+          "rights_version": {"type": ["integer", "null"]},
+          "rights_expires_at": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+          "clock_rollback": {"type": "boolean", "description": "The device saw its wall clock go back past its high-water mark (RIGHTS-SET §4.1)."}
+        }
+      },
+      "Enrollment": {
+        "description": "What enroll must leave on the device as /etc/eira/enrollment.json (root, 0644). Delivered over mTLS by the enroll flow (Fleet Agent Protocol v0.1 §2).",
+        "type": "object",
+        "required": ["eira_enrollment", "tenant_id", "device_id", "fleet_url", "rights_anchors"],
+        "properties": {
+          "eira_enrollment": {"const": "1"},
+          "tenant_id": {"type": "string"},
+          "device_id": {"type": "string"},
+          "fleet_url": {"type": "string", "pattern": "^https://"},
+          "rights_anchors": {
+            "description": "The tenant's rights-signing public keys (Ed25519, base64url). Pinned at enroll; only managed anchors.",
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "required": ["kind", "public_key"],
+              "properties": {"kind": {"const": "managed"}, "public_key": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}$"}}
+            }
+          }
+        }
+      }
+    },
+    "examples": {
+      "DesiredStateNewer": {
+        "summary": "A newer set. The value is tests/vectors/rights-set/apply-valid-managed.json, base64url-encoded (checked by tests).",
+        "externalValue": "../tests/vectors/rights-set/apply-valid-managed.json"
+      }
+    }
+  }
+}
