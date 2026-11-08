@@ -109,6 +109,29 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 - Nul rettigheder betyder ikke en død maskine (RIGHTS-SET §5.1): gaten starter, `gate.capabilities` viser tilstand og årsag, audit kan læses, og netværk og agentens kontakt til Fleet er substrat, ikke gate-handlinger. Der er ingen nødkonvolut med rettigheder.
 - Nøglerotation sker ved, at enroll-flowet leverer et nyt anker på samme måde, aldrig inde i et rettighedssæt.
 
+## 7. Transport (`app/rights/transport.py`)
+
+`HttpsFleetRightsClient` implementerer `FleetRightsClient` med standardbiblioteket (`ssl`, `http.client`), så pakken ikke får nye afhængigheder. Transporten sikrer forbindelsen; om et sæt må bruges, afgør stadig `contract.verify`.
+
+| Krav | Sådan |
+|---|---|
+| Kun den enrollede Fleet | Adressen kommer fra `fleet_url` i enrollment. Værtsnavnet skal passe til serverens certifikat. Omdirigeringer følges aldrig. |
+| Kun Fleets CA | Systemets tillidslager indlæses ikke, så en offentlig CA kan ikke gå i god for en falsk Fleet. |
+| mTLS | Enhedscertifikatet fra enroll; TLS 1.2 eller nyere. |
+| Tenant-token | `Authorization: Bearer`, når enroll har efterladt et token. Et token med linjeskift afvises. |
+| Afgrænset | 15 s timeout og højst 4 MiB svar. Uden for API'et → `ProtocolViolation`; utilgængelig → `FleetError` (offline). |
+
+**Filer, som enroll efterlader** (`/etc/eira/fleet/`):
+
+| Fil | Ejer og rettigheder | Indhold |
+|---|---|---|
+| `ca.pem` | root, 0644 | Fleets server-CA, den eneste betroede rod |
+| `device.crt` | root, 0644 | enhedscertifikatet |
+| `device.key` | root:eira, 0640 | enhedens private nøgle |
+| `tenant.token` | root:eira, 0640 | tenant-token (valgfri) |
+
+**Kommando:** `eira-rights-apply sync` kører én runde (§4) og derefter et heartbeat. Exit: 0 i orden, 1 sæt afvist, 2 ikke enrolled eller fejlkonfigureret, 3 offline. Hvornår den køres (timer eller daemon), fastlægges sammen med enroll-flowet.
+
 ## 6. Besluttet (8. november 2026)
 
 1. **Tillidsrod mod root — besluttet: transporten bygges nu med §2's grænse; attestation bliver et senere krav.** At signere enrollment-filen med en TPM-forseglet nøgle eller lægge ankeret i TPM NVRAM gør ikke root til en grænse: root kan stadig ændre koden, der kontrollerer TPM-signaturen, eller rette i cachen efter verifikationen. Det giver først mening med en målt og uforanderlig kæde (Secure Boot, `dm-verity` på `/usr`, PCR-målinger) **og** remote attestation, hvor Fleet verificerer et TPM-quote ved enroll og heartbeat, før det udsteder sæt. Så flyttes kontrollen til Fleet, som kan opdage en ændret enhed. Beslutning: transporten bygges nu med §2's ærlige grænse; attestation lægges ind i enroll og heartbeat som et senere krav, sammen med en uforanderlig `/usr`.
