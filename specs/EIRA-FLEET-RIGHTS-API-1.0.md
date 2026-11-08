@@ -1,6 +1,6 @@
 # EIRA Fleet Rights API 1.0
 
-**Status:** Udkast til ejerens godkendelse.
+**Status:** Godkendt af ejer 8. november 2026. Normativ.
 **Version:** 1.0
 **Defineret af:** `eira-os`. Fleet implementerer serversiden; eira-os afhænger ikke af, hvordan Fleet er bygget.
 **Grundlag:** [EIRA-RIGHTS-SET-1.1](EIRA-RIGHTS-SET-1.0.md) (sættet), [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), Fleet Agent Protocol v0.1 (transport og enroll).
@@ -103,8 +103,8 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 - Nul rettigheder betyder ikke en død maskine (RIGHTS-SET §5.1): gaten starter, `gate.capabilities` viser tilstand og årsag, audit kan læses, og netværk og agentens kontakt til Fleet er substrat, ikke gate-handlinger. Der er ingen nødkonvolut med rettigheder.
 - Nøglerotation sker ved, at enroll-flowet leverer et nyt anker på samme måde, aldrig inde i et rettighedssæt.
 
-## 6. Åbent til ejer
+## 6. Besluttet (8. november 2026)
 
-1. **Tillidsrod mod root (blokerer ikke transporten, men styrer hvad managed mode kan love).** At signere enrollment-filen med en TPM-forseglet nøgle eller lægge ankeret i TPM NVRAM gør ikke root til en grænse: root kan stadig ændre koden, der kontrollerer TPM-signaturen, eller rette i cachen efter verifikationen. Det giver først mening med en målt og uforanderlig kæde (Secure Boot, `dm-verity` på `/usr`, PCR-målinger) **og** remote attestation, hvor Fleet verificerer et TPM-quote ved enroll og heartbeat, før det udsteder sæt. Så flyttes kontrollen til Fleet, som kan opdage en ændret enhed. Forslag: transporten bygges nu med §2's ærlige grænse; attestation lægges ind i enroll og heartbeat som et senere krav, sammen med en uforanderlig `/usr`.
-2. **Nøglerotation.** Reviewet foreslår et nyt ankersæt signeret af det forrige anker. Det løser planlagt rotation, men ikke kompromittering: den, der har lækket det gamle anker, kan selv signere sig et nyt. Forslag i stedet: to niveauer. Enrollment fastgør tenantens **rod-nøgle** (offline, langlivet, i HSM), og roden udsteder kortlivede **driftsnøgler** med `not_after` som nøglecertifikater, leveret via desired state. En lækket driftsnøgle tilbagekaldes af roden uden re-enroll; kun en lækket rod kræver re-enroll.
-3. `eira-fleet-control` tager OpenAPI-filen og rettighedsvektorerne som en pinnet afhængighed og kører dem i sin CI (som RIGHTS-SET-kontrakten).
+1. **Tillidsrod mod root — besluttet: transporten bygges nu med §2's grænse; attestation bliver et senere krav.** At signere enrollment-filen med en TPM-forseglet nøgle eller lægge ankeret i TPM NVRAM gør ikke root til en grænse: root kan stadig ændre koden, der kontrollerer TPM-signaturen, eller rette i cachen efter verifikationen. Det giver først mening med en målt og uforanderlig kæde (Secure Boot, `dm-verity` på `/usr`, PCR-målinger) **og** remote attestation, hvor Fleet verificerer et TPM-quote ved enroll og heartbeat, før det udsteder sæt. Så flyttes kontrollen til Fleet, som kan opdage en ændret enhed. Beslutning: transporten bygges nu med §2's ærlige grænse; attestation lægges ind i enroll og heartbeat som et senere krav, sammen med en uforanderlig `/usr`.
+2. **Nøglerotation — besluttet: rod- og driftsnøgler.** Reviewet foreslår et nyt ankersæt signeret af det forrige anker. Det løser planlagt rotation, men ikke kompromittering: den, der har lækket det gamle anker, kan selv signere sig et nyt. Beslutning: to niveauer. Enrollment fastgør tenantens **rod-nøgle** (offline, langlivet, i HSM), og roden udsteder kortlivede **driftsnøgler** med `not_after` som nøglecertifikater, leveret via desired state. En lækket driftsnøgle tilbagekaldes af roden uden re-enroll; kun en lækket rod kræver re-enroll.
+3. **Åbent:** `eira-fleet-control` tager OpenAPI-filen og rettighedsvektorerne som en pinnet afhængighed og kører dem i sin CI (som RIGHTS-SET-kontrakten).
