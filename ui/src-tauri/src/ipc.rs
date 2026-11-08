@@ -402,12 +402,14 @@ mod tests {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
         use tokio::net::UnixListener;
 
+        /// Unique per test even when parallel tests start in the same
+        /// nanosecond: a shared directory let one test delete another's
+        /// socket (AddrInUse / flaky CI). Short, because sun_path is 108 bytes.
         fn short_temp_dir() -> PathBuf {
-            let stamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let dir = std::env::temp_dir().join(format!("e{:x}", stamp % 0xffff_ffff));
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static NEXT: AtomicU32 = AtomicU32::new(0);
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!("e{:x}-{n}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("create short temp dir");
             dir

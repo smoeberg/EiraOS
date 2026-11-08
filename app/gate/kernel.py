@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from app.gate import edp, system
+from app.gate.clock import BootInstant, boot_now, within
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
 from app.gate.executors import ExecutorRegistry, ExecutorUnavailable, default_registry
 from app.gate.policy import (
@@ -50,6 +51,7 @@ class Gate:
         sessions: Callable[[str], dict[str, Any] | None] | None = None,
         clock: Callable[[], datetime] = utc_now,
         consent_ttl: timedelta = DEFAULT_CONSENT_TTL,
+        boot_clock: Callable[[], BootInstant] = boot_now,
     ) -> None:
         self.store = store or GateStore()
         self._registry = registry if registry is not None else default_registry(self.store.db_path)
@@ -60,6 +62,7 @@ class Gate:
         self._sessions = sessions
         self._clock = clock
         self._consent_ttl = consent_ttl
+        self._boot_clock = boot_clock
         self.recover()
 
     # --- recovery --------------------------------------------------------------
@@ -171,8 +174,15 @@ class Gate:
                 raise LayerFailure(GateCode.E_CONSENT, "consent does not cover the text that was shown")
         except LayerFailure as failure:
             return self._fail("consent", None, failure, actor, action_id=action_id)
+        started = self._boot_clock()
         consent_id = self.store.grant_consent(
-            action_id, content_hash, rendering_hash_, session_id or "", self._clock() + self._consent_ttl
+            action_id,
+            content_hash,
+            rendering_hash_,
+            session_id or "",
+            self._clock() + self._consent_ttl,  # shown to the user, never decides
+            boot_id=started.boot_id,
+            boottime_ns=started.ns,
         )
         result = GateResult(
             decision=None,
@@ -273,7 +283,10 @@ class Gate:
     ) -> None:
         if not policy.requires_consent:
             return
-        now = self._clock()
+        # Bilag A pkt. 6: validity on CLOCK_BOOTTIME within this boot. Setting
+        # the wall clock back cannot extend a consent; a reboot ends it.
+        now = self._boot_clock()
+        ttl_ns = int(self._consent_ttl.total_seconds() * 1_000_000_000)
         consents = self.store.consents_for(record["action_id"])
         for consent in consents:
             if (
@@ -281,7 +294,7 @@ class Gate:
                 and consent["rendering_hash"] == record["rendering_hash"]
                 and consent["session_id"] == session_id
                 and consent["revoked_at"] is None
-                and datetime.fromisoformat(consent["expires_at"]) > now
+                and within(_boot_instant(consent), now, ttl_ns)
             ):
                 return
         if at_proposal and not consents:
@@ -578,3 +591,9 @@ def _rendering_intact(record: dict[str, Any]) -> bool:
         return False
     expected = rendering_hash(record["rendering_text"], record["render_lang"], record["renderer_version"])
     return expected == record["rendering_hash"]
+
+
+def _boot_instant(consent: dict[str, Any]) -> BootInstant | None:
+    if consent.get("boot_id") is None or consent.get("boottime_ns") is None:
+        return None
+    return BootInstant(consent["boot_id"], int(consent["boottime_ns"]))

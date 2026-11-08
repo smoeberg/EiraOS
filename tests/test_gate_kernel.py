@@ -75,6 +75,22 @@ class Clock:
         return self.now
 
 
+class BootClock:
+    """CLOCK_BOOTTIME stand-in: advances only when a test says so."""
+
+    def __init__(self):
+        self.boot_id = "boot-1"
+        self.ns = 1_000_000_000
+
+    def __call__(self):
+        from app.gate.clock import BootInstant
+
+        return BootInstant(self.boot_id, self.ns)
+
+    def advance(self, delta: timedelta) -> None:
+        self.ns += int(delta.total_seconds() * 1_000_000_000)
+
+
 @pytest.fixture
 def world(tmp_path):
     db = str(tmp_path / "gate.db")
@@ -88,13 +104,15 @@ def world(tmp_path):
     store.add_member(CONV, ANNE)
     grant = store.grant_right(ANNE, CONV, "*")
     clock = Clock()
-    gate = Gate(store, default_registry(db), sessions=sessions.get, clock=clock)
+    boot = BootClock()
+    gate = Gate(store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot)
 
     class World:
         pass
 
     w = World()
     w.db, w.store, w.sessions, w.grant, w.clock, w.gate = db, store, sessions, grant, clock, gate
+    w.boot = boot
     return w
 
 
@@ -234,10 +252,43 @@ def test_missing_consent_for_irreversible_action_is_rejected(world):
     assert outbox(world) == []
 
 
-def test_consent_expires(world):
+def test_consent_expires_on_the_boot_clock(world):
     env, digest = propose_and_consent(world)
-    world.clock.now += timedelta(minutes=11)
+    world.boot.advance(timedelta(minutes=11))
     assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").code is GateCode.E_CONSENT
+
+
+def test_setting_the_wall_clock_back_does_not_extend_consent(world):
+    """Bilag A pkt. 6: the wall clock is display only."""
+    env, digest = propose_and_consent(world)
+    world.boot.advance(timedelta(minutes=11))
+    world.clock.now -= timedelta(hours=1)
+    assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").code is GateCode.E_CONSENT
+
+
+def test_wall_clock_jump_alone_does_not_expire_consent(world):
+    env, digest = propose_and_consent(world)
+    world.clock.now += timedelta(hours=2)  # NTP correction, time zone change …
+    world.boot.advance(timedelta(minutes=2))
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
+    assert result.decision is Decision.PASS
+
+
+def test_consent_does_not_survive_a_reboot(world):
+    env, digest = propose_and_consent(world)
+    world.boot.boot_id, world.boot.ns = "boot-2", 5_000_000  # new boot, clock restarts low
+    assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").code is GateCode.E_CONSENT
+
+
+def test_consent_row_without_boot_instant_is_never_valid(world):
+    """Rows from before the migration fail closed."""
+    proposal = world.gate.propose(raw(envelope()), "s-anne", Origin.MODEL)
+    world.store.grant_consent(
+        "dlg-0001", proposal.content_hash, rh(world, "dlg-0001"), "s-anne",
+        world.clock() + timedelta(days=1),
+    )
+    result = world.gate.confirm("dlg-0001", proposal.content_hash, rh(world, "dlg-0001"), "s-anne")
+    assert (result.code, result.layer) == (GateCode.E_CONSENT, 5)
 
 
 def test_changed_parameters_after_confirmation_are_rejected(world):
@@ -563,7 +614,10 @@ def test_crash_between_outbox_and_gate_result_is_recovered_once(world, monkeypat
     monkeypatch.setattr(world.store, "finish", original_finish)
     assert world.gate.status(env["id"], "s-anne")["state"] == "executing"
     # Restart: a new gate recovers from the executor's durable state.
-    restarted = Gate(world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock)
+    restarted = Gate(
+        world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
+        boot_clock=world.boot,  # daemon restart, same boot
+    )
     assert restarted.gate_state(env["id"]) == "executed"
     again = restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert again.decision is Decision.PASS and again.result["recovered"] is True
@@ -581,7 +635,10 @@ def test_crash_before_the_outbox_write_returns_the_action_to_pending(world, monk
     with pytest.raises(SystemExit):
         world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.undo()
-    restarted = Gate(world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock)
+    restarted = Gate(
+        world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
+        boot_clock=world.boot,  # daemon restart, same boot
+    )
     assert restarted.gate_state(env["id"]) == "pending"
     assert restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").decision is Decision.PASS
     assert len(outbox(world)) == 1

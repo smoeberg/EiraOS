@@ -91,7 +91,7 @@ MIGRATIONS = {
         "renderer_version": "TEXT",
         "render_lang": "TEXT",
     },
-    "gate_consents": {"rendering_hash": "TEXT"},
+    "gate_consents": {"rendering_hash": "TEXT", "boot_id": "TEXT", "boottime_ns": "INTEGER"},
 }
 
 
@@ -195,13 +195,24 @@ class GateStore:
     # --- consent -----------------------------------------------------------
 
     def grant_consent(
-        self, action_id: str, content_hash: str, rendering_hash: str, session_id: str, expires_at: datetime
+        self,
+        action_id: str,
+        content_hash: str,
+        rendering_hash: str | None,
+        session_id: str,
+        expires_at: datetime,
+        boot_id: str | None = None,
+        boottime_ns: int | None = None,
     ) -> str:
+        """``expires_at`` is wall-clock time for display and audit only;
+        validity is decided on (boot_id, boottime_ns). A row without them is
+        never valid (fail closed, e.g. rows from before the migration)."""
         consent_id = str(uuid.uuid4())
         with self._connect() as conn:
             conn.execute(
                 """INSERT INTO gate_consents (consent_id, action_id, content_hash, rendering_hash,
-                   session_id, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   session_id, granted_at, expires_at, boot_id, boottime_ns)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     consent_id,
                     action_id,
@@ -210,6 +221,8 @@ class GateStore:
                     session_id,
                     iso(utc_now()),
                     iso(expires_at),
+                    boot_id,
+                    boottime_ns,
                 ),
             )
         return consent_id
