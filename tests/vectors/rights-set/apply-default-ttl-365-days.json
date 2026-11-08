@@ -1,0 +1,13 @@
+{
+  "name": "default-ttl-365-days",
+  "description": "Default-sæt med 365 dages levetid (loft: 400).",
+  "raw": "{\"denies\":[],\"device_id\":\"*\",\"eira_rights\":\"1\",\"expires_at\":\"2027-11-07T11:00:00Z\",\"grants\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"authenticated\":true}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"release-1.0.0\",\"fleet\":\"release.eira.example\"},\"kind\":\"default\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-release-1\",\"value\":\"uWQuSq3G12Hw-SLD3np1CX8EUFhPH8lh75MdxzP167Jz6AJChwldj00UGKy2UH094GWRp_89V9D8LfWS173CAg\"},\"template\":{\"id\":\"personal\",\"version\":\"1\"},\"tenant_id\":\"unmanaged\",\"version\":1}",
+  "device": {
+    "enrolled": false
+  },
+  "active": null,
+  "now": "2026-11-07T12:00:00Z",
+  "expect": {
+    "ok": true
+  }
+}

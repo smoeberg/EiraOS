@@ -84,7 +84,7 @@ class BootClock:
         self.ns = 1_000_000_000
 
     def __call__(self):
-        from app.gate.clock import BootInstant
+        from app.clock import BootInstant
 
         return BootInstant(self.boot_id, self.ns)
 

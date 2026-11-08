@@ -6,6 +6,8 @@
   #include <abstractions/python>
 
   /usr/bin/eira-intentd rix,
+  # ExecStartPre: applies the bundle's default rights set (separate process).
+  /usr/bin/eira-rights-apply rix,
   /bin/dash ix,
   /usr/bin/dash ix,
   /usr/bin/python3{,.[0-9]*} mrix,
@@ -17,6 +19,8 @@
   /run/eira/*.sock rwk,
   /var/log/eira/ rw,
   /var/log/eira/** rw,
+  # SQLite fsyncs the directory after removing a journal.
+  /data/ r,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
   # Rights cache: the gate advances the effective time (§4.1) on each read.

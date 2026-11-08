@@ -1,7 +1,10 @@
 {
   "note": "TEST KEYS ONLY. Never trust anchors on a real device.",
   "domain": "EIRAOS-RIGHTS-V1",
-  "max_ttl_seconds": 2592000,
+  "max_ttl_seconds": {
+    "managed": 2592000,
+    "default": 34560000
+  },
   "anchors": {
     "test-tenant-kk-1": {
       "kind": "managed",

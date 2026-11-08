@@ -24,8 +24,8 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
+from app.clock import BootInstant, boot_now, within
 from app.gate import edp, system
-from app.gate.clock import BootInstant, boot_now, within
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
 from app.gate.executors import ExecutorRegistry, ExecutorUnavailable, default_registry
 from app.gate.policy import (

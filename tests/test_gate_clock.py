@@ -4,8 +4,8 @@ import sys
 
 import pytest
 
-from app.gate import clock
-from app.gate.clock import BootInstant, within
+from app import clock
+from app.clock import BootInstant, within
 
 
 def test_within_same_boot():

@@ -192,6 +192,15 @@ def apply_vectors() -> list[dict]:
          text(sign(default_set(), "test-release-1")), {"ok": False, "reason": "default_on_enrolled"})
     case("managed-on-unmanaged", "Managed-sæt på en enhed, der ikke er enrolled.", text(good),
          {"ok": False, "reason": "wrong_tenant"}, device=UNMANAGED_DEVICE)
+    case("default-ttl-365-days", "Default-sæt med 365 dages levetid (loft: 400).",
+         text(sign(default_set(expires_at="2027-11-07T11:00:00Z"), "test-release-1")), ok,
+         device=UNMANAGED_DEVICE)
+    case("default-ttl-over-cap", "Default-sæt med 401 dages levetid (loft: 400).",
+         text(sign(default_set(expires_at="2027-12-13T11:00:00Z"), "test-release-1")),
+         {"ok": False, "reason": "ttl_over_cap"}, device=UNMANAGED_DEVICE)
+    case("managed-ttl-400-days", "Managed-sæt kan ikke låne default-loftet.",
+         text(sign(managed(expires_at="2027-12-12T11:00:00Z"), "test-tenant-kk-1")),
+         {"ok": False, "reason": "ttl_over_cap"})
     return v
 
 
@@ -230,7 +239,7 @@ def main() -> None:
     context = {
         "note": "TEST KEYS ONLY. Never trust anchors on a real device.",
         "domain": DOMAIN.decode(),
-        "max_ttl_seconds": 30 * 24 * 3600,
+        "max_ttl_seconds": {"managed": 30 * 24 * 3600, "default": 400 * 24 * 3600},
         "anchors": {kid: {"kind": kind, "public_key": public(seed)} for kid, (kind, seed) in KEYS.items()},
         "registry": REGISTRY,
     }

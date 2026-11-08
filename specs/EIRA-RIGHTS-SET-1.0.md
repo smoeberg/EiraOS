@@ -1,7 +1,7 @@
 # EIRA Rights Set 1.0 — kontrakt mellem Fleet og endpoint
 
 **Status:** Godkendt af ejer 7. november 2026. Normativ.
-**Version:** 1.0
+**Version:** 1.1 (8. november 2026: eget levetidsloft for `default`-sæt, §4.2; standardsættets bygning, §5.2)
 **Parter:** `eira-fleet-control` (udsteder) og `eira-os` (`eira-governance-agent` anvender, Gate håndhæver)
 **Grundlag:** [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), [GATE-KERNEL bilag A og B](GATE-KERNEL-1.0.md), Fleet Agent Protocol v0.1 (`eira-fleet-control`)
 
@@ -155,7 +155,14 @@ Det tilbageværende hul er tid, hvor maskinen er **slukket** og uret samtidig er
 
 ### 4.2 Levetidsloft
 
-Fleet vælger `expires_at` pr. tenant og skabelon — det er Fleet, der kender driftsmønsteret (en elev-pc i tasken fra fredag til mandag, en lærer på ferie). Endpointet afviser ethvert sæt, hvor `expires_at - issued_at` overstiger et **loft kompileret ind i bundlen: 30 dage** (`MAX_TTL`). Endpointet kan aldrig hæve loftet; en ny bundle kan sænke det.
+Fleet vælger `expires_at` pr. tenant og skabelon — det er Fleet, der kender driftsmønsteret (en elev-pc i tasken fra fredag til mandag, en lærer på ferie). Endpointet afviser ethvert sæt, hvor `expires_at - issued_at` overstiger et **loft kompileret ind i bundlen** (`MAX_TTL`):
+
+| Art | Loft | Begrundelse |
+|---|---|---|
+| `managed` | 30 dage | Beskytter mod en stjålet eller glemt enhed; Fleet fornyer ved kontakt. |
+| `default` | 400 dage | Fornyes kun via pakkeopdateringer. På en privat maskine har ejeren root, så et kort udløb beskytter ikke mod noget, men ville låse en maskine, der ikke er opdateret i en måned. 400 dage dækker en udgivelses supportperiode. |
+
+Endpointet kan aldrig hæve et loft; en ny bundle kan sænke det. Et `managed`-sæt kan ikke låne `default`-loftet.
 
 Fleet fornyer sættet ved hver kontakt (ny `version`, nyt `expires_at`), når mindre end halvdelen af levetiden er tilbage. Derfor er `expires_at` i praksis "sidste kontakt + TTL", og der er ikke brug for et særskilt nåde-begreb ved siden af.
 
@@ -177,7 +184,15 @@ Et udløbet sæt giver **nul rettigheder** for gate-handlinger. Det betyder ikke
 - Det, der skal til for at komme online igen — login, netværk, tidssynkronisering og agentens eget kald til Fleet — er **ikke gate-handlinger**. Det hører til substratet (ADR-0003, "ét begreb hører til ét lag") og afhænger aldrig af rettighedssættet. Det er et krav til `eira-governance-agent`, som skal testes dér.
 - Der er **ingen nødkonvolut** med grants. Et sæt, der giver rettigheder, når der ingen rettigheder er, udvider rettighederne; det kan ikke samtidig "kun formindske". Sluk og genstart sker med tænd/sluk-knappen via logind, ikke via gaten.
 
-**`default`-sættet** er minimalt (fx skabelonen `personal`), versioneret pr. bundle-release og kan ikke udvides lokalt. Det ligger read-only i pakken under `/usr/share/eira-os/rights/default.json`.
+**`default`-sættet** er minimalt (skabelonen `personal`), versioneret pr. pakke og kan ikke udvides lokalt. Det ligger read-only i pakken under `/usr/lib/eira-os/rights/default.json` sammen med sit anker (`anchors.json`).
+
+### 5.2 Standardsættets bygning og anvendelse
+
+- **Bygning** (`scripts/build_default_rights.py`, kaldt af `debian/rules`): sættet signeres med en Ed25519-nøgle, der dannes til det ene build og aldrig skrives nogen steder. Sæt og anker ligger i samme pakke, så pakkens egen signatur (apt) er tillidsroden; en langlivet nøgle ville ikke beskytte mere, men være en hemmelighed, der kan lække. Følge: et `default`-sæt kan kun erstattes af en ny pakke.
+- `version` og `issued_at` er den faktiske byggetid. `SOURCE_DATE_EPOCH` ignoreres med vilje: `dpkg-buildpackage` sætter den ud fra `debian/changelog`, hvilket ville give samme version med forskelligt indhold ved hvert build.
+- **Indhold:** den indloggede bruger (`authenticated`) får alle gatens `edp:`-handlinger på `obj:sag:*` og alle `system:`-handlinger på `device:local`. Samtykke, rendering og audit gælder stadig for hver handling.
+- **Anvendelse:** `eira-rights-apply apply-default` (`app/rights/agent.py`) kører som `ExecStartPre` i `eira-intentd.service`: samme bruger, sandkasse og AppArmor-profil, men en separat proces, så gaten ikke selv skriver rettigheder. Fejler den, starter gaten alligevel uden (nyt) sæt og fejler lukket. På en enrolled enhed (`/etc/eira/enrollment.json`) anvendes standardsættet ikke.
+- Agenten vurderer sæt ved `max(vægur, cachens højvandsmærke)` (§4.1).
 
 ## 6. Håndhævelse i gaten
 
