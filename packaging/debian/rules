@@ -28,6 +28,10 @@ override_dh_auto_install:
 		install -m 0755 packaging/bin/eira-daemon \
 			debian/eira-os-core/usr/bin/eira-$$daemon; \
 	done
+	install -m 0755 packaging/bin/eira-rights-apply \
+		debian/eira-os-core/usr/bin/eira-rights-apply
+	# Signed default rights set; the one-time build key is never written.
+	python3 scripts/build_default_rights.py debian/eira-os-core/usr/lib/eira-os/rights
 	install -m 0755 ui/src-tauri/target/release/eira-spatial-desktop \
 		debian/eira-os-core/usr/bin/eira-spatial-desktop
 	install -m 0755 packaging/session/eira-session \

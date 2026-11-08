@@ -29,9 +29,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 SCHEMA_PATH = Path(__file__).resolve().parent / "eira-rights-set-1.0.schema.json"
 DOMAIN = b"EIRAOS-RIGHTS-V1"
 MAX_BYTES = 1 << 20
-# §4.2: compiled-in ceiling for expires_at - issued_at. Fleet chooses the TTL
-# per tenant below it; the endpoint never raises it.
-MAX_TTL = timedelta(days=30)
+# §4.2: compiled-in ceilings for expires_at - issued_at, per kind. Fleet
+# chooses a managed TTL per tenant below its ceiling; the endpoint never
+# raises either. The default set is renewed only by package updates, and on a
+# private machine the owner has root, so its ceiling covers a support period.
+MAX_TTL = {"managed": timedelta(days=30), "default": timedelta(days=400)}
 CLOCK_SKEW = timedelta(minutes=5)
 
 
@@ -189,7 +191,7 @@ def verify(
     active: Active | None,
     now: datetime,
     registry: Iterable[str],
-    max_ttl: timedelta = MAX_TTL,
+    max_ttl: Mapping[str, timedelta] = MAX_TTL,
 ) -> Verdict:
     """Decide whether a rights set may replace the active one. Fail closed."""
     try:
@@ -223,7 +225,7 @@ def verify(
 
         # §4.2 lifetime ceiling and §4 rule 4 window (effective time, §4.1).
         issued, expires = _ts(doc["issued_at"]), _ts(doc["expires_at"])
-        if expires <= issued or expires - issued > max_ttl:
+        if expires <= issued or expires - issued > max_ttl[kind]:
             raise _Reject(Reason.TTL_OVER_CAP)
         if now + CLOCK_SKEW < issued:
             raise _Reject(Reason.NOT_YET_VALID)

@@ -6,6 +6,8 @@ Build-Depends:
  debhelper-compat (= 13),
  dh-python,
  python3-all (>= 3.12),
+ python3-cryptography (>= 41),
+ python3-jsonschema (>= 4.10),
  python3-pytest,
  python3-venv,
  nodejs,

@@ -89,6 +89,27 @@ power = reply["result"]["power"]
 print("gate power capability:", power)
 assert power["poweroff"] == "yes" and power["reboot"] == "yes", reply
 PY
+# EIRA-RIGHTS-SET-1.0 §5: an unmanaged install runs the bundle's signed
+# default set, and the gate says it is a private machine (owner_admin).
+check rights-default-active python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.capabilities",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+rights = json.loads(s.makefile().readline())["result"]["rights"]
+print("gate rights:", rights)
+assert rights["state"] == "active", rights
+assert rights["rights_kind"] == "default" and rights["owner_admin"] is True, rights
+assert rights["clock_rollback"] is False, rights
+PY
+# The desktop user can read neither the cache nor change it.
+check user-cannot-touch-rights-cache sh -c "! runuser -u $USER_NAME -- test -r /data/rights/active.json && ! runuser -u $USER_NAME -- test -w /data/rights"
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
 # Explorer has no escape hatch: EiraOS is the only selectable session.
 check only-eira-session sh -c '[ "$(ls /usr/share/wayland-sessions /usr/share/xsessions 2>/dev/null | grep "\.desktop$")" = "eira-session.desktop" ]'

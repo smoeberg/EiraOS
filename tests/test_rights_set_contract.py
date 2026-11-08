@@ -40,7 +40,9 @@ def _registry() -> list[str]:
 
 def test_vector_context_matches_contract_constants():
     assert CONTEXT["domain"] == contract.DOMAIN.decode()
-    assert CONTEXT["max_ttl_seconds"] == int(contract.MAX_TTL.total_seconds())
+    assert CONTEXT["max_ttl_seconds"] == {
+        kind: int(ttl.total_seconds()) for kind, ttl in contract.MAX_TTL.items()
+    }
     assert "TEST KEYS" in CONTEXT["note"]
 
 
@@ -51,6 +53,7 @@ def test_every_required_vector_exists():
         "missing-template", "ttl-over-cap", "unknown-key-id", "unknown-action", "wildcard-action",
         "unknown-field", "float-version", "duplicate-key", "same-version-same-content",
         "same-version-other-content", "default-on-enrolled", "tampered-after-signing",
+        "default-ttl-over-cap", "managed-ttl-400-days",
     }
     assert required <= names, required - names
 
@@ -67,7 +70,7 @@ def test_apply_vector(path: Path):
         active=active,
         now=_ts(vector["now"]),
         registry=_registry(),
-        max_ttl=timedelta(seconds=CONTEXT["max_ttl_seconds"]),
+        max_ttl={k: timedelta(seconds=v) for k, v in CONTEXT["max_ttl_seconds"].items()},
     )
     expect = vector["expect"]
     assert verdict.ok is expect["ok"], (vector["name"], verdict.reason)

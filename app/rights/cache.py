@@ -59,6 +59,8 @@ class ActiveRights:
             "rights_set_id": self.rights_set_id,
             "rights_version": self.version,
             "rights_kind": self.kind,
+            "rights_template": self.rights_set["template"]["id"],
+            "rights_api_call_id": self.rights_set["issued_by"]["api_call_id"],
             "owner_admin": self.owner_admin,
             "clock_rollback": self.clock_rollback,
         }
@@ -133,6 +135,10 @@ class RightsCache:
         if not state:
             return None
         return contract.Active(state["version"], state["content_hash"], state["tenant_id"])
+
+    def high_water(self) -> datetime | None:
+        state = self._read_state()
+        return _parse(state["high_water"]) if state and "high_water" in state else None
 
     # --- gate side -----------------------------------------------------------
 

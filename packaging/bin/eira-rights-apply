@@ -1,0 +1,7 @@
+#!/bin/sh
+# Applies the bundle's signed default rights set (EIRA-RIGHTS-SET-1.0 §5).
+# Runs as ExecStartPre of eira-intentd: same user, sandbox and AppArmor
+# profile, but a separate process, so the gate itself never writes rights.
+set -eu
+export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -m app.rights.agent "$@"

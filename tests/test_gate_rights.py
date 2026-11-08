@@ -77,6 +77,7 @@ def test_pass_is_audited_with_the_set_and_the_grant(tmp_path):
     assert entry["rights_set_id"] == "00000000-0000-7000-8000-000000000001"
     assert (entry["rights_version"], entry["rights_kind"], entry["rights_grant"]) == (1, "managed", 0)
     assert entry["owner_admin"] is False
+    assert (entry["rights_template"], entry["rights_api_call_id"]) == ("test", "test-1")  # §6
 
 
 def test_group_grant_from_the_session(tmp_path):
