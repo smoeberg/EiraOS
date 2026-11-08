@@ -1,8 +1,11 @@
 """Rights-set apply for the endpoint (EIRA-RIGHTS-SET-1.0 §4, §5).
 
-This is the apply half of `eira-governance-agent`. Today it applies the
-bundle's signed default set on an unmanaged device; fetching managed sets
-from Fleet plugs into `apply()` unchanged.
+This is the apply half of `eira-governance-agent`:
+
+- `apply_default`: the bundle's signed default set on an unmanaged device.
+- `sync_once`: one round against Fleet through `FleetRightsClient`
+  (specs/EIRA-FLEET-RIGHTS-API-1.0.md). The agent never depends on how Fleet
+  works, only on that interface; the HTTPS/mTLS transport implements it.
 
     eira-rights-apply apply-default
 
@@ -13,19 +16,27 @@ Exit codes: 0 applied, no-op or not applicable (enrolled device);
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import random
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping
 
 from app.rights import contract
 from app.rights.cache import RightsCache
+from app.rights.fleet_api import (
+    ApplyReport,
+    Enrollment,
+    FleetError,
+    FleetRightsClient,
+    RightsHeartbeat,
+    read_enrollment,
+)
 
 BUNDLE_DIR = Path(os.environ.get("EIRA_RIGHTS_BUNDLE_DIR", "/usr/lib/eira-os/rights"))
-# Written by enrollment (not yet built). Its absence means unmanaged.
-ENROLLMENT = Path(os.environ.get("EIRA_ENROLLMENT_FILE", "/etc/eira/enrollment.json"))
 
 
 def load_anchors(path: Path) -> dict[str, contract.Anchor]:
@@ -41,13 +52,8 @@ def load_anchors(path: Path) -> dict[str, contract.Anchor]:
     return out
 
 
-def device_identity(path: Path | None = None) -> contract.Device:
-    path = path if path is not None else ENROLLMENT
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return contract.Device(enrolled=False)
-    return contract.Device(enrolled=True, tenant_id=data["tenant_id"], device_id=data["device_id"])
+def enrollment(path: Path | None = None) -> Enrollment | None:
+    return read_enrollment(path)
 
 
 def apply(
@@ -85,14 +91,19 @@ def apply_default(bundle: Path = BUNDLE_DIR, cache: RightsCache | None = None) -
     except (OSError, ValueError, KeyError) as exc:
         _log("rights.apply", result="bundle_missing", error=str(exc))
         return 2
-    device = device_identity()
-    if device.enrolled:
+    try:
+        enrolled = enrollment()
+    except ValueError as exc:
+        # A broken enrollment must not turn a managed device into a private one.
+        _log("rights.apply", result="rejected", reason="enrollment_malformed", error=str(exc))
+        return 1
+    if enrolled is not None:
         _log("rights.apply", result="not_applicable", reason="device is enrolled; Fleet supplies the set")
         return 0
     verdict = apply(
         raw,
         anchors=anchors,
-        device=device,
+        device=contract.Device(enrolled=False),
         cache=cache or RightsCache(),
         registry=REGISTRY,
         wall_now=datetime.now(timezone.utc),
@@ -110,6 +121,101 @@ def apply_default(bundle: Path = BUNDLE_DIR, cache: RightsCache | None = None) -
         expires_at=doc.get("expires_at"),
     )
     return 0
+
+
+def sync_once(
+    client: FleetRightsClient,
+    enrolled: Enrollment,
+    cache: RightsCache,
+    *,
+    registry: Iterable[str],
+    wall_now: datetime,
+) -> str:
+    """One round: ask Fleet for anything newer, verify, install, report.
+
+    Returns "offline", "unchanged", "applied", "noop", "rejected" or
+    "rejected_known". Fleet being unreachable or misbehaving never changes the
+    active set (§5.1). A rejection is final for those exact bytes (API §3.2):
+    the same set is never verified again, and only re-reported if the first
+    report did not reach Fleet. Fleet resolves it by issuing a new version.
+    """
+    active = cache.active_meta()
+    try:
+        desired = client.desired_rights(active.version if active else None)
+    except FleetError as exc:
+        _log("rights.sync", result="offline", error=str(exc))
+        return "offline"
+    if desired.rights_set is None:
+        return "unchanged"
+    digest = "sha256:" + hashlib.sha256(desired.rights_set).hexdigest()
+    known = cache.rejection(digest)
+    if known is not None:
+        if not known["reported"]:
+            report = ApplyReport(enrolled.device_id, None, None, "rejected", known["reason"])
+            if _deliver(client, report):
+                cache.remember_rejection(digest, known["reason"], reported=True)
+        return "rejected_known"
+    verdict = apply(
+        desired.rights_set,
+        anchors=enrolled.rights_anchors,
+        device=enrolled.device,
+        cache=cache,
+        registry=registry,
+        wall_now=wall_now,
+    )
+    if verdict.ok:
+        doc = verdict.rights_set or {}
+        result = "noop" if verdict.noop else "applied"
+        report = ApplyReport(enrolled.device_id, doc.get("rights_set_id"), doc.get("version"), result)
+    else:
+        # Fields of a rejected set are unverified: report only the reason.
+        result = "rejected"
+        report = ApplyReport(enrolled.device_id, None, None, result, verdict.reason)
+    _log("rights.sync", **report.to_json())
+    delivered = _deliver(client, report)
+    if result == "rejected":
+        cache.remember_rejection(digest, verdict.reason or "", reported=delivered)
+    return result
+
+
+def _deliver(client: FleetRightsClient, report: ApplyReport) -> bool:
+    try:
+        client.report_apply(report)
+        return True
+    except FleetError as exc:
+        _log("rights.sync", report="not_delivered", error=str(exc))
+        return False
+
+
+POLL_INTERVAL = timedelta(minutes=15)
+MAX_BACKOFF = timedelta(hours=6)
+
+
+def next_poll(outcome: str, consecutive_offline: int, rng: random.Random | None = None) -> timedelta:
+    """When to ask Fleet again (API §4). Offline backs off exponentially to
+    six hours; every delay gets ±20 % jitter so a fleet of devices that lost
+    Fleet together does not return together. A rejected set does not make the
+    agent ask more often."""
+    rng = rng or random.Random()
+    if outcome == "offline":
+        base = min(POLL_INTERVAL * (2 ** max(0, consecutive_offline - 1)), MAX_BACKOFF)
+    else:
+        base = POLL_INTERVAL
+    return base * rng.uniform(0.8, 1.2)
+
+
+def heartbeat_fields(cache: RightsCache, wall_now: datetime) -> RightsHeartbeat:
+    """Same judgement as the gate's (cache.resolve), so Fleet sees exactly why
+    a device has no rights: never enrolled, waiting, broken or expired."""
+    resolved = cache.resolve(wall_now)
+    rights = resolved.rights
+    return RightsHeartbeat(
+        resolved.state,
+        resolved.reason,
+        rights.version if rights else None,
+        rights.rights_set["expires_at"] if rights else None,
+        rights.clock_rollback if rights else False,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

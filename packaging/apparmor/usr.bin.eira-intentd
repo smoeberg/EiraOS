@@ -14,6 +14,8 @@
   /usr/lib/eira-os/ r,
   /usr/lib/eira-os/** r,
   /etc/eira/eira.conf r,
+  # Rights are weighed against enrollment at every decision (FLEET-RIGHTS-API §5).
+  /etc/eira/enrollment.json r,
 
   /run/eira/ rw,
   /run/eira/*.sock rwk,

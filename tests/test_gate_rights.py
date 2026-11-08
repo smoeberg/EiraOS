@@ -66,7 +66,7 @@ def test_no_rights_set_means_no_rights(tmp_path):
     result = attempt(w)
     assert (result.decision, result.code, result.layer) == (Decision.REJECT, GateCode.E_UNAUTHORIZED, 6)
     assert result.data["rights"] == "missing"
-    assert w.gate.rights_status() == {"state": "missing"}
+    assert w.gate.rights_status() == {"state": "missing", "reason": "no_rights_set"}
 
 
 def test_pass_is_audited_with_the_set_and_the_grant(tmp_path):
@@ -176,7 +176,7 @@ def test_tampered_cache_file_fails_closed(tmp_path):
     w = make_world(tmp_path)
     path = w.fleet.cache.directory / "active.json"
     path.write_text(path.read_text().replace('"version":1', '"version":2'))
-    assert w.gate.rights_status() == {"state": "missing"}
+    assert w.gate.rights_status() == {"state": "missing", "reason": "no_rights_set"}
 
 
 def test_unparseable_state_fails_closed(tmp_path):
@@ -215,3 +215,47 @@ def test_capabilities_show_rights_status_read_only(tmp_path):
     rights = server.methods["gate.capabilities"]({})["rights"]
     assert rights["state"] == "active" and rights["rights_version"] == 1
     assert not any("right" in name for name in server.methods if name != "gate.capabilities")
+
+
+# --- enrollment is weighed at every decision (review of #146) ------------------
+
+
+def test_default_set_does_not_survive_enrollment(tmp_path):
+    """A private machine that is enrolled loses its default set and
+    owner_admin at once, before the first managed set arrives."""
+    from tests.rights_helpers import TestFleet as Signer
+
+    w = make_world(tmp_path, kind="default", grant=False)
+    w.fleet.grant(CONV).publish()
+    assert attempt(w).decision is Decision.PASS
+    managed = Signer(tmp_path / "managed-rights", w.clock)  # writes a real enrollment
+    w.fleet.cache._enrollment_path = managed.enrollment_path
+    result = attempt(w, envelope(id="dlg-0002"))
+    assert (result.code, result.data["rights"], result.data["reason"]) == (
+        GateCode.E_UNAUTHORIZED, "missing", "awaiting_managed_set"
+    )
+
+
+def test_broken_enrollment_removes_rights_the_cache_still_holds(tmp_path):
+    w = make_world(tmp_path)
+    w.fleet.enrollment_path.write_text("{")
+    result = attempt(w)
+    assert (result.data["rights"], result.data["reason"]) == ("misconfigured", "enrollment_malformed")
+    assert w.gate.rights_status()["state"] == "misconfigured"
+
+
+def test_removed_enrollment_does_not_make_a_managed_device_private(tmp_path):
+    w = make_world(tmp_path)
+    w.fleet.enrollment_path.unlink()
+    result = attempt(w)
+    assert (result.data["rights"], result.data["reason"]) == (
+        "misconfigured", "managed_set_without_enrollment"
+    )
+
+
+def test_set_for_another_enrollment_is_not_used(tmp_path):
+    w = make_world(tmp_path)
+    data = json.loads(w.fleet.enrollment_path.read_text())
+    data["device_id"] = "another-device"  # re-enrolled as something else
+    w.fleet.enrollment_path.write_text(json.dumps(data))
+    assert attempt(w).data["reason"] == "set_not_for_this_enrollment"

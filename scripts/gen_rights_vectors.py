@@ -33,7 +33,10 @@ OUT = ROOT / "tests" / "vectors" / "rights-set"
 KEYS = {
     "test-tenant-kk-1": ("managed", bytes([0x11] * 32)),
     "test-release-1": ("default", bytes([0x22] * 32)),
+    "test-tenant-kk-old": ("managed", bytes([0x44] * 32)),
 }
+# Anchors pinned at enroll expire (FLEET-RIGHTS-API §5).
+NOT_AFTER = {"test-tenant-kk-1": "2036-01-01T00:00:00Z", "test-tenant-kk-old": "2026-11-01T00:00:00Z"}
 REGISTRY = [
     "edp:utterance",
     "edp:commitment_proposed",
@@ -201,6 +204,12 @@ def apply_vectors() -> list[dict]:
     case("managed-ttl-400-days", "Managed-sæt kan ikke låne default-loftet.",
          text(sign(managed(expires_at="2027-12-12T11:00:00Z"), "test-tenant-kk-1")),
          {"ok": False, "reason": "ttl_over_cap"})
+    case("anchor-expired", "Gyldig signatur, men ankeret udløb før verifikationen (not_after).",
+         text(sign(managed(), "test-tenant-kk-old")), {"ok": False, "reason": "anchor_expired"})
+    case("anchor-expired-backdated", "Lækket, udløbet nøgle med tilbagedateret issued_at: afvises stadig.",
+         text(sign(managed(issued_at="2026-10-20T00:00:00Z", expires_at="2026-11-15T00:00:00Z"),
+                   "test-tenant-kk-old")),
+         {"ok": False, "reason": "anchor_expired"})
     return v
 
 
@@ -240,7 +249,10 @@ def main() -> None:
         "note": "TEST KEYS ONLY. Never trust anchors on a real device.",
         "domain": DOMAIN.decode(),
         "max_ttl_seconds": {"managed": 30 * 24 * 3600, "default": 400 * 24 * 3600},
-        "anchors": {kid: {"kind": kind, "public_key": public(seed)} for kid, (kind, seed) in KEYS.items()},
+        "anchors": {
+            kid: {"kind": kind, "public_key": public(seed), **({"not_after": NOT_AFTER[kid]} if kid in NOT_AFTER else {})}
+            for kid, (kind, seed) in KEYS.items()
+        },
         "registry": REGISTRY,
     }
     (OUT / "_context.json").write_text(json.dumps(context, indent=2, ensure_ascii=False) + "\n")

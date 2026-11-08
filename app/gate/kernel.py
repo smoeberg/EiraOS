@@ -325,11 +325,14 @@ class Gate:
         acting = [p for p in envelope["participants"] if p["identity"] == identity and p["role"] == "member"]
         if not acting:
             raise LayerFailure(GateCode.E_UNAUTHORIZED, "the user is not an acting participant")
-        rights = self._rights.current(self._clock())
+        resolved = self._rights.resolve(self._clock())
+        rights = resolved.rights
         _RIGHTS.set(rights)
         if rights is None:
             raise LayerFailure(
-                GateCode.E_UNAUTHORIZED, "no rights set on this device", data={"rights": "missing"}
+                GateCode.E_UNAUTHORIZED,
+                f"no rights on this device: {resolved.reason}",
+                data={"rights": resolved.state, "reason": resolved.reason},
             )
         decision = contract.authorize(
             rights.rights_set,
@@ -355,13 +358,14 @@ class Gate:
 
     def rights_status(self) -> dict[str, Any]:
         """For status UI: why actions are or are not possible (§5.1)."""
-        rights = self._rights.current(self._clock())
-        if rights is None:
-            return {"state": "missing"}
+        resolved = self._rights.resolve(self._clock())
+        if resolved.rights is None:
+            return {"state": resolved.state, "reason": resolved.reason}
         return {
-            "state": "expired" if rights.expired else "active",
-            "expires_at": iso(rights.expires_at),
-            **rights.audit(),
+            "state": resolved.state,
+            "reason": resolved.reason,
+            "expires_at": iso(resolved.rights.expires_at),
+            **resolved.rights.audit(),
         }
 
     def _layer_7_state(

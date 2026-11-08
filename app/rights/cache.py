@@ -33,6 +33,8 @@ from app.rights import contract
 ROLLBACK_TOLERANCE = timedelta(minutes=5)
 SET_FILE = "active.json"
 STATE_FILE = "state.json"
+REJECTED_FILE = "rejected.json"
+REJECTED_KEEP = 32
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,17 @@ class ActiveRights:
         }
 
 
+@dataclass(frozen=True)
+class RightsState:
+    """What the gate may rely on, after the cached set and enrollment are
+    weighed together. `rights` is None whenever the state is not active or
+    expired; then there are no rights, whatever the cache holds."""
+
+    state: str  # "active" | "expired" | "missing" | "misconfigured"
+    reason: str | None
+    rights: ActiveRights | None
+
+
 def default_directory() -> Path:
     explicit = os.environ.get("EIRA_RIGHTS_DIR")
     if explicit:
@@ -90,9 +103,11 @@ class RightsCache:
         directory: str | os.PathLike[str] | None = None,
         *,
         boot_clock=boot_now,
+        enrollment_path: str | os.PathLike[str] | None = None,
     ) -> None:
         self.directory = Path(directory) if directory is not None else default_directory()
         self._boot_clock = boot_clock
+        self._enrollment_path = Path(enrollment_path) if enrollment_path is not None else None
 
     # --- agent side ----------------------------------------------------------
 
@@ -137,11 +152,56 @@ class RightsCache:
             return None
         return contract.Active(state["version"], state["content_hash"], state["tenant_id"])
 
+    def rejection(self, digest: str) -> dict[str, Any] | None:
+        """A set (by hash of its exact bytes) this device already rejected."""
+        raw = self._read(REJECTED_FILE)
+        return (json.loads(raw) if raw else {}).get(digest)
+
+    def remember_rejection(self, digest: str, reason: str, *, reported: bool) -> None:
+        with self._locked():
+            raw = self._read(REJECTED_FILE)
+            known = json.loads(raw) if raw else {}
+            known.pop(digest, None)
+            known[digest] = {"reason": reason, "reported": reported}
+            # Bounded: a hostile Fleet cannot grow this file without limit.
+            trimmed = dict(list(known.items())[-REJECTED_KEEP:])
+            self._write(REJECTED_FILE, json.dumps(trimmed, sort_keys=False).encode())
+
     def high_water(self) -> datetime | None:
         state = self._read_state()
         return _parse(state["high_water"]) if state and "high_water" in state else None
 
     # --- gate side -----------------------------------------------------------
+
+    def resolve(self, wall_now: datetime) -> RightsState:
+        """The cached set is only trusted if it fits the device's enrollment.
+
+        - enrollment malformed → misconfigured: never a fallback to private.
+        - enrolled, cached set is the bundle default → missing: a private
+          set (and owner_admin) does not survive enrollment.
+        - enrolled, cached managed set for another tenant/device → misconfigured.
+        - not enrolled, cached managed set → misconfigured (enrollment removed).
+        """
+        from app.rights.fleet_api import read_enrollment
+
+        try:
+            enrolled = read_enrollment(self._enrollment_path)
+        except ValueError:
+            return RightsState("misconfigured", "enrollment_malformed", None)
+        rights = self.current(wall_now)
+        if rights is None:
+            return RightsState("missing", "no_rights_set", None)
+        if enrolled is not None:
+            if rights.kind == "default":
+                return RightsState("missing", "awaiting_managed_set", None)
+            doc = rights.rights_set
+            if (doc["tenant_id"], doc["device_id"]) != (enrolled.tenant_id, enrolled.device_id):
+                return RightsState("misconfigured", "set_not_for_this_enrollment", None)
+        elif rights.kind == "managed":
+            return RightsState("misconfigured", "managed_set_without_enrollment", None)
+        if rights.expired:
+            return RightsState("expired", "rights_expired", rights)
+        return RightsState("active", None, rights)
 
     def current(self, wall_now: datetime) -> ActiveRights | None:
         """The active set and the effective time, advanced and persisted.
