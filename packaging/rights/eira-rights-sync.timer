@@ -1,0 +1,12 @@
+[Unit]
+Description=EIRA rights sync with Fleet every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+# ±jitter so devices that come up together do not call Fleet together.
+RandomizedDelaySec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -281,6 +281,11 @@ def sync(client: FleetRightsClient | None = None, cache: RightsCache | None = No
         _log("rights.sync", result="not_enrolled")
         return 2
     cache = cache or RightsCache()
+    now = datetime.now(timezone.utc)
+    due = cache.sync_due(now)
+    if not due:
+        _log("rights.sync", result="not_due")  # backing off after Fleet was unreachable
+        return 0
     if client is None:
         from app.rights.transport import HttpsFleetRightsClient
 
@@ -289,8 +294,8 @@ def sync(client: FleetRightsClient | None = None, cache: RightsCache | None = No
         except (OSError, ValueError) as exc:
             _log("rights.sync", result="misconfigured", reason="fleet_tls_files", error=str(exc))
             return 2
-    now = datetime.now(timezone.utc)
     outcome = sync_once(client, enrolled, cache, registry=REGISTRY, wall_now=now)
+    cache.record_sync(outcome, now, next_poll)
     heartbeat = getattr(client, "heartbeat", None)
     if heartbeat is not None and outcome != "offline":
         try:
