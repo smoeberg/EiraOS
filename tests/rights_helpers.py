@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -39,7 +40,10 @@ class TestFleet:
 
     def __init__(self, directory: Path, clock, *, boot_clock=None, kind: str = "managed"):
         kwargs = {"boot_clock": boot_clock} if boot_clock is not None else {}
-        self.cache = RightsCache(directory, **kwargs)
+        # A managed test device is enrolled for real: the gate weighs the set
+        # against enrollment (cache.resolve). A default device has no file.
+        self.enrollment_path = Path(directory).parent / f"{Path(directory).name}-enrollment.json"
+        self.cache = RightsCache(directory, enrollment_path=self.enrollment_path, **kwargs)
         self.clock = clock
         self.kind = kind
         self.version = 0
@@ -50,6 +54,20 @@ class TestFleet:
         self._key = key
         public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
         self.anchors = {KEY_ID: contract.Anchor(kind=kind, public_key=public)}
+        if kind == "managed":
+            self.enrollment_path.write_text(json.dumps(self.enrollment()))
+
+    def enrollment(self) -> dict[str, Any]:
+        public = self.anchors[KEY_ID].public_key
+        return {
+            "eira_enrollment": "1",
+            "tenant_id": DEVICE.tenant_id,
+            "device_id": DEVICE.device_id,
+            "fleet_url": "https://fleet.test",
+            "rights_anchors": {
+                KEY_ID: {"kind": "managed", "public_key": _b64url(public), "not_after": "2036-01-01T00:00:00Z"}
+            },
+        }
 
     def grant(self, scope: str, actions: Iterable[str] | None = None, *, principal=None, group=None,
               expires_at: datetime | None = None, required_assurance: str | None = None) -> "TestFleet":

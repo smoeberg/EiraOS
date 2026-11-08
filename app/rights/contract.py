@@ -55,12 +55,16 @@ class Reason:
     VERSION_CONFLICT = "version_conflict"  # same version, different content
     UNKNOWN_ACTION = "unknown_action"
     GRANT_OUTLIVES_SET = "grant_outlives_set"
+    ANCHOR_EXPIRED = "anchor_expired"
 
 
 @dataclass(frozen=True)
 class Anchor:
     kind: str                  # "managed" or "default"
     public_key: bytes          # raw 32-byte Ed25519 key
+    # Managed anchors expire (pinned at enroll). Judged on the verifier's
+    # effective time, never on the set's issued_at: a leaked key can backdate.
+    not_after: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +210,8 @@ def verify(
             raise _Reject(Reason.UNKNOWN_KEY_ID)
         if anchor.kind != kind:
             raise _Reject(Reason.WRONG_ANCHOR)
+        if anchor.not_after is not None and now >= anchor.not_after:
+            raise _Reject(Reason.ANCHOR_EXPIRED)
         try:
             Ed25519PublicKey.from_public_bytes(anchor.public_key).verify(
                 _b64url(doc["signature"]["value"]), signing_input(doc)

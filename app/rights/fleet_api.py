@@ -18,7 +18,9 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import os
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
@@ -26,6 +28,11 @@ from app.rights import contract
 
 API_VERSION = "1"
 MAX_SET_BYTES = contract.MAX_BYTES
+# Unpadded base64url length of MAX_SET_BYTES; the OpenAPI maxLength is
+# checked against this one constant.
+MAX_ENCODED_LENGTH = (4 * MAX_SET_BYTES + 2) // 3
+# Written by enroll (root, 0644). The one place this path is configured.
+ENROLLMENT_PATH = Path(os.environ.get("EIRA_ENROLLMENT_FILE", "/etc/eira/enrollment.json"))
 
 
 class FleetError(Exception):
@@ -45,9 +52,11 @@ class Enrollment:
     """/etc/eira/enrollment.json, written once by enrollment (root, 0644).
 
     `rights_anchors` are the tenant's rights-signing public keys, received
-    over mTLS at enroll. They are pinned here; a set signed by any other key
-    is rejected (`unknown_key_id`). Rotation = re-enroll or a new anchor
-    delivered the same way, never inside a rights set.
+    over mTLS at enroll, each with a `not_after`. They are pinned here; a set
+    signed by any other key is rejected (`unknown_key_id`), one checked after
+    its anchor's `not_after` (effective time) is rejected (`anchor_expired`).
+    Anchors never arrive inside a rights set: a compromised set must not be
+    able to name the key it should be trusted under.
     """
 
     tenant_id: str
@@ -74,22 +83,28 @@ def parse_enrollment(data: Mapping[str, Any]) -> Enrollment:
             raw = _b64url(anchor["public_key"])
             if len(raw) != 32:
                 raise ValueError(f"anchor {key_id}: not an Ed25519 key")
-            anchors[key_id] = contract.Anchor("managed", raw)
+            not_after = datetime.strptime(anchor["not_after"], "%Y-%m-%dT%H:%M:%SZ")
+            anchors[key_id] = contract.Anchor("managed", raw, not_after.replace(tzinfo=timezone.utc))
         if not anchors:
             raise ValueError("no rights anchors")
         return Enrollment(str(data["tenant_id"]), str(data["device_id"]), url, anchors)
-    except (KeyError, TypeError, AttributeError, binascii.Error) as exc:
+    except (KeyError, TypeError, AttributeError, binascii.Error, ValueError) as exc:
         raise ValueError(f"malformed enrollment: {exc}") from None
 
 
-def read_enrollment(path: Path) -> Enrollment | None:
-    """None = not enrolled. A file that exists but is malformed is an error:
-    the device must not silently fall back to being unmanaged."""
+def read_enrollment(path: Path | None = None) -> Enrollment | None:
+    """None = not enrolled. A file that exists but is malformed is an error
+    (ValueError): the device must never silently fall back to unmanaged."""
+    path = path if path is not None else ENROLLMENT_PATH
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    return parse_enrollment(json.loads(text))
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ValueError(f"malformed enrollment: {exc}") from None
+    return parse_enrollment(data)
 
 
 # --- messages -----------------------------------------------------------------
@@ -124,9 +139,10 @@ class ApplyReport:
 @dataclass(frozen=True)
 class RightsHeartbeat:
     """Fields added to POST /v1/heartbeat so Fleet can see devices whose
-    rights are missing, expired or about to expire."""
+    rights are missing, expired, misconfigured or about to expire."""
 
-    rights_state: str  # "active" | "expired" | "missing"
+    rights_state: str  # "active" | "expired" | "missing" | "misconfigured"
+    rights_reason: str | None  # why, when not "active" (cache.RightsState)
     rights_version: int | None
     rights_expires_at: str | None
     clock_rollback: bool
@@ -143,14 +159,16 @@ def parse_desired_state(body: Any) -> DesiredRights:
     if "rights_set" not in body or body["rights_set"] is None:
         return DesiredRights(None)
     encoded = body["rights_set"]
-    if not isinstance(encoded, str) or len(encoded) > (MAX_SET_BYTES * 4) // 3 + 4:
-        raise ProtocolViolation("rights_set must be a base64url string")
+    if not isinstance(encoded, str) or len(encoded) > MAX_ENCODED_LENGTH:
+        raise ProtocolViolation("rights_set must be a base64url string of at most 1 MiB")
     try:
         raw = _b64url(encoded)
     except (binascii.Error, ValueError):
         raise ProtocolViolation("rights_set is not base64url") from None
-    if len(raw) > MAX_SET_BYTES:
-        raise ProtocolViolation("rights_set too large")
+    # Canonical encoding only: one wire string per set, so nothing that logs
+    # or deduplicates on the string can see one set as two.
+    if encode_rights_set(raw) != encoded:
+        raise ProtocolViolation("rights_set is not canonical base64url")
     return DesiredRights(raw)
 
 

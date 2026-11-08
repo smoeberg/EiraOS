@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from app.gate.policy import REGISTRY
-from app.rights import agent, contract
+from app.rights import agent, contract, fleet_api
 from app.rights.cache import RightsCache
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +29,7 @@ def bundle(tmp_path, monkeypatch):
         [sys.executable, str(ROOT / "scripts" / "build_default_rights.py"), str(out)],
         check=True, capture_output=True,
     )
-    monkeypatch.setattr(agent, "ENROLLMENT", tmp_path / "no-enrollment.json")
+    monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", tmp_path / "no-enrollment.json")
     return out
 
 
@@ -94,9 +94,9 @@ def test_enrolled_device_does_not_take_the_default_set(bundle, tmp_path, monkeyp
     enrollment.write_text(json.dumps({
         "eira_enrollment": "1", "tenant_id": "kk", "device_id": "dev-1",
         "fleet_url": "https://fleet.kk.example",
-        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43}},
+        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}},
     }))
-    monkeypatch.setattr(agent, "ENROLLMENT", enrollment)
+    monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", enrollment)
     cache = RightsCache(tmp_path / "rights")
     assert agent.apply_default(bundle, cache) == 0
     assert json.loads(capsys.readouterr().out)["result"] == "not_applicable"
@@ -106,7 +106,7 @@ def test_enrolled_device_does_not_take_the_default_set(bundle, tmp_path, monkeyp
 def test_malformed_enrollment_never_falls_back_to_private(bundle, tmp_path, monkeypatch, capsys):
     enrollment = tmp_path / "enrollment.json"
     enrollment.write_text(json.dumps({"tenant_id": "kk", "device_id": "dev-1"}))  # no anchors
-    monkeypatch.setattr(agent, "ENROLLMENT", enrollment)
+    monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", enrollment)
     cache = RightsCache(tmp_path / "rights")
     assert agent.apply_default(bundle, cache) == 1
     assert json.loads(capsys.readouterr().out)["reason"] == "enrollment_malformed"

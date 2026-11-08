@@ -19,7 +19,7 @@ from app.gate.policy import REGISTRY
 from app.rights import agent, contract, fleet_api
 from app.rights.cache import RightsCache
 from app.rights.fleet_api import ApplyReport, FleetError
-from tests.rights_helpers import DEVICE, TestFleet
+from tests.rights_helpers import TestFleet
 from tests.test_gate_kernel import Clock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,11 +67,9 @@ def world(tmp_path):
     signer = TestFleet(tmp_path / "unused", clock)
     signer.version = 7
     signer.grant("obj:sag:*", principal="did:eira:anne")
-    enrollment = fleet_api.Enrollment(
-        DEVICE.tenant_id, DEVICE.device_id, "https://fleet.test", signer.anchors
-    )
+    enrollment = fleet_api.read_enrollment(signer.enrollment_path)
     fleet = FakeFleet(signer)
-    cache = RightsCache(tmp_path / "rights")
+    cache = RightsCache(tmp_path / "rights", enrollment_path=signer.enrollment_path)
 
     def sync():
         return agent.sync_once(fleet, enrollment, cache, registry=REGISTRY, wall_now=clock())
@@ -201,14 +199,15 @@ def test_enrollment_schema_and_parser_agree(tmp_path):
     good = {
         "eira_enrollment": "1", "tenant_id": "kk", "device_id": "dev-1",
         "fleet_url": "https://fleet.kk.example",
-        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43}},
+        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}},
     }
     jsonschema.validate(good, schema("Enrollment"))
     assert fleet_api.parse_enrollment(good).device == contract.Device(True, "kk", "dev-1")
     for bad in (
         {**good, "fleet_url": "http://fleet.kk.example"},
         {**good, "rights_anchors": {}},
-        {**good, "rights_anchors": {"k": {"kind": "default", "public_key": "A" * 43}}},
+        {**good, "rights_anchors": {"k": {"kind": "default", "public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}}},
+        {**good, "rights_anchors": {"k": {"kind": "managed", "public_key": "A" * 43}}},  # no not_after
         {k: v for k, v in good.items() if k != "rights_anchors"},
     ):
         with pytest.raises(ValueError):
@@ -231,3 +230,80 @@ def test_agent_reaches_fleet_with_an_expired_set(world):
     signer.version = 8
     assert sync() == "applied"
     assert cache.active_meta().version == 8
+
+
+# --- review of #146 -------------------------------------------------------------
+
+
+def test_non_canonical_base64url_is_refused():
+    raw = b"ab"
+    canonical = fleet_api.encode_rights_set(raw)  # "YWI"
+    alias = canonical[:-1] + "J"  # same bytes, other unused bits
+    assert fleet_api._b64url(alias) == raw
+    with pytest.raises(fleet_api.ProtocolViolation, match="canonical"):
+        fleet_api.parse_desired_state({"rights_set": alias})
+
+
+def test_published_max_length_is_exactly_one_mebibyte_encoded():
+    published = SCHEMAS["DesiredState"]["properties"]["rights_set"]["maxLength"]
+    assert published == fleet_api.MAX_ENCODED_LENGTH == len(
+        fleet_api.encode_rights_set(b"\0" * contract.MAX_BYTES)
+    )
+    with pytest.raises(fleet_api.ProtocolViolation):
+        fleet_api.parse_desired_state({"rights_set": "A" * (published + 1)})
+
+
+def test_published_heartbeat_reasons_are_exactly_the_caches():
+    import inspect
+
+    from app.rights import cache as cache_module
+
+    source = inspect.getsource(cache_module.RightsCache.resolve)
+    published = set(SCHEMAS["RightsHeartbeat"]["properties"]["rights_reason"]["enum"]) - {None}
+    assert published == set(__import__("re").findall(r'RightsState\("\w+", "(\w+)"', source))
+
+
+def test_a_rejected_set_is_final_and_reported_once(world):
+    fleet, cache, sync, signer, _ = world
+    sync()
+    signer.version = 3
+    stale = {"rights_set": fleet_api.encode_rights_set(contract.canonical(signer.document()))}
+    fleet.next_answer = stale
+    assert sync() == "rejected"
+    assert sync() == "rejected_known"
+    assert sync() == "rejected_known"
+    assert [r.result for r in fleet.reports] == ["applied", "rejected"]
+
+
+def test_lost_rejection_report_is_sent_again_once(world):
+    fleet, cache, sync, signer, _ = world
+    sync()
+    signer.version = 3
+    fleet.next_answer = {"rights_set": fleet_api.encode_rights_set(contract.canonical(signer.document()))}
+    fleet.reports_fail = True
+    assert sync() == "rejected"
+    fleet.reports_fail = False
+    assert sync() == "rejected_known"
+    assert sync() == "rejected_known"
+    assert [r.reason for r in fleet.reports if r.result == "rejected"] == ["version_rollback"]
+
+
+def test_offline_backoff_is_bounded_and_jittered():
+    import random
+
+    rng = random.Random(1)
+    delays = [agent.next_poll("offline", n, rng) for n in range(1, 12)]
+    assert delays[0] <= timedelta(minutes=18) and max(delays) <= timedelta(hours=7.2)
+    assert agent.next_poll("rejected", 0, rng) <= timedelta(minutes=18)
+    assert len({agent.next_poll("unchanged", 0, random.Random(s)) for s in range(5)}) == 5
+
+
+def test_expired_anchor_rejects_even_a_backdated_set(world, tmp_path):
+    fleet, cache, sync, signer, clock = world
+    data = json.loads(signer.enrollment_path.read_text())
+    for anchor in data["rights_anchors"].values():
+        anchor["not_after"] = "2026-11-01T00:00:00Z"  # before the test clock
+    signer.enrollment_path.write_text(json.dumps(data))
+    enrolled = fleet_api.read_enrollment(signer.enrollment_path)
+    assert agent.sync_once(fleet, enrolled, cache, registry=REGISTRY, wall_now=clock()) == "rejected"
+    assert fleet.reports[-1].reason == "anchor_expired"

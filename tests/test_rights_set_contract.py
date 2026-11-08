@@ -29,7 +29,8 @@ def _anchors() -> dict[str, contract.Anchor]:
     out = {}
     for key_id, anchor in CONTEXT["anchors"].items():
         raw = base64.urlsafe_b64decode(anchor["public_key"] + "=" * (-len(anchor["public_key"]) % 4))
-        out[key_id] = contract.Anchor(kind=anchor["kind"], public_key=raw)
+        not_after = _ts(anchor["not_after"]) if "not_after" in anchor else None
+        out[key_id] = contract.Anchor(kind=anchor["kind"], public_key=raw, not_after=not_after)
     return out
 
 
@@ -53,7 +54,7 @@ def test_every_required_vector_exists():
         "missing-template", "ttl-over-cap", "unknown-key-id", "unknown-action", "wildcard-action",
         "unknown-field", "float-version", "duplicate-key", "same-version-same-content",
         "same-version-other-content", "default-on-enrolled", "tampered-after-signing",
-        "default-ttl-over-cap", "managed-ttl-400-days",
+        "default-ttl-over-cap", "managed-ttl-400-days", "anchor-expired", "anchor-expired-backdated",
     }
     assert required <= names, required - names
 

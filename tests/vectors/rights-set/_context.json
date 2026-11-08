@@ -8,11 +8,17 @@
   "anchors": {
     "test-tenant-kk-1": {
       "kind": "managed",
-      "public_key": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc"
+      "public_key": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc",
+      "not_after": "2036-01-01T00:00:00Z"
     },
     "test-release-1": {
       "kind": "default",
       "public_key": "oJql9HpnWYAv-VX43C0qFKXJnSO-l_hkEn_5ODRVpPA"
+    },
+    "test-tenant-kk-old": {
+      "kind": "managed",
+      "public_key": "11l5O7wTooGagnx2rbb7qKSa7gB_SfLQmS2ZuCWtLEg",
+      "not_after": "2026-11-01T00:00:00Z"
     }
   },
   "registry": [
