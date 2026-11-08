@@ -7,8 +7,9 @@ import pytest
 from app.gate.executors import default_registry
 from app.gate.ipc import register_gate_handlers
 from app.gate.kernel import Gate
-from app.gate.store import GateStore
+from app.gate.store import GateStore, utc_now
 from app.ipc.jsonrpc import JsonRpcError
+from tests.rights_helpers import TestFleet
 from tests.test_gate_kernel import ANNE, CONV, envelope
 
 
@@ -26,10 +27,11 @@ def rpc(tmp_path):
     store = GateStore(db)
     store.bind_identity("anne@kommune.dk", ANNE)
     store.add_member(CONV, ANNE)
-    store.grant_right(ANNE, CONV, "*")
+    fleet = TestFleet(tmp_path / "rights", utc_now)
+    fleet.grant(CONV, principal=ANNE).publish()
     sessions = {"s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}}
     server = FakeServer()
-    register_gate_handlers(server, Gate(store, default_registry(db), sessions=sessions.get))
+    register_gate_handlers(server, Gate(store, default_registry(db), sessions=sessions.get, rights=fleet.cache))
     return server.methods
 
 

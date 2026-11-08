@@ -111,6 +111,9 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             "families": ["edp", "eira_system"],
             "system_operations": sorted(OPERATIONS),
             "power": {action: probe.availability(action) if probe else "error" for action in POWER_METHODS},
+            # Why actions are or are not possible (RIGHTS-SET §5.1): state,
+            # expiry, set id/version and owner_admin. Read-only.
+            "rights": active.rights_status(),
         }
 
     server.register("gate.capabilities", capabilities)

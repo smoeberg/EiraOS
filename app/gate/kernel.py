@@ -19,6 +19,7 @@ En PASS logges først, når executoren har returneret et verificeret resultat.
 
 from __future__ import annotations
 
+import contextvars
 import json
 from datetime import datetime, timedelta
 from typing import Any, Callable
@@ -37,6 +38,8 @@ from app.gate.policy import (
 )
 from app.gate.render import LANGUAGES, RenderError, render, rendering_hash
 from app.gate.store import GateStore, iso, utc_now
+from app.rights import contract
+from app.rights.cache import ActiveRights, RightsCache
 
 FINISHED_STATES = {"executed", "partial", "failed", "unknown"}
 DEFAULT_CONSENT_TTL = timedelta(minutes=10)
@@ -52,6 +55,7 @@ class Gate:
         clock: Callable[[], datetime] = utc_now,
         consent_ttl: timedelta = DEFAULT_CONSENT_TTL,
         boot_clock: Callable[[], BootInstant] = boot_now,
+        rights: RightsCache | None = None,
     ) -> None:
         self.store = store or GateStore()
         self._registry = registry if registry is not None else default_registry(self.store.db_path)
@@ -63,6 +67,9 @@ class Gate:
         self._clock = clock
         self._consent_ttl = consent_ttl
         self._boot_clock = boot_clock
+        # The only source of rights (ADR-0003): the Fleet-signed set the
+        # governance agent installed. No set → no rights.
+        self._rights = rights if rights is not None else RightsCache()
         self.recover()
 
     # --- recovery --------------------------------------------------------------
@@ -109,6 +116,7 @@ class Gate:
     def propose(
         self, raw: str | bytes | None, session_id: str | None, origin: Origin, lang: str = "da"
     ) -> GateResult:
+        _reset_rights()
         actor = self._actor(session_id)
         record: dict[str, Any] | None = None
         try:
@@ -161,6 +169,7 @@ class Gate:
     ) -> GateResult:
         """The user's explicit consent to exactly this action, these parameters
         and this rendering (the text the user was shown)."""
+        _reset_rights()
         actor = self._actor(session_id)
         record = self.store.find(action_id)
         try:
@@ -198,6 +207,7 @@ class Gate:
     def confirm(
         self, action_id: str, content_hash: str, rendering_hash_: str, session_id: str | None
     ) -> GateResult:
+        _reset_rights()
         actor = self._actor(session_id)
         record = self.store.find(action_id)
         if record is None:
@@ -308,20 +318,51 @@ class Gate:
     def _layer_6_authorization(
         self, envelope: dict[str, Any], policy: ActionPolicy, actor: dict[str, Any] | None
     ) -> None:
+        """EIRA-RIGHTS-SET-1.0 §6, evaluated afresh at every decision."""
         if actor is None:
             raise LayerFailure(GateCode.E_UNAUTHORIZED, "no authenticated session")
         identity = actor["identity"]
         acting = [p for p in envelope["participants"] if p["identity"] == identity and p["role"] == "member"]
         if not acting:
             raise LayerFailure(GateCode.E_UNAUTHORIZED, "the user is not an acting participant")
-        if not self.store.has_right(identity, envelope["conversation_id"], policy.action_type, self._clock()):
-            raise LayerFailure(GateCode.E_UNAUTHORIZED, f"no right to {policy.action_type} here")
-        if assurance_rank(actor["assurance_level"]) < assurance_rank(policy.required_assurance):
+        rights = self._rights.current(self._clock())
+        _RIGHTS.set(rights)
+        if rights is None:
+            raise LayerFailure(
+                GateCode.E_UNAUTHORIZED, "no rights set on this device", data={"rights": "missing"}
+            )
+        decision = contract.authorize(
+            rights.rights_set,
+            principal=identity,
+            groups=actor.get("groups") or (),
+            scope=envelope["conversation_id"],
+            action=action_key(policy.action_type),
+            now=rights.effective_now,
+        )
+        _DECISION.set(decision)
+        if not decision.allowed:
+            data = {"rights": "expired", "expires_at": iso(rights.expires_at)} if decision.reason == "expired" else {}
+            raise LayerFailure(
+                GateCode.E_UNAUTHORIZED, f"{decision.reason}: {policy.action_type} here", data=data
+            )
+        required = contract.stricter_assurance(policy.required_assurance, decision.required_assurance)
+        if assurance_rank(actor["assurance_level"]) < assurance_rank(required):
             raise LayerFailure(
                 GateCode.E_STEP_UP_REQUIRED,
-                f"requires {policy.required_assurance}",
-                data={"required_assurance": policy.required_assurance},
+                f"requires {required}",
+                data={"required_assurance": required},
             )
+
+    def rights_status(self) -> dict[str, Any]:
+        """For status UI: why actions are or are not possible (§5.1)."""
+        rights = self._rights.current(self._clock())
+        if rights is None:
+            return {"state": "missing"}
+        return {
+            "state": "expired" if rights.expired else "active",
+            "expires_at": iso(rights.expires_at),
+            **rights.audit(),
+        }
 
     def _layer_7_state(
         self, record: dict[str, Any], envelope: dict[str, Any], content_hash: str, rendering_hash_: str
@@ -423,6 +464,9 @@ class Gate:
             "session_id": session_id,
             "identity": identity,
             "assurance_level": session.get("assurance_level"),
+            # Group membership comes from identity (Entra/identityd), never
+            # from the request; rights for groups come from the set (ADR-0003).
+            "groups": tuple(session.get("groups") or ()),
         }
 
     def _store_pending(
@@ -559,6 +603,7 @@ class Gate:
                 "input_hash": edp.input_hash(raw) if raw is not None else None,
                 "rendering_hash": self._rendering_hash_of(result.action_id),
                 "policy_version": POLICY_VERSION,
+                **_rights_audit(),
             }
         )
 
@@ -597,3 +642,35 @@ def _boot_instant(consent: dict[str, Any]) -> BootInstant | None:
     if consent.get("boot_id") is None or consent.get("boottime_ns") is None:
         return None
     return BootInstant(consent["boot_id"], int(consent["boottime_ns"]))
+
+
+# Set by layer 6 for the audit entry of the same call. Context variables are
+# per thread and per task, so concurrent requests never see each other's.
+_RIGHTS: contextvars.ContextVar[ActiveRights | None] = contextvars.ContextVar("gate_rights", default=None)
+_DECISION: contextvars.ContextVar[contract.Decision | None] = contextvars.ContextVar(
+    "gate_rights_decision", default=None
+)
+
+
+def _reset_rights() -> None:
+    _RIGHTS.set(None)
+    _DECISION.set(None)
+
+
+def action_key(action_type: str) -> str:
+    """Gate action type → rights-set action key (RIGHTS-SET §2.2)."""
+    return action_type if action_type.startswith("system:") else f"edp:{action_type}"
+
+
+def _rights_audit() -> dict[str, Any]:
+    """ADR-0003: every decision records which signed set it rested on, and
+    whether the owner has root (then the gate protects against mistakes and
+    programs running as the user, not against the owner)."""
+    rights = _RIGHTS.get()
+    if rights is None:
+        return {"rights_set_id": None}
+    entry = rights.audit()
+    decision = _DECISION.get()
+    if decision is not None and decision.allowed:
+        entry["rights_grant"] = decision.grant_index
+    return entry

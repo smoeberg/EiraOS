@@ -19,6 +19,9 @@
   /var/log/eira/** rw,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
+  # Rights cache: the gate advances the effective time (§4.1) on each read.
+  /data/rights/ rw,
+  /data/rights/** rwk,
 
   # Gate 1.1 power executor: fixed busctl call to systemd-logind only.
   /usr/bin/busctl ix,

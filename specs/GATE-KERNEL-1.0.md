@@ -107,9 +107,12 @@ Constrained decoding (JSON Schema i Ollama, GBNF i llama.cpp) kan reducere synta
 
 | Kontrol | Krav |
 |---|---|
-| Rettighed findes | Har `participants[].identity` rettighed til `action.type` på `conversation_id`? |
-| Rettighed gælder nu | Er rettigheden ikke tilbagekaldt eller udløbet? |
-| Step-up niveau | Kræver handlingen et højere assurance-niveau end sessionens? |
+| Rettighedssæt findes | Er der et aktivt, Fleet-signeret rettighedssæt i cachen (EIRA-RIGHTS-SET-1.0)? Ellers `E_UNAUTHORIZED` med `rights: missing`. |
+| Rettighed findes | Giver sættet brugeren (principal eller gruppe fra sessionen) handlingsnøglen (`edp:<type>` / `system:<operation>`) på scope `conversation_id`, og rammer ingen deny? (`contract.authorize`) |
+| Rettighed gælder nu | Er sæt og grant ikke udløbet målt i effektiv tid (RIGHTS-SET §4.1)? Ellers `rights: expired`. |
+| Step-up niveau | Kræver politikken eller granten (den strengeste af dem) et højere assurance-niveau end sessionens? |
+
+Rettighedssættet er den eneste kilde til rettigheder. Gaten har ingen lokal tildelingsvej og ingen IPC-metode, der skriver rettigheder. Hver audit-post indeholder sættets id, version og art, den autoriserende grant ved PASS, `owner_admin` (privat maskine, ADR-0003) og `clock_rollback`.
 
 **Ved fejl:** `REJECT` med `E_UNAUTHORIZED` eller `E_STEP_UP_REQUIRED`. `E_STEP_UP_REQUIRED` kan starte en separat autentifikationsproces, men handlingen er ikke autoriseret, før Gate kontrollerer den igen efter step-up.
 
@@ -299,7 +302,7 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
    - **Binding:** Ved `propose` gemmes tekst, hash, version og sprog sammen med handlingen. `gate.consent` og `gate.confirm` kræver `rendering_hash`. Lag 5 godtager kun et samtykke til netop den tekst, og samtykker fra før rendereren (NULL) tæller ikke. Lag 7 tjekker, at den gemte tekst stadig hasher til den gemte hash. Teksten gen-renderes aldrig, så en nyere renderer ændrer ikke det, der er samtykket til.
    - Sproget indgår i hashen. Samme handling på et andet sprog er et nyt samtykke (`E_STATE` ved genbrug af id'et), og et ukendt sprog giver `E_POLICY`.
    - **Ikke dækket:** Ruten (`transport`) er ikke med i gengivelsen, fordi den vælges efter samtykket. Hvis en rute ændrer privatliv, pris eller levering væsentligt, kræver EDP §2.4 et nyt samtykke. Det hører til route-selection i adapter-laget.
-4. **Rettigheder og medlemskab** (`gate_members`, `gate_grants`) har ingen produktionskilde endnu. **ADR-0003:** Alle rettigheder sættes via Fleet's rettigheds-API. Tabellerne er en cache af det signerede rettighedssæt, som kun `eira-governance-agent` må anvende (signatur, tenant/device, monoton version, TTL), og der findes ingen lokal tildelingsvej. Identitet (`gate_identities`, session, assurance) kommer fra `identityd`. Begge dele kræver procesidentitet (punkt 1). **Fundet i VM-testen:** Den installerede `identityd` har hverken database-sti eller skriveadgang (ingen `/data` i unit eller AppArmor). Sessioner, som `identityd` opretter, deles derfor ikke med `intentd` på en installeret maskine. Gaten fejler lukket (ukendt session giver `REJECT`), men flowet virker først installeret, når denne PR er lavet.
+4. **Rettigheder og medlemskab.** *Rettigheder: lag 6 læser nu kun det Fleet-signerede rettighedssæt (`app/rights/cache.py`, `/data/rights`); tabellen `gate_grants` og den lokale tildelingsvej er fjernet.* Tilbage: `eira-governance-agent` skal hente, verificere og installere sæt, og bundlen skal have et signeret default-sæt. Indtil da har en installeret maskine intet sæt og afviser alle handlinger i lag 6 (fejler lukket). Medlemskab (`gate_members`) har stadig ingen produktionskilde. Identitet (`gate_identities`, session, assurance) kommer fra `identityd`. Begge dele kræver procesidentitet (punkt 1). **Fundet i VM-testen:** Den installerede `identityd` har hverken database-sti eller skriveadgang (ingen `/data` i unit eller AppArmor). Sessioner, som `identityd` opretter, deles derfor ikke med `intentd` på en installeret maskine. Gaten fejler lukket (ukendt session giver `REJECT`), men flowet virker først installeret, når denne PR er lavet.
 5. ~~**Tre gamle skriveveje går uden om gaten.**~~ **Lukket.** `intent.confirm`, `intent.execute` og `journey.advance` svarer nu `E_GATE_REQUIRED` med et pejl til `gate.propose` og en `user_message`. De er omdirigeret, ikke slettet. Bevis:
    - `test_former_bypasses_answer_gate_required_and_never_execute` kører over den rigtige JSON-RPC-server og viser, at hverken `execute_intent`, `stated`-appenderen eller journey-lageret nås.
    - `test_every_intentd_method_is_classified` har en tom `KNOWN_BYPASSES`.
