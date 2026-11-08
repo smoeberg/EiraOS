@@ -145,3 +145,17 @@ def test_entry_points_import_alone(module):
         [sys.executable, "-c", f"import {module}"], cwd=ROOT, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_cache_directory_is_usable_under_the_daemon_umask(bundle, tmp_path):
+    """systemd units use UMask=0117; mkdir(0o700) alone gives 0600."""
+    import os
+    import stat
+
+    old = os.umask(0o117)
+    try:
+        cache = RightsCache(tmp_path / "rights")
+        assert agent.apply_default(bundle, cache) == 0
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE((tmp_path / "rights").stat().st_mode) == 0o700

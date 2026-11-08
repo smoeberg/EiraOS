@@ -19,6 +19,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import stat
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -184,6 +185,11 @@ class RightsCache:
     @contextmanager
     def _locked(self) -> Iterator[None]:
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # The daemons run with UMask=0117, which also strips the owner's x bit:
+        # mkdir(0o700) yields 0600, a directory not even its owner can enter.
+        # chmod is not subject to the umask (found in the VM).
+        if stat.S_IMODE(self.directory.stat().st_mode) != 0o700:
+            os.chmod(self.directory, 0o700)
         with open(self.directory / ".lock", "a+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:
