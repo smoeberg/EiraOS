@@ -16,6 +16,7 @@ directory (0700 eira, created by the package).
 
 from __future__ import annotations
 
+import base64
 import fcntl
 import json
 import os
@@ -34,6 +35,7 @@ ROLLBACK_TOLERANCE = timedelta(minutes=5)
 SET_FILE = "active.json"
 STATE_FILE = "state.json"
 REJECTED_FILE = "rejected.json"
+KEYS_FILE = "keys.json"
 REJECTED_KEEP = 32
 
 
@@ -131,6 +133,7 @@ class RightsCache:
                     "version": doc["version"],
                     "kind": doc["kind"],
                     "tenant_id": doc["tenant_id"],
+                    "key_id": doc["signature"]["key_id"],
                     "issued_at": doc["issued_at"],
                     "expires_at": doc["expires_at"],
                     "elapsed_ns": 0,
@@ -145,12 +148,53 @@ class RightsCache:
             self._write(SET_FILE, bytes(raw))
             self._write(STATE_FILE, json.dumps(state, sort_keys=True).encode())
 
+    def anchors(self, enrolled, now: datetime) -> dict[str, contract.Anchor]:
+        """Anchors for managed sets: certified, unexpired operational keys of
+        the enrolled tenant, revoked ones marked (keys.operational_anchors)."""
+        from app.rights import keys
+
+        certificates, revocations_raw = self.key_material()
+        revocations = None
+        if revocations_raw is not None:
+            try:
+                revocations = keys.verify_revocations(
+                    revocations_raw, roots=enrolled.rights_roots, tenant_id=enrolled.tenant_id,
+                    now=now, previous=None,
+                )
+            except keys.KeyRejected:
+                # A stored list that no longer verifies (e.g. its root expired)
+                # cannot vouch for any key: trust none.
+                return {}
+        return keys.operational_anchors(
+            certificates, roots=enrolled.rights_roots, tenant_id=enrolled.tenant_id,
+            revocations=revocations, now=now,
+        )
+
     def active_meta(self) -> contract.Active | None:
         """What `contract.verify` needs to judge the next set (§4 rule 6)."""
         state = self._read_state()
         if not state:
             return None
         return contract.Active(state["version"], state["content_hash"], state["tenant_id"])
+
+    def key_material(self) -> tuple[list[bytes], bytes | None]:
+        """Operational-key certificates and the revocation list, as received
+        (unverified bytes; keys.py verifies them on every use)."""
+        raw = self._read(KEYS_FILE)
+        if not raw:
+            return [], None
+        data = json.loads(raw)
+        certs = [base64.b64decode(c) for c in data.get("certificates", [])]
+        rev = data.get("revocations")
+        return certs, base64.b64decode(rev) if rev else None
+
+    def store_key_material(self, certificates: list[bytes], revocations: bytes | None) -> None:
+        data = {
+            "certificates": [base64.b64encode(c).decode() for c in certificates],
+            "revocations": base64.b64encode(revocations).decode() if revocations else None,
+        }
+        with self._locked():
+            self._write(KEYS_FILE, json.dumps(data).encode())
 
     def rejection(self, digest: str) -> dict[str, Any] | None:
         """A set (by hash of its exact bytes) this device already rejected."""
@@ -197,6 +241,13 @@ class RightsCache:
             doc = rights.rights_set
             if (doc["tenant_id"], doc["device_id"]) != (enrolled.tenant_id, enrolled.device_id):
                 return RightsState("misconfigured", "set_not_for_this_enrollment", None)
+            # The key that signed the active set must still be certified and
+            # not revoked: a revoked key takes its sets' rights with it.
+            anchor = self.anchors(enrolled, rights.effective_now).get(doc["signature"]["key_id"])
+            if anchor is None or anchor.revoked:
+                return RightsState("missing", "signing_key_revoked", None)
+            if anchor.not_after is not None and rights.effective_now >= anchor.not_after:
+                return RightsState("missing", "signing_key_expired", None)
         elif rights.kind == "managed":
             return RightsState("misconfigured", "managed_set_without_enrollment", None)
         if rights.expired:

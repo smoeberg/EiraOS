@@ -49,10 +49,13 @@ class FakeFleet:
             raise FleetError("connection refused")
         if self.next_answer is not None:
             return fleet_api.parse_desired_state(self.next_answer)
-        if active_version == self.signer.version:
-            return fleet_api.parse_desired_state({"policy_revision": "x"})
-        raw = contract.canonical(self.signer.document())
-        return fleet_api.parse_desired_state({"rights_set": fleet_api.encode_rights_set(raw)})
+        certs, rev = self.signer.key_material()
+        body = {"rights_keys": [fleet_api.encode_rights_set(c) for c in certs]}
+        if rev is not None:
+            body["rights_revocations"] = fleet_api.encode_rights_set(rev)
+        if active_version != self.signer.version:
+            body["rights_set"] = fleet_api.encode_rights_set(contract.canonical(self.signer.document()))
+        return fleet_api.parse_desired_state(body)
 
     def report_apply(self, report):
         if self.reports_fail:
@@ -114,13 +117,21 @@ def test_rejected_set_reports_only_the_reason(world):
 
 def test_set_from_another_tenants_key_is_rejected(world, tmp_path):
     fleet, cache, sync, _, clock = world
+    assert sync() == "applied"  # the device now knows the certified key
     other = TestFleet(tmp_path / "x", clock)
     other._key = Ed25519PrivateKey.generate()  # same key_id, another key
     other.version = 9
     fleet.next_answer = {"rights_set": fleet_api.encode_rights_set(contract.canonical(other.document()))}
     assert sync() == "rejected"
     assert fleet.reports[-1].reason == "bad_signature"
-    assert cache.active_meta() is None
+    assert cache.active_meta().version == 7
+
+
+def test_without_certificates_no_managed_set_verifies(world):
+    fleet, cache, sync, signer, _ = world
+    fleet.next_answer = {"rights_set": fleet_api.encode_rights_set(contract.canonical(signer.document()))}
+    assert sync() == "rejected"
+    assert fleet.reports[-1].reason == "unknown_key_id"
 
 
 def test_unreported_result_is_not_fatal(world):
@@ -196,19 +207,19 @@ def test_newer_example_is_a_real_vector():
 
 
 def test_enrollment_schema_and_parser_agree(tmp_path):
+    root = {"public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}
     good = {
-        "eira_enrollment": "1", "tenant_id": "kk", "device_id": "dev-1",
-        "fleet_url": "https://fleet.kk.example",
-        "rights_anchors": {"kk-1": {"kind": "managed", "public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}},
+        "eira_enrollment": "2", "tenant_id": "kk", "device_id": "dev-1",
+        "fleet_url": "https://fleet.kk.example", "rights_roots": {"kk-root-1": root},
     }
     jsonschema.validate(good, schema("Enrollment"))
     assert fleet_api.parse_enrollment(good).device == contract.Device(True, "kk", "dev-1")
     for bad in (
         {**good, "fleet_url": "http://fleet.kk.example"},
-        {**good, "rights_anchors": {}},
-        {**good, "rights_anchors": {"k": {"kind": "default", "public_key": "A" * 43, "not_after": "2036-01-01T00:00:00Z"}}},
-        {**good, "rights_anchors": {"k": {"kind": "managed", "public_key": "A" * 43}}},  # no not_after
-        {k: v for k, v in good.items() if k != "rights_anchors"},
+        {**good, "rights_roots": {}},
+        {**good, "rights_roots": {"k": {"public_key": "A" * 43}}},  # no not_after
+        {**good, "eira_enrollment": "1"},  # 1.0 enrollment with rights_anchors
+        {k: v for k, v in good.items() if k != "rights_roots"},
     ):
         with pytest.raises(ValueError):
             fleet_api.parse_enrollment(bad)
@@ -298,12 +309,12 @@ def test_offline_backoff_is_bounded_and_jittered():
     assert len({agent.next_poll("unchanged", 0, random.Random(s)) for s in range(5)}) == 5
 
 
-def test_expired_anchor_rejects_even_a_backdated_set(world, tmp_path):
+def test_expired_root_certifies_nothing(world):
     fleet, cache, sync, signer, clock = world
     data = json.loads(signer.enrollment_path.read_text())
-    for anchor in data["rights_anchors"].values():
-        anchor["not_after"] = "2026-11-01T00:00:00Z"  # before the test clock
+    for root in data["rights_roots"].values():
+        root["not_after"] = "2026-11-01T00:00:00Z"  # before the test clock
     signer.enrollment_path.write_text(json.dumps(data))
     enrolled = fleet_api.read_enrollment(signer.enrollment_path)
     assert agent.sync_once(fleet, enrolled, cache, registry=REGISTRY, wall_now=clock()) == "rejected"
-    assert fleet.reports[-1].reason == "anchor_expired"
+    assert fleet.reports[-1].reason == "unknown_key_id"

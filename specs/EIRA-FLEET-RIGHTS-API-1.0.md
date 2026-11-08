@@ -1,9 +1,9 @@
 # EIRA Fleet Rights API 1.0
 
 **Status:** Godkendt af ejer 8. november 2026. Normativ.
-**Version:** 1.0
+**Version:** 1.1 (8. november 2026: rod- og driftsnøgler, `rights_keys`, `rights_revocations`, enrollment version 2)
 **Defineret af:** `eira-os`. Fleet implementerer serversiden; eira-os afhænger ikke af, hvordan Fleet er bygget.
-**Grundlag:** [EIRA-RIGHTS-SET-1.1](EIRA-RIGHTS-SET-1.0.md) (sættet), [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), Fleet Agent Protocol v0.1 (transport og enroll).
+**Grundlag:** [EIRA-RIGHTS-SET-1.3](EIRA-RIGHTS-SET-1.0.md) (sættet), [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), Fleet Agent Protocol v0.1 (transport og enroll).
 
 ## 1. Formål og afgrænsning
 
@@ -22,7 +22,7 @@ Denne kontrakt er rettighedsdelen af grænsen mellem endpoint og Fleet: hvordan 
 ## 2. Tillid
 
 - **Svar fra Fleet er data, ikke rettigheder.** Et sæt bliver først til rettigheder, når `contract.verify` har godkendt det med et anker fra enrollment. mTLS beviser, at svaret kommer fra Fleet; signaturen beviser, at tenanten har udstedt sættet. Begge kræves.
-- **Ankre fastgøres ved enroll** (§5), ikke i rettighedssæt og ikke i desired state. Et sæt signeret med en anden nøgle afvises (`unknown_key_id` eller `bad_signature`).
+- **Rodnøgler fastgøres ved enroll** (§5), aldrig i rettighedssæt eller desired state. Driftsnøgler, der signerer sæt, kommer i desired state, men kun som certifikater signeret af en rod (RIGHTS-SET §3.1). Et sæt signeret med en anden nøgle afvises (`unknown_key_id`, `bad_signature` eller `key_revoked`).
 - **Fleet utilgængelig eller i strid med kontrakten** ændrer aldrig det aktive sæt. Offline er en normal tilstand (RIGHTS-SET §5.1); agentens kontakt til Fleet afhænger aldrig af sættet.
 - **Tillidsgrænse: root er udenfor.** Tillidsroden på enheden er `/etc/eira/enrollment.json` (root-ejet) og den installerede kode under `/usr/lib/eira-os`. Den, der har root på enheden, kan skrive sit eget anker ind, ændre verifikatoren eller rette i cachen efter verifikationen. **På en enhed, hvor nogen har root, er resten af denne kontrakt ikke en sikkerhedsgrænse.** Den beskytter mod fejl, mod programmer der kører som brugeren og mod alt på netværket, ikke mod root. Derfor er "ingen stående lokal admin, kun midlertidig Fleet-grant" (ADR-0003) den kontrol, der bærer managed mode, og §6 punkt 1 er den vigtigste åbne beslutning.
 
@@ -34,6 +34,9 @@ Denne kontrakt er rettighedsdelen af grænsen mellem endpoint og Fleet: hvordan 
 - Har Fleet et nyere sæt, indeholder svaret `rights_set`: **base64url uden padding af de præcise signerede bytes**. Sættet indlejres aldrig som JSON-objekt, så ingen JSON-parser mellem udsteder og verifikator kan omordne, fjerne dubletter eller normalisere det.
 - **Kun kanonisk base64url:** gen-kodning af de dekodede bytes skal give præcis den modtagne streng. Ellers kan to wire-strenge være samme sæt, og noget, der logger eller deduplikerer på strengen, ville se ét sæt som to. Længden er højst 1.398.102 tegn (1 MiB ukodet); grænsen udledes ét sted (`MAX_ENCODED_LENGTH`) og er bundet til OpenAPI-filen af en test.
 - Intet nyere: `rights_set` udelades eller er `null`.
+- `rights_keys`: rodsignerede certifikater for tenantens driftsnøgler, altid den fulde aktuelle liste (højst 16). Udeladt = uændret.
+- `rights_revocations`: den rodsignerede tilbagekaldelsesliste. Kun en nyere (højere sekvens, kun voksende) erstatter den gemte.
+- Agenten behandler nøgler **før** sættet i samme svar: en nyligt certificeret nøgle virker straks, og en tilbagekaldelse gælder, før noget sæt ses på. Et ugyldigt certifikat bliver aldrig et anker, så en dårlig nøgleliste kan kun fjerne tillid, aldrig give den.
 - Et svar, der ikke er et objekt, eller hvor `rights_set` ikke er en base64url-streng på højst 1 MiB dekodet, er et brud på kontrakten. Agenten behandler det som offline og ændrer intet.
 - Fleet sender det samme sæt, indtil det har fået et `apply-result` for det, **undtagen** når resultatet var `rejected` (§3.2).
 
@@ -67,6 +70,8 @@ Sendes efter hvert sæt, Fleet har leveret:
 | `misconfigured` | `enrollment_malformed` | enrollment-filen er i stykker; skal rettes |
 | `misconfigured` | `set_not_for_this_enrollment` | cachen har et sæt til en anden tenant/enhed (gen-enrolled) |
 | `misconfigured` | `managed_set_without_enrollment` | enrollment er fjernet fra en managed enhed |
+| `missing` | `signing_key_revoked` | nøglen bag det aktive sæt er tilbagekaldt; venter på et sæt signeret med en ny |
+| `missing` | `signing_key_expired` | nøglen bag det aktive sæt er udløbet |
 
   `missing` skal sættes op; `misconfigured` er en fejl.
 - `clock_rollback`: enheden har set sit ur gå tilbage forbi sit højvandsmærke. Fleet Console bør vise det.
@@ -87,16 +92,17 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 
 ```json
 {
-  "eira_enrollment": "1",
+  "eira_enrollment": "2",
   "tenant_id": "kk",
   "device_id": "dev-0001",
   "fleet_url": "https://fleet.kk.example",
-  "rights_anchors": {"kk-rights-2026": {"kind": "managed", "public_key": "<base64url Ed25519>", "not_after": "2027-12-31T00:00:00Z"}}
+  "rights_roots": {"kk-root-2026": {"public_key": "<base64url Ed25519>", "not_after": "2031-01-01T00:00:00Z"}}
 }
 ```
 
-- Kun `managed`-ankre; mindst ét; hvert med `not_after`; `fleet_url` skal være `https://`.
-- **`not_after`** vurderes i enhedens effektive tid ved verifikation (`anchor_expired`), aldrig mod sættets `issued_at`, som den, der har lækket en nøgle, kan tilbagedatere.
+- `rights_roots`: mindst én rod, hver med `not_after`; `fleet_url` skal være `https://`. Version 1 (`rights_anchors`) afvises.
+- En rod signerer aldrig sæt. Den certificerer driftsnøgler og signerer tilbagekaldelseslisten (RIGHTS-SET §3.1). Skift af rod kræver re-enroll.
+- `not_after` vurderes i enhedens effektive tid ved verifikation, aldrig mod et dokuments egne tidsfelter, som den, der har lækket en nøgle, kan tilbagedatere.
 - **Findes filen ikke**, er enheden privat og bruger bundlens standardsæt.
 - **Findes filen, men er den ugyldig**, er det en fejl, aldrig et fald tilbage til privat tilstand: standardsættet anvendes ikke, og enheden har ingen rettigheder, indtil enrollment er rettet.
 - **Gaten vejer cachen mod enrollment ved hver beslutning**, ikke kun når et sæt anvendes (tabellen i §3.3). Et cachet standardsæt og `owner_admin` overlever derfor ikke enrollment, og en ødelagt eller fjernet enrollment-fil fjerner rettigheder, som cachen stadig har.
@@ -106,5 +112,5 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 ## 6. Besluttet (8. november 2026)
 
 1. **Tillidsrod mod root — besluttet: transporten bygges nu med §2's grænse; attestation bliver et senere krav.** At signere enrollment-filen med en TPM-forseglet nøgle eller lægge ankeret i TPM NVRAM gør ikke root til en grænse: root kan stadig ændre koden, der kontrollerer TPM-signaturen, eller rette i cachen efter verifikationen. Det giver først mening med en målt og uforanderlig kæde (Secure Boot, `dm-verity` på `/usr`, PCR-målinger) **og** remote attestation, hvor Fleet verificerer et TPM-quote ved enroll og heartbeat, før det udsteder sæt. Så flyttes kontrollen til Fleet, som kan opdage en ændret enhed. Beslutning: transporten bygges nu med §2's ærlige grænse; attestation lægges ind i enroll og heartbeat som et senere krav, sammen med en uforanderlig `/usr`.
-2. **Nøglerotation — besluttet: rod- og driftsnøgler.** Reviewet foreslår et nyt ankersæt signeret af det forrige anker. Det løser planlagt rotation, men ikke kompromittering: den, der har lækket det gamle anker, kan selv signere sig et nyt. Beslutning: to niveauer. Enrollment fastgør tenantens **rod-nøgle** (offline, langlivet, i HSM), og roden udsteder kortlivede **driftsnøgler** med `not_after` som nøglecertifikater, leveret via desired state. En lækket driftsnøgle tilbagekaldes af roden uden re-enroll; kun en lækket rod kræver re-enroll.
+2. **Nøglerotation — besluttet og indført i 1.1: rod- og driftsnøgler (RIGHTS-SET §3.1).** Reviewet foreslår et nyt ankersæt signeret af det forrige anker. Det løser planlagt rotation, men ikke kompromittering: den, der har lækket det gamle anker, kan selv signere sig et nyt. Beslutning: to niveauer. Enrollment fastgør tenantens **rod-nøgle** (offline, langlivet, i HSM), og roden udsteder kortlivede **driftsnøgler** med `not_after` som nøglecertifikater, leveret via desired state. En lækket driftsnøgle tilbagekaldes af roden uden re-enroll; kun en lækket rod kræver re-enroll.
 3. **Åbent:** `eira-fleet-control` tager OpenAPI-filen og rettighedsvektorerne som en pinnet afhængighed og kører dem i sin CI (som RIGHTS-SET-kontrakten).

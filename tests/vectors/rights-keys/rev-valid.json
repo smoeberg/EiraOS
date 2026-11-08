@@ -1,0 +1,12 @@
+{
+  "name": "rev-valid",
+  "description": "Første tilbagekaldelsesliste.",
+  "kind": "revocations",
+  "raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-07T10:00:00Z\",\"revoked\":[\"old-1\"],\"sequence\":1,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"G7eGy7cG5o16rbvevRFiaP4QkSJ4Z_o87xnc_b6eRPEi6I81EwjzKVA9GjSlDIo-JgRczH_mep94B9aLfOl6AQ\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": null,
+  "expect": {
+    "ok": true
+  }
+}

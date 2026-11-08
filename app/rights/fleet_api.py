@@ -25,8 +25,12 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from app.rights import contract
+from app.rights.keys import Root
 
 API_VERSION = "1"
+ENROLLMENT_VERSION = "2"  # 2: rights_roots (root keys) replace rights_anchors
+MAX_KEY_CERTIFICATES = 16
+MAX_KEY_DOC_BYTES = 64 * 1024
 MAX_SET_BYTES = contract.MAX_BYTES
 # Unpadded base64url length of MAX_SET_BYTES; the OpenAPI maxLength is
 # checked against this one constant.
@@ -51,18 +55,18 @@ class ProtocolViolation(FleetError):
 class Enrollment:
     """/etc/eira/enrollment.json, written once by enrollment (root, 0644).
 
-    `rights_anchors` are the tenant's rights-signing public keys, received
-    over mTLS at enroll, each with a `not_after`. They are pinned here; a set
-    signed by any other key is rejected (`unknown_key_id`), one checked after
-    its anchor's `not_after` (effective time) is rejected (`anchor_expired`).
-    Anchors never arrive inside a rights set: a compromised set must not be
-    able to name the key it should be trusted under.
+    `rights_roots` are the tenant's root keys, received over mTLS at enroll,
+    each with a `not_after`. A root never signs a rights set: it certifies the
+    operational keys that do and signs the revocation list (keys.py). Roots
+    never arrive inside a rights set or desired state, so neither a
+    compromised set nor a compromised operational key can name the key it
+    should be trusted under. Changing a root means re-enrolling.
     """
 
     tenant_id: str
     device_id: str
     fleet_url: str
-    rights_anchors: Mapping[str, contract.Anchor]
+    rights_roots: Mapping[str, Root]
 
     @property
     def device(self) -> contract.Device:
@@ -71,23 +75,21 @@ class Enrollment:
 
 def parse_enrollment(data: Mapping[str, Any]) -> Enrollment:
     try:
-        if data["eira_enrollment"] != API_VERSION:
+        if data["eira_enrollment"] != ENROLLMENT_VERSION:
             raise ValueError("unsupported enrollment version")
         url = data["fleet_url"]
         if not isinstance(url, str) or not url.startswith("https://"):
             raise ValueError("fleet_url must be https")
-        anchors = {}
-        for key_id, anchor in data["rights_anchors"].items():
-            if anchor["kind"] != "managed":
-                raise ValueError("enrollment may only pin managed anchors")
-            raw = _b64url(anchor["public_key"])
+        roots = {}
+        for key_id, root in data["rights_roots"].items():
+            raw = _b64url(root["public_key"])
             if len(raw) != 32:
-                raise ValueError(f"anchor {key_id}: not an Ed25519 key")
-            not_after = datetime.strptime(anchor["not_after"], "%Y-%m-%dT%H:%M:%SZ")
-            anchors[key_id] = contract.Anchor("managed", raw, not_after.replace(tzinfo=timezone.utc))
-        if not anchors:
-            raise ValueError("no rights anchors")
-        return Enrollment(str(data["tenant_id"]), str(data["device_id"]), url, anchors)
+                raise ValueError(f"root {key_id}: not an Ed25519 key")
+            not_after = datetime.strptime(root["not_after"], "%Y-%m-%dT%H:%M:%SZ")
+            roots[key_id] = Root(raw, not_after.replace(tzinfo=timezone.utc))
+        if not roots:
+            raise ValueError("no rights roots")
+        return Enrollment(str(data["tenant_id"]), str(data["device_id"]), url, roots)
     except (KeyError, TypeError, AttributeError, binascii.Error, ValueError) as exc:
         raise ValueError(f"malformed enrollment: {exc}") from None
 
@@ -114,12 +116,19 @@ def read_enrollment(path: Path | None = None) -> Enrollment | None:
 class DesiredRights:
     """The rights part of GET /v1/desired-state.
 
-    `rights_set` is the exact signed bytes, base64url on the wire, so no JSON
-    parser between Fleet and the verifier can reorder, deduplicate or
-    renormalise the document. None = nothing newer than `rights_version`.
+    Every document is the exact signed bytes, base64url on the wire, so no
+    JSON parser between Fleet and the verifier can reorder, deduplicate or
+    renormalise it.
+
+    - `rights_set`: None = nothing newer than `rights_version`.
+    - `rights_keys`: root-signed certificates of the tenant's operational
+      keys, always the full current list.
+    - `rights_revocations`: the root-signed revocation list, if any.
     """
 
     rights_set: bytes | None
+    rights_keys: tuple[bytes, ...] = ()
+    rights_revocations: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -152,24 +161,35 @@ class RightsHeartbeat:
 
 
 def parse_desired_state(body: Any) -> DesiredRights:
-    """Validate Fleet's answer. Anything else is a ProtocolViolation; the set
-    inside is still unverified."""
+    """Validate Fleet's answer. Anything else is a ProtocolViolation; the
+    documents inside are still unverified."""
     if not isinstance(body, dict):
         raise ProtocolViolation("desired-state is not an object")
-    if "rights_set" not in body or body["rights_set"] is None:
-        return DesiredRights(None)
-    encoded = body["rights_set"]
-    if not isinstance(encoded, str) or len(encoded) > MAX_ENCODED_LENGTH:
-        raise ProtocolViolation("rights_set must be a base64url string of at most 1 MiB")
+    rights_set = _document(body.get("rights_set"), MAX_SET_BYTES, "rights_set")
+    keys = body.get("rights_keys") or []
+    if not isinstance(keys, list) or len(keys) > MAX_KEY_CERTIFICATES:
+        raise ProtocolViolation(f"rights_keys must be a list of at most {MAX_KEY_CERTIFICATES}")
+    certificates = tuple(_document(k, MAX_KEY_DOC_BYTES, "rights_keys[]") for k in keys)
+    if any(c is None for c in certificates):
+        raise ProtocolViolation("rights_keys[] must be strings")
+    revocations = _document(body.get("rights_revocations"), MAX_KEY_DOC_BYTES, "rights_revocations")
+    return DesiredRights(rights_set, certificates, revocations)  # type: ignore[arg-type]
+
+
+def _document(encoded: Any, limit: int, name: str) -> bytes | None:
+    if encoded is None:
+        return None
+    if not isinstance(encoded, str) or len(encoded) > (4 * limit + 2) // 3:
+        raise ProtocolViolation(f"{name} must be a base64url string of at most {limit} bytes")
     try:
         raw = _b64url(encoded)
     except (binascii.Error, ValueError):
-        raise ProtocolViolation("rights_set is not base64url") from None
-    # Canonical encoding only: one wire string per set, so nothing that logs
-    # or deduplicates on the string can see one set as two.
+        raise ProtocolViolation(f"{name} is not base64url") from None
+    # Canonical encoding only: one wire string per document, so nothing that
+    # logs or deduplicates on the string can see one document as two.
     if encode_rights_set(raw) != encoded:
-        raise ProtocolViolation("rights_set is not canonical base64url")
-    return DesiredRights(raw)
+        raise ProtocolViolation(f"{name} is not canonical base64url")
+    return raw
 
 
 def encode_rights_set(raw: bytes) -> str:

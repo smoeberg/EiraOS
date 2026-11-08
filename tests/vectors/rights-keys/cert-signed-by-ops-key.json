@@ -1,0 +1,13 @@
+{
+  "name": "cert-signed-by-ops-key",
+  "description": "Driftsnøglen udgiver sig for roden.",
+  "kind": "certificate",
+  "raw": "{\"eira_rights_key\":\"1\",\"key_id\":\"test-tenant-kk-1\",\"not_after\":\"2027-01-15T00:00:00Z\",\"not_before\":\"2026-11-01T00:00:00Z\",\"public_key\":\"0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"RnGtTOXOmB-VqJcM8k1CHPCvGrs1sqt-TNeUUEc2mM_t_QoVoqKevn58-nIJw7rIZlPIqoUjhER7YXaKyOdiCQ\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": null,
+  "expect": {
+    "ok": false,
+    "reason": "bad_signature"
+  }
+}
