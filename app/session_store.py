@@ -49,6 +49,13 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             updated_at TEXT
         );
         """)
+        # Bilag A pkt. 1: a session counts for the gate only if it was
+        # authenticated from verified claims, and only for the OS user that
+        # logged in. Sessions made by naming an actor id have neither.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+        for column, kind in (("os_uid", "INTEGER"), ("authenticated_at", "TEXT")):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
         conn.commit()
     finally:
         if close:
@@ -94,17 +101,35 @@ def ensure_session(
             conn.commit()
     return sid
 
-def create_session_from_claims(claims: dict, *, session_id: str | None = None) -> str:
+def create_session_from_claims(
+    claims: dict, *, session_id: str | None = None, os_uid: int | None = None
+) -> str:
+    """The only way to a session the gate accepts: claims the caller has
+    verified, bound to the OS user who logged in (`os_uid`, from SO_PEERCRED
+    of the login request). Without `os_uid` the session is not bound, and the
+    gate refuses it."""
     actor_id = claims.get("email") or claims.get("sub") or "user"
     actor_name = claims.get("name") or actor_id
     org_unit = claims.get("org_unit") or "Default"
-    return ensure_session(
+    # Session fixation: a login never adopts an existing session (anyone can
+    # create one by naming an id). A requested id is honoured only if unused.
+    if session_id is not None and get_session(session_id) is not None:
+        session_id = None
+    sid = ensure_session(
         session_id,
         actor_id,
         actor_name=actor_name,
         org_unit=org_unit,
         assurance_level="idp_authenticated",
     )
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE sessions SET os_uid = ?, authenticated_at = ?, actor_id = ?, assurance_level = ?"
+            " WHERE session_id = ?",
+            (os_uid, utc_now_iso(), actor_id, "idp_authenticated", sid),
+        )
+        conn.commit()
+    return sid
 
 def get_session(session_id: str) -> dict | None:
     with get_connection() as conn:

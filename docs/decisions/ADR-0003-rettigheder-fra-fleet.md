@@ -132,7 +132,7 @@ EiraOS redigerer ikke Ubuntu-rettigheder på egen hånd. Det anvender Ubuntu-des
 
 **Privat maskine: én konto med sudo (b), men tilstanden skal være synlig, ikke kun beskrevet.** En separat administratorkonto (a) er ikke en grænse på ejerens egen maskine: ejeren ejer hardwaren og kan altid komme ind via recovery, og en dagligbruger uden sudo ender med at slå begrænsningen fra ved første printer, VPN eller pakkeopdatering. Krav:
 
-1. **Synlig:** Bundlens default-sæt markerer tilstanden (`owner_admin`). Gaten viser den i status og på samtykkeskærmen: *"Ejeren har sudo på denne maskine. Eira beskytter mod fejl og mod programmer, der kører som dig — ikke mod dig."*
+1. **Synlig:** Bundlens default-sæt markerer tilstanden (`owner_admin`). Gaten viser den i status og på samtykkeskærmen: *"Ejeren har sudo på denne maskine. Eira beskytter mod fejl, mod AI'en og mod andre brugere på maskinen — ikke mod dig."* (Rettet 9. november 2026: den tidligere tekst lovede beskyttelse mod "programmer, der kører som dig". Det holder ikke, før samtykke kommer via en betroet vej, se GATE-KERNEL bilag A pkt. 1.)
 2. **Ærlig assurance:** Gaten registrerer `owner_admin` i audit ved hver beslutning, så en handling på en privat maskine aldrig fremstår med samme garanti som på en managed maskine. Beslutningen (PASS/REJECT) ændres ikke af flaget.
 3. **Ingen påstand stærkere end sandheden:** Ingen tekst i UI eller dokumentation må sige "Eira forhindrer X" om en maskine, hvor ejeren har root.
 

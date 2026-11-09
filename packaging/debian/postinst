@@ -17,6 +17,15 @@ case "${1:-configure}" in
             addgroup --system eira-clients
         fi
         adduser --quiet eira eira-clients
+        # The model runs as its own user (GATE-KERNEL bilag A pkt. 1): the gate
+        # knows it by uid, records its proposals as origin "model" and never
+        # lets it consent or confirm. It reaches the sockets (eira-clients) but
+        # is never in eira, so it cannot touch /data.
+        if ! getent passwd eira-model >/dev/null; then
+            adduser --system --no-create-home --home /nonexistent --disabled-login \
+                --disabled-password --shell /usr/sbin/nologin eira-model
+        fi
+        adduser --quiet eira-model eira-clients
         # Upgrade from earlier versions, where desktop users were put in
         # eira: move them to eira-clients.
         for member in $(getent group eira | cut -d: -f4 | tr ',' ' '); do
