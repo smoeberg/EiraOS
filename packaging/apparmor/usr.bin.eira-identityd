@@ -2,6 +2,7 @@
 
 /usr/bin/eira-identityd flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
+  #include <abstractions/ssl_certs>
   #include <abstractions/nameservice>
   #include <abstractions/openssl>
   #include <abstractions/python>
@@ -17,6 +18,12 @@
   /etc/eira/trust/ r,
   /etc/eira/trust/** r,
 
+  # Sessions (shared with the gate) and OIDC login state.
+  /data/ r,
+  /data/eira-app.db rwk,
+  /data/eira-app.db-{journal,shm,wal} rwk,
+  # Login: the caller's loginuid, cross-checked with SO_PEERCRED.
+  @{PROC}/[0-9]*/loginuid r,
   /run/eira/ rw,
   /run/eira/*.sock rwk,
   /var/log/eira/ rw,

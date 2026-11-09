@@ -476,6 +476,9 @@ class Gate:
         session = self._sessions(session_id)
         if not session or not session.get("authenticated_at"):
             return None
+        expires = session.get("expires_at")
+        if expires and datetime.fromisoformat(str(expires).replace("Z", "+00:00")) <= self._clock():
+            return None  # an expired session is no session
         bound = session.get("os_uid")
         if bound is None:
             return None
@@ -487,7 +490,9 @@ class Gate:
                 return None
         elif int(bound) != caller.uid:
             return None
-        identity = self.store.identity_for(session["actor_id"])
+        # Installed logins carry the identity from verified claims
+        # (did:eira:entra.<oid>); gate_identities is the binding for older sessions.
+        identity = session.get("identity") or self.store.identity_for(session["actor_id"])
         if identity is None:
             return None
         return {

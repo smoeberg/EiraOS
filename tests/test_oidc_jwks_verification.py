@@ -264,6 +264,8 @@ class TestClaimsFromIdToken:
             "preferred_username": "test@example.com",
             "name": "Test User",
             "tid": "test-tenant",
+            "oid": "7A9C1E4B-0000-4000-8000-000000000001",
+            "groups": ["laerere", "laerere", "x" * 200],
             "iss": oidc_config.issuer,
             "aud": oidc_config.client_id,
             "exp": int((now + timedelta(hours=1)).timestamp()),
@@ -275,11 +277,27 @@ class TestClaimsFromIdToken:
             mock_fetch.return_value = valid_jwks
             claims = claims_from_id_token(token, oidc_config, nonce="test-nonce")
 
+        assert claims["identity"] == "did:eira:entra.7a9c1e4b-0000-4000-8000-000000000001"
+        assert claims["groups"] == ["laerere"]  # deduplicated, oversized dropped
         assert claims["email"] == "test@example.com"
         assert claims["name"] == "Test User"
         assert claims["tenant_id"] == "test-tenant"
         assert claims["sub"] == "test-sub"
         assert claims["idp"] == "entra"
+
+    def test_token_without_oid_is_rejected(self, rsa_keys, valid_jwks, oidc_config):
+        """The gate's identity is the object id; an email alone is not one."""
+        private_pem, _, _, _ = rsa_keys
+        now = datetime.now(timezone.utc)
+        payload = {
+            "sub": "s", "preferred_username": "test@example.com", "iss": oidc_config.issuer,
+            "aud": oidc_config.client_id, "exp": int((now + timedelta(hours=1)).timestamp()), "nonce": "n",
+        }
+        token = _make_jwt({"alg": "RS256", "typ": "JWT", "kid": "test-kid-1"}, payload, private_pem)
+        with patch("app.auth.oidc._fetch_jwks") as mock_fetch:
+            mock_fetch.return_value = valid_jwks
+            with pytest.raises(ValueError, match="oid"):
+                claims_from_id_token(token, oidc_config, nonce="n")
 
     def test_forged_token_rejected(self, rsa_keys, valid_jwks, oidc_config):
         """Test that a forged token is rejected."""

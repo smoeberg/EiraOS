@@ -26,7 +26,7 @@ Et **rettighedssæt** er ét signeret dokument, der fuldt ud beskriver, hvad pri
 
 | Begreb | Kilde | Eksempel |
 |---|---|---|
-| Principal og grupper (*hvem*) | Entra / `identityd` | `entra:oid:9f3…`, `group:laerere` |
+| Principal og grupper (*hvem*) | Entra / `identityd` | `did:eira:entra.<oid>` (Entra-objekt-id i Eiras navnerum, samme form som EDP-deltagere), gruppenavne fra tokenets `groups` |
 | Grant og deny (*hvad*) | Fleet, via skabelon | `edp:commitment_proposed` på `obj:sag:*` for `group:laerere` |
 | Håndhævelse | Gate (lag 4 og 6) | `REJECT E_UNAUTHORIZED` |
 
@@ -70,7 +70,7 @@ Inden for profilen er **kanonisk JSON** = RFC 8785 (JCS). I Python svarer det ti
       "actions": ["system:power.request_action"]
     },
     {
-      "subject": {"principal": "entra:oid:9f3…"},
+      "subject": {"principal": "did:eira:entra.9f3…"},
       "scope": "obj:sag:42",
       "actions": ["edp:value_transfer_requested"],
       "expires_at": "2026-11-07T15:00:00Z",

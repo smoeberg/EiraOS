@@ -214,6 +214,13 @@ def _migrate_oidc(conn: sqlite3.Connection) -> None:
             )
             """
         )
+    # nonce was written by _store_auth_state but never had a column, so a live
+    # login failed at start (no test ran it). os_uid binds a login to the OS
+    # user who started it (GATE-KERNEL bilag A pkt. 1).
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(oidc_auth_states)")}
+    for column in ("nonce TEXT", "os_uid INTEGER"):
+        if column.split()[0] not in columns:
+            conn.execute(f"ALTER TABLE oidc_auth_states ADD COLUMN {column}")
 
 
 def _migrate_v03(conn: sqlite3.Connection) -> None:
