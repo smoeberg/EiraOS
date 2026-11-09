@@ -1,7 +1,7 @@
 # EIRA Fleet Rights API 1.0
 
 **Status:** Godkendt af ejer 8. november 2026. Normativ.
-**Version:** 1.1 (8. november 2026: rod- og driftsnøgler, `rights_keys`, `rights_revocations`, enrollment version 2)
+**Version:** 1.2 (8. november 2026: 1.1 rod- og driftsnøgler og enrollment version 2; 1.2 enroll, §8, og sync-planlægning, §7)
 **Defineret af:** `eira-os`. Fleet implementerer serversiden; eira-os afhænger ikke af, hvordan Fleet er bygget.
 **Grundlag:** [EIRA-RIGHTS-SET-1.3](EIRA-RIGHTS-SET-1.0.md) (sættet), [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), Fleet Agent Protocol v0.1 (transport og enroll).
 
@@ -130,7 +130,28 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 | `device.key` | root:eira, 0640 | enhedens private nøgle |
 | `tenant.token` | root:eira, 0640 | tenant-token (valgfri) |
 
-**Kommando:** `eira-rights-apply sync` kører én runde (§4) og derefter et heartbeat. Exit: 0 i orden, 1 sæt afvist, 2 ikke enrolled eller fejlkonfigureret, 3 offline. Hvornår den køres (timer eller daemon), fastlægges sammen med enroll-flowet.
+**Kommando:** `eira-rights-apply sync` kører én runde (§4) og derefter et heartbeat. Exit: 0 i orden, 1 sæt afvist, 2 ikke enrolled eller fejlkonfigureret, 3 offline.
+
+**Planlægning:** `eira-rights-sync.timer` starter `eira-rights-sync.service` 2 minutter efter boot og derefter hvert 15. minut med op til 3 minutters tilfældig forsinkelse. Unit'en kører kun på en enrolled enhed (`ConditionPathExists=/etc/eira/enrollment.json`), som brugeren `eira`, med samme hærdning som daemonerne, skrivning kun til `/data/rights` og sin egen AppArmor-profil (læser Fleet-filerne, skriver dem aldrig). Efter to eller flere runder offline springer agenten timer-ticks over efter `next_poll` (op til 6 timer). Exit 1 og 3 er normale udfald, ikke fejl.
+
+## 8. Enroll (`eira-enroll`, `app/rights/enroll.py`)
+
+**Invitationen** gives til enheden af IT ad deres egen kanal (USB, provisioneringsimage). Den er ikke en API-besked:
+
+```json
+{"eira_enroll_invite": "1", "fleet_url": "https://fleet.kk.example", "ca": "<PEM: Fleets server-CA>",
+ "enroll_token": "<engangs-token>", "expires_at": "2026-11-15T00:00:00Z"}
+```
+
+**Forløbet** (`eira-enroll INVITATION.json`, som root):
+
+1. Enheden danner sit nøglepar lokalt. Den private nøgle forlader aldrig enheden; kun en CSR sendes.
+2. `POST /v1/enroll` over TLS, der kun stoler på invitationens CA (endnu ingen klientcertifikat). Med sendes token, CSR, `machine_hash` (sha256 af `/etc/machine-id` med præfiks, ikke det rå id) og værtsnavn.
+3. Svaret kontrolleres, før noget skrives: samme `fleet_url` som invitationen; et enhedscertifikat udstedt af invitationens CA til *denne* nøgle, gyldigt nu og til klientgodkendelse; gyldige `rights_roots`; et token uden linjeskift.
+4. Filerne i `/etc/eira/fleet/` skrives først, hver atomart og med rettighederne fra §7; `/etc/eira/enrollment.json` skrives **til sidst**. Det er den fil, der gør enheden managed, så et nedbrud undervejs efterlader en privat enhed, aldrig en halvt managed.
+5. En første sync startes med det samme.
+
+En enhed, der allerede er enrolled, afvises: gen-enroll er en bevidst handling (fjern enrollment først). Fra næste beslutning gælder standardsættet og `owner_admin` ikke længere (§5, `awaiting_managed_set`).
 
 ## 6. Besluttet (8. november 2026)
 

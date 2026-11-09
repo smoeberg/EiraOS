@@ -108,6 +108,12 @@ assert rights["state"] == "active", rights
 assert rights["rights_kind"] == "default" and rights["owner_admin"] is True, rights
 assert rights["clock_rollback"] is False, rights
 PY
+# FLEET-RIGHTS-API §7: the sync timer is armed, its AppArmor profile is
+# loaded, and on a private machine a round ends as "not enrolled" (exit 2).
+check rights-sync-timer-enabled systemctl is-enabled --quiet eira-rights-sync.timer
+check rights-sync-profile-loaded sh -c "grep -q '^/usr/bin/eira-rights-apply ' /sys/kernel/security/apparmor/profiles"
+check rights-sync-not-enrolled sh -c 'runuser -u eira -- env EIRA_RIGHTS_DIR=/data/rights /usr/bin/eira-rights-apply sync; [ $? -eq 2 ]'
+check enroll-tool-installed test -x /usr/bin/eira-enroll
 # The desktop user can read neither the cache nor change it.
 check user-cannot-touch-rights-cache sh -c "! runuser -u $USER_NAME -- test -r /data/rights/active.json && ! runuser -u $USER_NAME -- test -w /data/rights"
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop

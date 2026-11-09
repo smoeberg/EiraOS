@@ -193,9 +193,10 @@ def test_openapi_reasons_are_exactly_the_contracts():
 def test_openapi_is_a_valid_document():
     from jsonschema import Draft202012Validator
 
-    for name in ("DesiredState", "RightsApplyResult", "RightsHeartbeat", "Enrollment"):
+    for name in ("DesiredState", "RightsApplyResult", "RightsHeartbeat", "Enrollment",
+                 "EnrollRequest", "EnrollAnswer", "Invitation"):
         Draft202012Validator.check_schema(SCHEMAS[name])
-    assert set(OPENAPI["paths"]) == {"/v1/desired-state", "/v1/report/apply-result", "/v1/heartbeat"}
+    assert set(OPENAPI["paths"]) == {"/v1/desired-state", "/v1/report/apply-result", "/v1/heartbeat", "/v1/enroll"}
 
 
 def test_newer_example_is_a_real_vector():

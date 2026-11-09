@@ -36,6 +36,7 @@ SET_FILE = "active.json"
 STATE_FILE = "state.json"
 REJECTED_FILE = "rejected.json"
 KEYS_FILE = "keys.json"
+SYNC_FILE = "sync.json"
 REJECTED_KEEP = 32
 
 
@@ -195,6 +196,23 @@ class RightsCache:
         }
         with self._locked():
             self._write(KEYS_FILE, json.dumps(data).encode())
+
+    def sync_due(self, wall_now: datetime) -> bool:
+        """The timer fires every 15 minutes; after offline rounds the agent
+        waits longer (agent.next_poll), so many devices do not hammer Fleet."""
+        raw = self._read(SYNC_FILE)
+        if not raw:
+            return True
+        due = json.loads(raw).get("next_due")
+        return due is None or wall_now >= _parse(due)
+
+    def record_sync(self, outcome: str, wall_now: datetime, next_poll) -> None:
+        raw = self._read(SYNC_FILE)
+        offline = (json.loads(raw).get("consecutive_offline", 0) if raw else 0) + 1 if outcome == "offline" else 0
+        state = {"consecutive_offline": offline, "last_outcome": outcome,
+                 "next_due": _iso(wall_now + next_poll(outcome, offline)) if offline > 1 else None}
+        with self._locked():
+            self._write(SYNC_FILE, json.dumps(state).encode())
 
     def rejection(self, digest: str) -> dict[str, Any] | None:
         """A set (by hash of its exact bytes) this device already rejected."""
