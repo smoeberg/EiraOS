@@ -16,6 +16,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Consent proof (app/gate/consent_proof.py): HMAC-SHA256.
+hmac = "0.12"
+sha2 = "0.10"
 tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 

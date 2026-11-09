@@ -27,7 +27,7 @@ from typing import Any
 from app.auth import oidc
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
-from app.session_store import create_session_from_claims, get_session
+from app.session_store import create_session_from_claims, get_session_for_gate
 
 LOGIN_FAILED = -32021
 UNSET_LOGINUID = 4294967295
@@ -97,8 +97,15 @@ def login_complete(params: dict[str, Any]) -> dict[str, Any]:
         "session_id": sid, "identity": claims["identity"], "os_uid": uid, "mode": "desktop",
         "tenant_id": claims.get("tenant_id"),
     })
-    session = get_session(sid) or {}
-    return {"session_id": sid, "identity": claims["identity"], "expires_at": session.get("expires_at")}
+    session = get_session_for_gate(sid) or {}
+    # The consent key goes only to the process that completed the login (the
+    # app's Rust core, which never hands it to the webview).
+    return {
+        "session_id": sid,
+        "identity": claims["identity"],
+        "expires_at": session.get("expires_at"),
+        "consent_key": session.get("consent_key"),
+    }
 
 
 def wants_peer(handler):

@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from app.clock import BootInstant, boot_now, within
-from app.gate import edp, system
+from app.gate import consent_proof, edp, system
 from app.gate.caller import current as current_caller
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
 from app.gate.executors import ExecutorRegistry, ExecutorUnavailable, default_registry
@@ -61,7 +61,7 @@ class Gate:
         self.store = store or GateStore()
         self._registry = registry if registry is not None else default_registry(self.store.db_path)
         if sessions is None:
-            from app.session_store import get_session
+            from app.session_store import get_session_for_gate as get_session
 
             sessions = get_session
         self._sessions = sessions
@@ -166,14 +166,23 @@ class Gate:
         return self.propose(raw, session_id, Origin.MODEL)
 
     def grant_consent(
-        self, action_id: str, content_hash: str, rendering_hash_: str, session_id: str | None
+        self,
+        action_id: str,
+        content_hash: str,
+        rendering_hash_: str,
+        session_id: str | None,
+        proof: str | None = None,
     ) -> GateResult:
         """The user's explicit consent to exactly this action, these parameters
-        and this rendering (the text the user was shown)."""
+        and this rendering (the text the user was shown), from the EiraOS app
+        (`proof`, consent_proof.py)."""
         _reset_rights()
         if _model_is_calling():
             return self._fail("consent", None, _MODEL_CANNOT_DECIDE, None, action_id=action_id)
         actor = self._human_actor(session_id)
+        bad_proof = self._proof_failure("consent", actor, action_id, content_hash, rendering_hash_, proof)
+        if bad_proof is not None:
+            return self._fail("consent", None, bad_proof, actor, action_id=action_id)
         record = self.store.find(action_id)
         try:
             if record is None or record["state"] != "pending":
@@ -208,12 +217,20 @@ class Gate:
         return result
 
     def confirm(
-        self, action_id: str, content_hash: str, rendering_hash_: str, session_id: str | None
+        self,
+        action_id: str,
+        content_hash: str,
+        rendering_hash_: str,
+        session_id: str | None,
+        proof: str | None = None,
     ) -> GateResult:
         _reset_rights()
         if _model_is_calling():
             return self._fail("confirm", None, _MODEL_CANNOT_DECIDE, None, action_id=action_id)
         actor = self._human_actor(session_id)
+        bad_proof = self._proof_failure("confirm", actor, action_id, content_hash, rendering_hash_, proof)
+        if bad_proof is not None:
+            return self._fail("confirm", None, bad_proof, actor, action_id=action_id)
         record = self.store.find(action_id)
         if record is None:
             return self._fail(
@@ -505,6 +522,30 @@ class Gate:
             "caller_uid": caller.uid,
             "caller_model": caller.model,
         }
+
+    def _proof_failure(
+        self,
+        verb: str,
+        actor: dict[str, Any] | None,
+        action_id: str,
+        content_hash: str,
+        rendering_hash_: str,
+        proof: str | None,
+    ) -> LayerFailure | None:
+        """No actor is handled by the normal path (it fails there). With an
+        actor, the decision must carry the app's proof for exactly this step."""
+        if actor is None:
+            return None
+        session = self._sessions(actor["session_id"]) or {}
+        if consent_proof.verify(
+            session.get("consent_key"), proof, verb, actor["caller_uid"], actor["session_id"],
+            action_id, content_hash, rendering_hash_,
+        ):
+            return None
+        return LayerFailure(
+            GateCode.E_CONSENT_PROOF,
+            f"{verb} must come from the EiraOS app (missing or invalid consent proof)",
+        )
 
     def _human_actor(self, session_id: str | None) -> dict[str, Any] | None:
         """Consent and confirmation come from the user, never from the model."""

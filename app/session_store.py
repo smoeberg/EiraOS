@@ -4,6 +4,13 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
+
+def new_consent_key() -> str:
+    from app.gate.consent_proof import new_key
+
+    return new_key()
+
+
 # An authenticated desktop session counts for at most a working day; then the
 # user logs in again. A leaked session id is worth nothing after that.
 SESSION_LIFETIME = timedelta(hours=12)
@@ -66,6 +73,8 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             ("identity", "TEXT"),
             ("groups_json", "TEXT"),
             ("expires_at", "TEXT"),
+            # Trusted path: only the app that completed the login holds it.
+            ("consent_key", "TEXT"),
         ):
             if column not in columns:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
@@ -141,11 +150,12 @@ def create_session_from_claims(
                 INSERT INTO sessions (
                     session_id, actor_id, actor_name, org_unit, assurance_level,
                     delegated_for, presentation_mode, created_at, updated_at,
-                    os_uid, authenticated_at, identity, groups_json, expires_at
-                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?)
+                    os_uid, authenticated_at, identity, groups_json, expires_at, consent_key
+                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO NOTHING
                 """,
-                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires),
+                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires,
+                 new_consent_key()),
             )
             if cursor.rowcount == 1:
                 conn.commit()
@@ -153,7 +163,12 @@ def create_session_from_claims(
     raise RuntimeError("could not create a fresh session")
 
 
-def get_session(session_id: str) -> dict | None:
+# Never leaves the session store except to the gate: identity.session and
+# dashboard.get hand sessions to whoever names the id.
+SECRET_FIELDS = ("consent_key",)
+
+
+def _read_session(session_id: str) -> dict | None:
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
@@ -164,6 +179,21 @@ def get_session(session_id: str) -> dict | None:
         raw_groups = session.pop("groups_json", None)
         session["groups"] = json.loads(raw_groups) if raw_groups else []
         return session
+
+
+def get_session(session_id: str) -> dict | None:
+    """A session as clients may see it: without its secrets."""
+    session = _read_session(session_id)
+    if session is not None:
+        for field in SECRET_FIELDS:
+            session.pop(field, None)
+    return session
+
+
+def get_session_for_gate(session_id: str) -> dict | None:
+    """The gate's view, including the consent key it verifies proofs with.
+    Only the gate kernel may use this."""
+    return _read_session(session_id)
 
 def update_assurance(session_id: str, assurance_level: str) -> dict:
     ensure_session(session_id)

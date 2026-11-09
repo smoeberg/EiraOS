@@ -29,6 +29,12 @@ export async function desktopLogin(): Promise<DesktopLogin> {
   return invoke<DesktopLogin>("desktop_login");
 }
 
+/** Forget the session and the consent key held by the app. */
+export async function desktopLogout(): Promise<void> {
+  if (window.__EIRA_TEST_DESKTOP_LOGIN__) return;
+  if (window.__TAURI_INTERNALS__) await invoke("desktop_logout");
+}
+
 const MESSAGES: Array<[RegExp, string]> = [
   [/login_denied/, "Login blev afbrudt i browseren."],
   [/login_timed_out/, "Login tog for lang tid. Prøv igen."],

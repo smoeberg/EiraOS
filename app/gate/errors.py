@@ -27,6 +27,9 @@ class GateCode(str, Enum):
     # The model tried to consent or confirm. Its own code so audit, SIEM and
     # Fleet can alert on it: it is either a UI bug or a compromised model call.
     E_MODEL_CANNOT_DECIDE = "E_MODEL_CANNOT_DECIDE"
+    # Consent/confirm without the proof only the EiraOS app can make: another
+    # program running as the user, or a stolen session id (bilag A pkt. 1).
+    E_CONSENT_PROOF = "E_CONSENT_PROOF"
     E_STEP_UP_REQUIRED = "E_STEP_UP_REQUIRED"
     E_STATE = "E_STATE"
     E_PARTIAL = "E_PARTIAL"
@@ -44,6 +47,7 @@ CODE_LAYER = {
     GateCode.E_NEED_CONSENT: 5,
     GateCode.E_UNAUTHORIZED: 6,
     GateCode.E_MODEL_CANNOT_DECIDE: 5,
+    GateCode.E_CONSENT_PROOF: 5,
     GateCode.E_STEP_UP_REQUIRED: 6,
     GateCode.E_STATE: 7,
     GateCode.E_PARTIAL: 8,

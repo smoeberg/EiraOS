@@ -105,6 +105,7 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             _text(params, "content_hash"),
             _text(params, "rendering_hash"),
             params.get("session_id"),
+            params.get("proof"),
         ).to_dict()
 
     def confirm(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:
@@ -113,6 +114,7 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             _text(params, "content_hash"),
             _text(params, "rendering_hash"),
             params.get("session_id"),
+            params.get("proof"),
         ).to_dict()
 
     def status(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:

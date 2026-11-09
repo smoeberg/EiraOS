@@ -8,7 +8,7 @@ import {
   setSessionId,
   type OidcConfig,
 } from "./api";
-import { desktopLogin, isDesktop, loginErrorMessage } from "./lib/login";
+import { desktopLogin, desktopLogout, isDesktop, loginErrorMessage } from "./lib/login";
 
 type Props = {
   actorId?: string;
@@ -66,8 +66,9 @@ export function AuthButton({ actorId, onAuthChange }: Props) {
 
   const handleLogout = useCallback(() => {
     clearSessionId();
+    if (desktop) void desktopLogout().catch(() => undefined);
     onAuthChange();
-  }, [onAuthChange]);
+  }, [desktop, onAuthChange]);
 
   if (!config && !desktop) return null;
 

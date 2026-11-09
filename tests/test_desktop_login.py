@@ -155,10 +155,12 @@ def test_login_uid_reads_the_kernel_value(tmp_path):
 def test_installed_login_session_is_accepted_by_the_gate(app_db, entra, loginuids, tmp_path):
     """The whole of punkt 2: a desktop login yields a session the gate
     accepts, with the identity and groups from claims — no gate_identities."""
-    from app.session_store import get_session
+
+    from app.gate import consent_proof
 
     start = call(login.login_start, HUMAN)
-    sid = call(login.login_complete, HUMAN, state=start["state"], code="abc")["session_id"]
+    done = call(login.login_complete, HUMAN, state=start["state"], code="abc")
+    sid, key = done["session_id"], done["consent_key"]  # the key stays in the app's Rust core
     store = GateStore(str(tmp_path / "gate.db"))
     conversation = "obj:sag:42"
     store.add_member(conversation, IDENTITY)
@@ -166,7 +168,9 @@ def test_installed_login_session_is_accepted_by_the_gate(app_db, entra, loginuid
     clock.now = datetime.now(timezone.utc)
     fleet = TestFleet(tmp_path / "rights", clock)
     fleet.grant(conversation, group="laerere").publish()
-    gate = Gate(store, default_registry(str(tmp_path / "gate.db")), sessions=get_session,
+    from app.session_store import get_session_for_gate
+
+    gate = Gate(store, default_registry(str(tmp_path / "gate.db")), sessions=get_session_for_gate,
                 clock=clock, rights=fleet.cache)
     env = envelope()
     env["participants"][0]["identity"] = IDENTITY
@@ -174,11 +178,31 @@ def test_installed_login_session_is_accepted_by_the_gate(app_db, entra, loginuid
         proposal = gate.propose(raw(env), sid, Origin.USER)
         assert proposal.code.value == "E_NEED_CONSENT", proposal
         rendering = store.find(env["id"])["rendering_hash"]
-        gate.grant_consent(env["id"], proposal.content_hash, rendering, sid)
-        result = gate.confirm(env["id"], proposal.content_hash, rendering, sid)
+
+        def prove(verb):
+            return consent_proof.compute(key, verb, HUMAN.uid, sid, env["id"], proposal.content_hash, rendering)
+
+        # Without the app's proof (another program as the same user): refused.
+        refused = gate.grant_consent(env["id"], proposal.content_hash, rendering, sid)
+        assert refused.code.value == "E_CONSENT_PROOF"
+        gate.grant_consent(env["id"], proposal.content_hash, rendering, sid, prove("consent"))
+        result = gate.confirm(env["id"], proposal.content_hash, rendering, sid, prove("confirm"))
     assert result.decision is Decision.PASS
     with acting_as(OTHER_HUMAN):
         assert gate.status(env["id"], sid) is None
+
+
+def test_consent_key_never_reaches_clients(app_db, entra, loginuids):
+    """identity.session and dashboard.get hand sessions to whoever names the
+    id; the key must not be among what they see."""
+    from app.daemons.identityd import identity_session
+    from app.session_store import get_session
+
+    start = call(login.login_start, HUMAN)
+    done = call(login.login_complete, HUMAN, state=start["state"], code="abc")
+    assert len(done["consent_key"]) == 64
+    assert "consent_key" not in get_session(done["session_id"])
+    assert "consent_key" not in identity_session({"session_id": done["session_id"]})
 
 
 def test_expired_session_is_no_session(app_db, entra, loginuids, tmp_path):

@@ -12,7 +12,7 @@ from app.gate.policy import Origin
 from app.gate.store import GateStore
 from app.rights import contract
 from app.rights.cache import RightsCache
-from tests.callers import HUMAN_SESSION
+from tests.callers import HUMAN_SESSION, ProvingGate
 from tests.rights_helpers import TestFleet
 from tests.test_gate_kernel import (
     ANNE,
@@ -49,10 +49,10 @@ def make_world(tmp_path, *, kind="managed", grant=True):
     w.fleet = TestFleet(tmp_path / "rights", w.clock, boot_clock=w.boot, kind=kind)
     if grant:
         w.fleet.grant(CONV, principal=ANNE).publish()
-    w.gate = Gate(
+    w.gate = ProvingGate(Gate(
         w.store, default_registry(w.db), sessions=w.sessions.get, clock=w.clock,
         boot_clock=w.boot, rights=w.fleet.cache,
-    )
+    ), w.sessions.get)
     return w
 
 
