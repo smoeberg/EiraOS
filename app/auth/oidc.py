@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.auth.audit import record_auth_event
-from app.config import validate_mock_login_configuration
+from app.auth.mock_guard import validate_mock_login_configuration
 from app.database import get_connection, utc_now_iso
 from app.session_store import create_session_from_claims
 

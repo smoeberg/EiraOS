@@ -1,22 +1,10 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_MOCK_TRUE_VALUES = {"1", "true", "yes"}
-
-
-def validate_mock_login_configuration() -> None:
-    """Fail closed when mock identity is enabled in a production runtime."""
-    environment = os.environ.get("EIRA_ENV", "development").strip().lower()
-    mock_enabled = os.environ.get("EIRA_OIDC_MOCK", "").strip().lower() in _MOCK_TRUE_VALUES
-    if environment == "production" and mock_enabled:
-        raise RuntimeError(
-            "EIRA_OIDC_MOCK cannot be enabled when EIRA_ENV=production"
-        )
-
+from app.auth.mock_guard import validate_mock_login_configuration
 
 # Run at import time so application startup fails before serving requests.
 validate_mock_login_configuration()
