@@ -133,6 +133,27 @@ reply = json.loads(s.makefile().readline())["result"]
 print("model consent:", reply)
 assert reply["decision"] == "REJECT" and "only the user" in reply["detail"], reply
 PY
+# GATE-KERNEL bilag A pkt. 1 (login): identityd has its database, and a login
+# needs a real login session (loginuid) that matches the socket peer. This
+# script has none, so the answer must be exactly that refusal, with no
+# AppArmor denial behind it (an unreadable loginuid would look the same).
+IDENTITY_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/identityd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": sys.argv[1],
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+print(s.makefile().readline().strip())'
+identity_reply_has() {
+    runuser -u "$USER_NAME" -- python3 -c "$IDENTITY_PY" "$1" | grep -q -- "$2"
+}
+check identityd-has-database identity_reply_has identity.session '"session_id"'
+check login-needs-login-session identity_reply_has identity.login_start caller_not_in_a_login_session
+check identityd-no-apparmor-denials sh -c "! journalctl -k -b --no-pager | grep 'apparmor=\"DENIED\"' | grep -q 'eira-identityd'"
 # FLEET-RIGHTS-API §7: the sync timer is armed, its AppArmor profile is
 # loaded, and on a private machine a round ends as "not enrolled" (exit 2).
 check rights-sync-timer-enabled systemctl is-enabled --quiet eira-rights-sync.timer

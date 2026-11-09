@@ -1,7 +1,12 @@
+import json
 import os
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+# An authenticated desktop session counts for at most a working day; then the
+# user logs in again. A leaked session id is worth nothing after that.
+SESSION_LIFETIME = timedelta(hours=12)
 
 
 def utc_now_iso() -> str:
@@ -53,7 +58,15 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
         # authenticated from verified claims, and only for the OS user that
         # logged in. Sessions made by naming an actor id have neither.
         columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
-        for column, kind in (("os_uid", "INTEGER"), ("authenticated_at", "TEXT")):
+        for column, kind in (
+            ("os_uid", "INTEGER"),
+            ("authenticated_at", "TEXT"),
+            # From verified claims only: the gate's identity and groups, and
+            # when the session stops counting.
+            ("identity", "TEXT"),
+            ("groups_json", "TEXT"),
+            ("expires_at", "TEXT"),
+        ):
             if column not in columns:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
         conn.commit()
@@ -117,6 +130,9 @@ def create_session_from_claims(
     actor_name = claims.get("name") or actor_id
     org_unit = claims.get("org_unit") or "Default"
     now = utc_now_iso()
+    identity = claims.get("identity")
+    groups_json = json.dumps(sorted(claims.get("groups") or []))
+    expires = (datetime.now(timezone.utc) + SESSION_LIFETIME).strftime("%Y-%m-%dT%H:%M:%SZ")
     candidates = ([session_id] if session_id else []) + [str(uuid.uuid4())]
     with get_connection() as conn:
         for sid in candidates:
@@ -125,11 +141,11 @@ def create_session_from_claims(
                 INSERT INTO sessions (
                     session_id, actor_id, actor_name, org_unit, assurance_level,
                     delegated_for, presentation_mode, created_at, updated_at,
-                    os_uid, authenticated_at
-                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?)
+                    os_uid, authenticated_at, identity, groups_json, expires_at
+                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO NOTHING
                 """,
-                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now),
+                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires),
             )
             if cursor.rowcount == 1:
                 conn.commit()
@@ -144,7 +160,10 @@ def get_session(session_id: str) -> dict | None:
         ).fetchone()
         if not row:
             return None
-        return dict(row)
+        session = dict(row)
+        raw_groups = session.pop("groups_json", None)
+        session["groups"] = json.loads(raw_groups) if raw_groups else []
+        return session
 
 def update_assurance(session_id: str, assurance_level: str) -> dict:
     ensure_session(session_id)

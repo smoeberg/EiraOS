@@ -17,6 +17,8 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/usr/lib/eira-os
 EnvironmentFile=-/etc/eira/eira.conf
+# Sessions live in the app database shared with the gate (intentd).
+Environment=EIRA_APP_DB=/data/eira-app.db
 ExecStart=/usr/bin/eira-identityd
 Restart=always
 RestartSec=2s
@@ -41,7 +43,7 @@ ProtectControlGroups=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictSUIDSGID=true
-ReadWritePaths=/run/eira /var/log/eira
+ReadWritePaths=/data /run/eira /var/log/eira
 AppArmorProfile=/usr/bin/eira-identityd
 
 [Install]

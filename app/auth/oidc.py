@@ -15,9 +15,13 @@ from urllib.parse import urlencode
 import httpx
 
 from app.auth.audit import record_auth_event
-from app.config import validate_mock_login_configuration
+from app.auth.mock_guard import validate_mock_login_configuration
 from app.database import get_connection, utc_now_iso
 from app.session_store import create_session_from_claims
+
+# Fail at import, before any login can be served (moved here from app.config,
+# which identityd cannot import on an installed system).
+validate_mock_login_configuration()
 
 _STATE_TTL = timedelta(minutes=10)
 _JWKS_TTL = timedelta(hours=1)
@@ -197,21 +201,34 @@ def _pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _store_auth_state(state: str, code_verifier: str, nonce: str | None = None) -> None:
+def _store_auth_state(
+    state: str, code_verifier: str, nonce: str | None = None, os_uid: int | None = None
+) -> None:
     with get_connection() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO oidc_auth_states (state, code_verifier, nonce, created_at) VALUES (?, ?, ?, ?)",
-            (state, code_verifier, nonce, utc_now_iso()),
+            "INSERT INTO oidc_auth_states (state, code_verifier, nonce, created_at, os_uid)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (state, code_verifier, nonce, utc_now_iso(), os_uid),
         )
 
 
-def _pop_auth_state(state: str) -> tuple[str, str | None] | None:
+def _pop_auth_state(state: str, os_uid: int | None = None) -> tuple[str, str | None] | None:
+    """Use a state once. With `os_uid`, only the OS user who started the login
+    can complete it; another user's attempt does not consume it."""
+    # One statement: a state can be used once, even by two concurrent callbacks.
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT code_verifier, nonce, created_at FROM oidc_auth_states WHERE state = ?",
-            (state,),
-        ).fetchone()
-        conn.execute("DELETE FROM oidc_auth_states WHERE state = ?", (state,))
+        if os_uid is None:
+            row = conn.execute(
+                "DELETE FROM oidc_auth_states WHERE state = ? RETURNING code_verifier, nonce, created_at",
+                (state,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "DELETE FROM oidc_auth_states WHERE state = ? AND os_uid = ?"
+                " RETURNING code_verifier, nonce, created_at",
+                (state, os_uid),
+            ).fetchone()
+        conn.commit()
     if row is None:
         return None
     created = datetime.strptime(row["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
@@ -220,8 +237,9 @@ def _pop_auth_state(state: str) -> tuple[str, str | None] | None:
     return (row["code_verifier"], row["nonce"])
 
 
-def start_oidc_login() -> dict[str, str]:
-    """Build Entra authorize URL with PKCE state and nonce (live mode only)."""
+def start_oidc_login(os_uid: int | None = None) -> dict[str, str]:
+    """Build Entra authorize URL with PKCE state and nonce (live mode only).
+    `os_uid` binds the login to the OS user who started it."""
     cfg = load_oidc_config()
     if cfg.mock_enabled:
         raise PermissionError("Mock mode active — use POST /v1/auth/oidc/mock-login")
@@ -229,7 +247,7 @@ def start_oidc_login() -> dict[str, str]:
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
     verifier, challenge = _pkce_pair()
-    _store_auth_state(state, verifier, nonce)
+    _store_auth_state(state, verifier, nonce, os_uid)
 
     params = {
         "client_id": cfg.client_id,
@@ -347,6 +365,16 @@ def claims_from_id_token(id_token: str, cfg: OidcConfig | None = None, nonce: st
     name = str(payload.get("name") or email.split("@")[0])
     tenant_id = str(payload.get("tid") or "")
     org_unit = str(payload.get("tenant_name") or tenant_id or "Entra")
+    # The gate's identity is the Entra object id: stable, unlike an email.
+    # It lives in Eira's own namespace (EDP 1.0 allows did:eira:… and
+    # external:…), so EDP participants, the gate and rights-set principals
+    # share one form: did:eira:entra.<oid>.
+    oid = str(payload.get("oid") or "").strip()
+    if not oid or not all(c.isalnum() or c == "-" for c in oid) or len(oid) > 64:
+        raise ValueError("id_token missing or malformed oid claim")
+    groups = payload.get("groups") or []
+    if not isinstance(groups, list) or len(groups) > 200 or not all(isinstance(g, str) for g in groups):
+        raise ValueError("id_token groups claim is malformed")
 
     return {
         "sub": payload.get("sub") or email,
@@ -354,6 +382,8 @@ def claims_from_id_token(id_token: str, cfg: OidcConfig | None = None, nonce: st
         "name": name,
         "org_unit": org_unit,
         "tenant_id": tenant_id,
+        "identity": f"did:eira:entra.{oid.lower()}",
+        "groups": sorted({g for g in groups if 0 < len(g) <= 128}),
         "idp": "entra",
         "assurance_level": "idp_authenticated",
     }

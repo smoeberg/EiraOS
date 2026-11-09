@@ -92,7 +92,7 @@ def managed(**over) -> dict:
              "actions": ["edp:utterance", "edp:commitment_proposed", "edp:commitment_accepted"]},
             {"subject": {"group": "laerere"}, "scope": "device:local",
              "actions": ["system:power.request_action"]},
-            {"subject": {"principal": "entra:oid:9f3"}, "scope": "obj:sag:42",
+            {"subject": {"principal": "did:eira:entra.9f3"}, "scope": "obj:sag:42",
              "actions": ["edp:value_transfer_requested"],
              "expires_at": "2026-11-07T15:00:00Z", "required_assurance": "eid_high"},
         ],
@@ -225,22 +225,22 @@ def authorize_vectors() -> dict:
         q.append({"name": name, "principal": principal, "groups": groups, "scope": scope,
                   "action": action, "now": now, "expect": expect})
 
-    query("group-grant", "entra:oid:a1", ["laerere"], "obj:sag:7", "edp:commitment_proposed", NOW,
+    query("group-grant", "did:eira:entra.a1", ["laerere"], "obj:sag:7", "edp:commitment_proposed", NOW,
           {"allowed": True, "reason": "granted", "grant_index": 0})
-    query("group-without-grant", "entra:oid:a2", ["elever"], "obj:sag:7", "edp:commitment_proposed",
+    query("group-without-grant", "did:eira:entra.a2", ["elever"], "obj:sag:7", "edp:commitment_proposed",
           NOW, {"allowed": False, "reason": "no_grant"})
-    query("deny-wins", "entra:oid:a3", ["laerere", "vikarer"], "device:local",
+    query("deny-wins", "did:eira:entra.a3", ["laerere", "vikarer"], "device:local",
           "system:power.request_action", NOW, {"allowed": False, "reason": "denied"})
-    query("wildcard-does-not-match-type-root", "entra:oid:a1", ["laerere"], "obj:sag:", "edp:utterance",
+    query("wildcard-does-not-match-type-root", "did:eira:entra.a1", ["laerere"], "obj:sag:", "edp:utterance",
           NOW, {"allowed": False, "reason": "no_grant"})
-    query("scope-type-mismatch", "entra:oid:a1", ["laerere"], "obj:budget:7", "edp:utterance", NOW,
+    query("scope-type-mismatch", "did:eira:entra.a1", ["laerere"], "obj:budget:7", "edp:utterance", NOW,
           {"allowed": False, "reason": "no_grant"})
-    query("principal-grant-raises-assurance", "entra:oid:9f3", [], "obj:sag:42",
+    query("principal-grant-raises-assurance", "did:eira:entra.9f3", [], "obj:sag:42",
           "edp:value_transfer_requested", NOW,
           {"allowed": True, "reason": "granted", "grant_index": 2, "required_assurance": "eid_high"})
-    query("temporary-grant-expired", "entra:oid:9f3", [], "obj:sag:42", "edp:value_transfer_requested",
+    query("temporary-grant-expired", "did:eira:entra.9f3", [], "obj:sag:42", "edp:value_transfer_requested",
           "2026-11-07T15:00:00Z", {"allowed": False, "reason": "no_grant"})
-    query("set-expired", "entra:oid:a1", ["laerere"], "obj:sag:7", "edp:utterance",
+    query("set-expired", "did:eira:entra.a1", ["laerere"], "obj:sag:7", "edp:utterance",
           "2026-11-21T11:00:00Z", {"allowed": False, "reason": "expired"})
     return {"rights_set": doc, "queries": q}
 

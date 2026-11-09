@@ -10,6 +10,10 @@ Type=oneshot
 User=eira
 Group=eira
 UMask=0117
+# python -m puts the working directory on sys.path: keep it the code dir,
+# never "/" (and no bytecode writes into it).
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=-/etc/eira/eira.conf
 Environment=EIRA_RIGHTS_DIR=/data/rights
 Environment=EIRA_APP_DB=/data/eira-app.db

@@ -39,7 +39,7 @@
       },
       {
         "subject": {
-          "principal": "entra:oid:9f3"
+          "principal": "did:eira:entra.9f3"
         },
         "scope": "obj:sag:42",
         "actions": [
@@ -64,7 +64,7 @@
   "queries": [
     {
       "name": "group-grant",
-      "principal": "entra:oid:a1",
+      "principal": "did:eira:entra.a1",
       "groups": [
         "laerere"
       ],
@@ -79,7 +79,7 @@
     },
     {
       "name": "group-without-grant",
-      "principal": "entra:oid:a2",
+      "principal": "did:eira:entra.a2",
       "groups": [
         "elever"
       ],
@@ -93,7 +93,7 @@
     },
     {
       "name": "deny-wins",
-      "principal": "entra:oid:a3",
+      "principal": "did:eira:entra.a3",
       "groups": [
         "laerere",
         "vikarer"
@@ -108,7 +108,7 @@
     },
     {
       "name": "wildcard-does-not-match-type-root",
-      "principal": "entra:oid:a1",
+      "principal": "did:eira:entra.a1",
       "groups": [
         "laerere"
       ],
@@ -122,7 +122,7 @@
     },
     {
       "name": "scope-type-mismatch",
-      "principal": "entra:oid:a1",
+      "principal": "did:eira:entra.a1",
       "groups": [
         "laerere"
       ],
@@ -136,7 +136,7 @@
     },
     {
       "name": "principal-grant-raises-assurance",
-      "principal": "entra:oid:9f3",
+      "principal": "did:eira:entra.9f3",
       "groups": [],
       "scope": "obj:sag:42",
       "action": "edp:value_transfer_requested",
@@ -150,7 +150,7 @@
     },
     {
       "name": "temporary-grant-expired",
-      "principal": "entra:oid:9f3",
+      "principal": "did:eira:entra.9f3",
       "groups": [],
       "scope": "obj:sag:42",
       "action": "edp:value_transfer_requested",
@@ -162,7 +162,7 @@
     },
     {
       "name": "set-expired",
-      "principal": "entra:oid:a1",
+      "principal": "did:eira:entra.a1",
       "groups": [
         "laerere"
       ],
