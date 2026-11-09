@@ -1,0 +1,26 @@
+{
+  "note": "Python (app/gate/consent_proof.py) and Rust (ui/src-tauri/src/login.rs) must produce these.",
+  "domain": "EIRA-CONSENT-V1",
+  "cases": [
+    {
+      "verb": "consent",
+      "uid": 1000,
+      "session_id": "sess-123",
+      "action_id": "dlg-0001",
+      "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "rendering_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "key": "1111111111111111111111111111111111111111111111111111111111111111",
+      "proof": "33046805088537979390fc89a38671031619c2a77ae516173d2c762f74d2804a"
+    },
+    {
+      "verb": "confirm",
+      "uid": 1000,
+      "session_id": "sess-123",
+      "action_id": "dlg-0001",
+      "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "rendering_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "key": "1111111111111111111111111111111111111111111111111111111111111111",
+      "proof": "c03bd784b2fc9ac011517749ed6d3a01b41c5ae7cdfb40cd945c714b3dae92af"
+    }
+  ]
+}

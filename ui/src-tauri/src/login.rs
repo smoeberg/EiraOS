@@ -11,14 +11,32 @@
 //!
 //! The code never touches the webview: it goes straight from the loopback
 //! socket to identityd. Only the resulting session id is returned.
+//!
+//! Trusted path for consent: identityd also returns the session's consent
+//! key. It stays here, in this process's memory, and is never handed to the
+//! webview. `gate_consent` / `gate_confirm` sign each decision with it
+//! (app/gate/consent_proof.py), so another program running as the same user,
+//! even with the session id, cannot consent.
 
+use hmac::{Hmac, Mac};
 use serde::Serialize;
 use serde_json::{json, Value};
+use sha2::Sha256;
+use std::sync::Mutex;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 pub const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
+const CONSENT_DOMAIN: &str = "EIRA-CONSENT-V1";
+
+/// The logged-in session and its consent key: process memory only.
+struct Held {
+    session_id: String,
+    consent_key: Vec<u8>,
+}
+
+static HELD: Mutex<Option<Held>> = Mutex::new(None);
 const MAX_REQUEST_HEAD: usize = 8 * 1024;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -221,14 +239,136 @@ pub async fn desktop_login() -> Result<LoginResult, String> {
         json!({ "state": state, "code": code }),
     )
     .await?;
+    let session_id = field(&done, "session_id")?.to_owned();
+    let consent_key = decode_hex(field(&done, "consent_key")?)
+        .filter(|key| key.len() == 32)
+        .ok_or("identityd returned a malformed consent key")?;
+    *HELD.lock().map_err(|_| "consent key store poisoned")? = Some(Held {
+        session_id: session_id.clone(),
+        consent_key,
+    });
     Ok(LoginResult {
-        session_id: field(&done, "session_id")?.to_owned(),
+        session_id,
         identity: field(&done, "identity")?.to_owned(),
         expires_at: done
             .get("expires_at")
             .and_then(Value::as_str)
             .map(str::to_owned),
     })
+}
+
+fn decode_hex(text: &str) -> Option<Vec<u8>> {
+    if text.len() % 2 != 0 {
+        return None;
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(text.get(i..i + 2)?, 16).ok())
+        .collect()
+}
+
+/// HMAC-SHA256 over the same message as app/gate/consent_proof.py.
+pub fn consent_proof(
+    key: &[u8],
+    verb: &str,
+    uid: u32,
+    session_id: &str,
+    action_id: &str,
+    content_hash: &str,
+    rendering_hash: &str,
+) -> Result<String, String> {
+    if verb != "consent" && verb != "confirm" {
+        return Err(format!("unknown verb {verb}"));
+    }
+    let uid = uid.to_string();
+    let parts = [
+        CONSENT_DOMAIN,
+        verb,
+        &uid,
+        session_id,
+        action_id,
+        content_hash,
+        rendering_hash,
+    ];
+    if parts.iter().any(|part| part.contains('\0')) {
+        return Err("NUL in consent proof field".into());
+    }
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(|e| e.to_string())?;
+    mac.update(parts.join("\0").as_bytes());
+    Ok(mac
+        .finalize()
+        .into_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+/// One decision from the user, signed with the held key and sent to the gate.
+async fn decide(
+    verb: &str,
+    action_id: String,
+    content_hash: String,
+    rendering_hash: String,
+) -> Result<Value, String> {
+    let (session_id, proof) = {
+        let held = HELD.lock().map_err(|_| "consent key store poisoned")?;
+        let held = held.as_ref().ok_or("not logged in")?;
+        #[cfg(unix)]
+        // SAFETY: getuid has no preconditions and cannot fail.
+        let uid = unsafe { libc::getuid() };
+        #[cfg(not(unix))]
+        let uid: u32 = return Err("the trusted consent path needs a Unix user id".into());
+        let proof = consent_proof(
+            &held.consent_key,
+            verb,
+            uid,
+            &held.session_id,
+            &action_id,
+            &content_hash,
+            &rendering_hash,
+        )?;
+        (held.session_id.clone(), proof)
+    };
+    crate::ipc::send_ipc_request(
+        "intentd".into(),
+        format!("gate.{verb}"),
+        json!({
+            "action_id": action_id,
+            "content_hash": content_hash,
+            "rendering_hash": rendering_hash,
+            "session_id": session_id,
+            "proof": proof,
+        }),
+    )
+    .await
+}
+
+/// The user consents to exactly this action and this rendering.
+#[tauri::command]
+pub async fn gate_consent(
+    action_id: String,
+    content_hash: String,
+    rendering_hash: String,
+) -> Result<Value, String> {
+    decide("consent", action_id, content_hash, rendering_hash).await
+}
+
+/// The user confirms the consented action; the gate executes it.
+#[tauri::command]
+pub async fn gate_confirm(
+    action_id: String,
+    content_hash: String,
+    rendering_hash: String,
+) -> Result<Value, String> {
+    decide("confirm", action_id, content_hash, rendering_hash).await
+}
+
+/// Logging out forgets the key: nothing more can be signed.
+#[tauri::command]
+pub fn desktop_logout() {
+    if let Ok(mut held) = HELD.lock() {
+        *held = None;
+    }
 }
 
 #[cfg(test)]
@@ -266,6 +406,35 @@ mod tests {
         );
         let foreign = "GET /callback?error=access_denied&state=nope HTTP/1.1\r\n\r\n";
         assert_eq!(parse_callback(foreign, STATE), Callback::Ignore);
+    }
+
+    #[test]
+    fn consent_proof_matches_the_python_gate() {
+        let raw = include_str!("../../../tests/vectors/consent-proof.json");
+        let vectors: Value = serde_json::from_str(raw).unwrap();
+        for case in vectors["cases"].as_array().unwrap() {
+            let key = decode_hex(case["key"].as_str().unwrap()).unwrap();
+            let proof = consent_proof(
+                &key,
+                case["verb"].as_str().unwrap(),
+                case["uid"].as_u64().unwrap() as u32,
+                case["session_id"].as_str().unwrap(),
+                case["action_id"].as_str().unwrap(),
+                case["content_hash"].as_str().unwrap(),
+                case["rendering_hash"].as_str().unwrap(),
+            )
+            .unwrap();
+            assert_eq!(proof, case["proof"].as_str().unwrap());
+        }
+    }
+
+    #[test]
+    fn consent_proof_refuses_other_verbs_and_nul() {
+        let key = [0x11u8; 32];
+        assert!(consent_proof(&key, "delete", 1, "s", "a", "c", "r").is_err());
+        assert!(consent_proof(&key, "consent", 1, "s\0x", "a", "c", "r").is_err());
+        assert_eq!(decode_hex("0g"), None);
+        assert_eq!(decode_hex("abc"), None);
     }
 
     #[test]

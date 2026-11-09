@@ -29,7 +29,7 @@ from app.gate.executors import (
 )
 from app.gate.policy import Origin
 from app.gate.store import GateStore
-from tests.callers import HUMAN, HUMAN_SESSION
+from tests.callers import HUMAN, HUMAN_SESSION, ProvingGate
 from tests.rights_helpers import TestFleet
 
 CONV = "obj:sag:42"
@@ -109,9 +109,9 @@ def world(tmp_path):
     boot = BootClock()
     fleet = TestFleet(tmp_path / "rights", clock, boot_clock=boot)
     fleet.grant(CONV, principal=ANNE).publish()
-    gate = Gate(
+    gate = ProvingGate(Gate(
         store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot, rights=fleet.cache
-    )
+    ), sessions.get)
 
     class World:
         pass
@@ -625,11 +625,11 @@ def test_crash_between_outbox_and_gate_result_is_recovered_once(world, monkeypat
     monkeypatch.setattr(world.store, "finish", original_finish)
     assert world.gate.status(env["id"], "s-anne")["state"] == "executing"
     # Restart: a new gate recovers from the executor's durable state.
-    restarted = Gate(
+    restarted = ProvingGate(Gate(
         world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
         boot_clock=world.boot,  # daemon restart, same boot
         rights=world.fleet.cache,
-    )
+    ), world.sessions.get)
     assert restarted.gate_state(env["id"]) == "executed"
     again = restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert again.decision is Decision.PASS and again.result["recovered"] is True
@@ -647,11 +647,11 @@ def test_crash_before_the_outbox_write_returns_the_action_to_pending(world, monk
     with pytest.raises(SystemExit):
         world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.undo()
-    restarted = Gate(
+    restarted = ProvingGate(Gate(
         world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
         boot_clock=world.boot,  # daemon restart, same boot
         rights=world.fleet.cache,
-    )
+    ), world.sessions.get)
     assert restarted.gate_state(env["id"]) == "pending"
     assert restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").decision is Decision.PASS
     assert len(outbox(world)) == 1
@@ -664,10 +664,10 @@ def test_recovery_without_proof_is_unknown_never_success(world, monkeypatch):
     with pytest.raises(SystemExit):
         world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     monkeypatch.undo()
-    restarted = Gate(
+    restarted = ProvingGate(Gate(
         world.store, _registry_with(world, _PartialExecutor()), sessions=world.sessions.get,
         rights=world.fleet.cache,
-    )
+    ), world.sessions.get)
     assert restarted.gate_state(env["id"]) == "unknown"
 
 

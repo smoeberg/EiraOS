@@ -15,7 +15,7 @@ from app.gate.executors import ExecutorRegistry, PowerExecutor
 from app.gate.policy import Origin
 from app.gate.store import GateStore, utc_now
 from app.gate.system import SYSTEM_SCOPE
-from tests.callers import HUMAN_SESSION
+from tests.callers import HUMAN_SESSION, ProvingGate
 from tests.rights_helpers import TestFleet
 
 ANNE, BO = "did:eira:anne", "did:eira:bo"
@@ -65,7 +65,7 @@ def sysworld(tmp_path):
     bus = FakeBusctl()
     registry = ExecutorRegistry()
     registry.register(PowerExecutor(bus))
-    gate = Gate(store, registry, sessions=sessions.get, rights=fleet.cache)
+    gate = ProvingGate(Gate(store, registry, sessions=sessions.get, rights=fleet.cache), sessions.get)
     gate.fleet = fleet  # test handle
     return gate, store, bus, sessions
 
@@ -195,7 +195,7 @@ def test_a_crash_during_poweroff_is_unknown_and_never_retried(sysworld, monkeypa
     monkeypatch.undo()
     registry = ExecutorRegistry()
     registry.register(PowerExecutor(bus))
-    restarted = Gate(store, registry, sessions=sessions.get, rights=gate.fleet.cache)
+    restarted = ProvingGate(Gate(store, registry, sessions=sessions.get, rights=gate.fleet.cache), sessions.get)
     assert restarted.gate_state("sys-0001") == "unknown"
     again = restarted.confirm(proposal.action_id, proposal.content_hash, rhash, "s-anne")
     assert again.code is GateCode.E_PARTIAL

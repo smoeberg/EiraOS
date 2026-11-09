@@ -57,8 +57,17 @@ def test_full_flow_over_ipc(rpc):
         "content_hash": proposal["content_hash"],
         "rendering_hash": rendering["hash"],
     }
-    assert rpc["gate.consent"](args)["detail"] == "consent recorded"
-    done = rpc["gate.confirm"](args)
+    from app.gate import consent_proof
+    from tests.callers import CONSENT_KEY, HUMAN
+
+    def prove(verb):
+        return consent_proof.compute(CONSENT_KEY, verb, HUMAN.uid, "s-anne", args["action_id"],
+                                     args["content_hash"], args["rendering_hash"])
+
+    assert rpc["gate.consent"](args)["error"] == "E_CONSENT_PROOF"  # no proof: not from the app
+    assert rpc["gate.consent"]({**args, "proof": prove("consent")})["detail"] == "consent recorded"
+    assert rpc["gate.confirm"]({**args, "proof": prove("consent")})["error"] == "E_CONSENT_PROOF"  # wrong verb
+    done = rpc["gate.confirm"]({**args, "proof": prove("confirm")})
     assert done["decision"] == "PASS" and done["result"]["visible_state"] == "proposed"
     assert rpc["gate.status"]({"action_id": "dlg-0001", "session_id": "s-anne"})["state"] == "executed"
     json.dumps(done)  # serialisable for the wire

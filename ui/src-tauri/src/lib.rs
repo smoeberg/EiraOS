@@ -222,6 +222,9 @@ pub fn run() {
             .invoke_handler(tauri::generate_handler![
                 ipc::send_ipc_request,
                 login::desktop_login,
+                login::desktop_logout,
+                login::gate_consent,
+                login::gate_confirm,
                 system_api_commands::eira_system,
                 terminal_commands::terminal_create,
                 terminal_commands::terminal_write,
