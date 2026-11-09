@@ -5,8 +5,10 @@ import {
   getSessionId,
   mockLogin,
   startOidcLogin,
+  setSessionId,
   type OidcConfig,
 } from "./api";
+import { desktopLogin, isDesktop, loginErrorMessage } from "./lib/login";
 
 type Props = {
   actorId?: string;
@@ -25,9 +27,25 @@ export function AuthButton({ actorId, onAuthChange }: Props) {
       .catch(() => setConfig(null));
   }, []);
 
+  const desktop = isDesktop();
+
   const handleLogin = useCallback(async () => {
-    if (!config) return;
     setError(null);
+    if (desktop) {
+      // Installed EiraOS: Entra in the system browser, completed by identityd.
+      setBusy(true);
+      try {
+        const result = await desktopLogin();
+        setSessionId(result.session_id);
+        onAuthChange();
+      } catch (exc) {
+        setError(loginErrorMessage(exc));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (!config) return;
     setBusy(true);
     try {
       if (config.mock_enabled) {
@@ -44,14 +62,14 @@ export function AuthButton({ actorId, onAuthChange }: Props) {
       setError(exc instanceof Error ? exc.message : "Login fejlede");
       setBusy(false);
     }
-  }, [config, onAuthChange]);
+  }, [config, desktop, onAuthChange]);
 
   const handleLogout = useCallback(() => {
     clearSessionId();
     onAuthChange();
   }, [onAuthChange]);
 
-  if (!config) return null;
+  if (!config && !desktop) return null;
 
   if (hasSession) {
     const label = actorId ?? "Logget ind";
@@ -76,7 +94,7 @@ export function AuthButton({ actorId, onAuthChange }: Props) {
         onClick={handleLogin}
         disabled={busy}
       >
-        {busy ? "Logger ind…" : config.mock_enabled ? "Log ind (dev)" : "Log ind med Entra"}
+        {busy ? "Logger ind…" : config?.mock_enabled ? "Log ind (dev)" : "Log ind med Entra"}
       </button>
     </div>
   );

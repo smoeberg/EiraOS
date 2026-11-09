@@ -57,9 +57,16 @@ def caller_uid(params: dict[str, Any]) -> int:
 
 
 def login_start(params: dict[str, Any]) -> dict[str, Any]:
+    """The desktop app passes its loopback redirect (RFC 8252); it is
+    validated, stored with the state and reused for the token exchange."""
     uid = caller_uid(params)
+    redirect_uri = params.get("redirect_uri")
+    if not isinstance(redirect_uri, str):
+        raise JsonRpcError(-32602, "redirect_uri is required")
     try:
-        return oidc.start_oidc_login(os_uid=uid)
+        return oidc.start_oidc_login(os_uid=uid, redirect_uri=redirect_uri)
+    except ValueError as exc:
+        raise JsonRpcError(-32602, str(exc)) from None
     except PermissionError as exc:  # mock mode on an installed system
         raise JsonRpcError(LOGIN_FAILED, "live_login_unavailable", {"detail": str(exc)}) from None
 
@@ -69,15 +76,15 @@ def login_complete(params: dict[str, Any]) -> dict[str, Any]:
     state, code = params.get("state"), params.get("code")
     if not isinstance(state, str) or not isinstance(code, str) or not state or not code:
         raise JsonRpcError(-32602, "state and code are required")
-    found = oidc._pop_auth_state(state, os_uid=uid)
+    found = oidc.pop_login_state(state, os_uid=uid)
     if found is None:
         oidc.fail_oidc_login("invalid_state", detail={"mode": "desktop"})
         raise JsonRpcError(LOGIN_FAILED, "invalid_or_expired_state")
-    verifier, nonce = found
+    verifier, nonce = found["code_verifier"], found["nonce"]
     if not nonce:
         raise JsonRpcError(LOGIN_FAILED, "login_without_nonce")
     try:
-        tokens = oidc.exchange_code_for_tokens(code, verifier)
+        tokens = oidc.exchange_code_for_tokens(code, verifier, redirect_uri=found["redirect_uri"])
         id_token = tokens.get("id_token")
         if not id_token:
             raise ValueError("token response missing id_token")

@@ -50,8 +50,8 @@ def entra(monkeypatch):
     returns these claims only for the nonce the login was started with."""
     seen = {}
 
-    def exchange(code, verifier, cfg=None):
-        seen["code"], seen["verifier"] = code, verifier
+    def exchange(code, verifier, cfg=None, redirect_uri=None):
+        seen["code"], seen["verifier"], seen["redirect_uri"] = code, verifier, redirect_uri
         return {"id_token": "token-for-" + code}
 
     def claims(id_token, cfg=None, nonce=None):
@@ -74,7 +74,12 @@ def loginuids(monkeypatch):
     return table
 
 
+REDIRECT = "http://127.0.0.1:49152/callback"
+
+
 def call(method, caller, **params):
+    if method is login.login_start:
+        params.setdefault("redirect_uri", REDIRECT)
     return method({**params, "_peer": Peer(caller) if caller else None})
 
 
@@ -82,8 +87,10 @@ def test_login_creates_a_bound_expiring_session_with_identity_from_claims(app_db
     start = call(login.login_start, HUMAN)
     assert start["authorize_url"].startswith("https://login.microsoftonline.com/kk-tenant/")
     assert "code_challenge=" in start["authorize_url"] and "nonce=" in start["authorize_url"]
+    assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback" in start["authorize_url"]
     done = call(login.login_complete, HUMAN, state=start["state"], code="abc")
     assert done["identity"] == IDENTITY and entra["nonce"]
+    assert entra["redirect_uri"] == REDIRECT  # the exchange reuses the authorize redirect
     from app.session_store import get_session
 
     session = get_session(done["session_id"])
@@ -203,3 +210,25 @@ def test_identityd_registers_login_with_the_peer(app_db):
     for name in ("identity.login_start", "identity.login_complete"):
         assert getattr(server.methods[name], "wants_peer", False), name
     assert json.dumps(sorted(server.methods))  # registered without error
+
+
+@pytest.mark.parametrize(
+    "redirect",
+    [
+        "http://localhost:49152/callback",          # a name can resolve elsewhere
+        "http://127.0.0.1/callback",                # no explicit port
+        "http://127.0.0.1:80/callback",             # privileged port
+        "http://127.0.0.1:49152/other",             # another path
+        "https://evil.example/callback",
+        "http://127.0.0.1:49152/callback?x=1",
+        "http://127.0.0.1:99999/callback",
+    ],
+)
+def test_only_the_ipv4_loopback_callback_is_accepted(app_db, loginuids, redirect):
+    with pytest.raises(JsonRpcError, match="redirect_uri"):
+        call(login.login_start, HUMAN, redirect_uri=redirect)
+
+
+def test_redirect_is_required(app_db, loginuids):
+    with pytest.raises(JsonRpcError, match="redirect_uri is required"):
+        login.login_start({"_peer": Peer(HUMAN)})
