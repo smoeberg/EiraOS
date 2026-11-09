@@ -19,6 +19,10 @@ from app.auth.mock_guard import validate_mock_login_configuration
 from app.database import get_connection, utc_now_iso
 from app.session_store import create_session_from_claims
 
+# Fail at import, before any login can be served (moved here from app.config,
+# which identityd cannot import on an installed system).
+validate_mock_login_configuration()
+
 _STATE_TTL = timedelta(minutes=10)
 _JWKS_TTL = timedelta(hours=1)
 _NONCE_TTL = timedelta(minutes=10)
