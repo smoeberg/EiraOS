@@ -27,6 +27,7 @@
   /etc/eira/fleet/tenant.token r,
 
   /data/ r,
+  /data/audit/anchor.json r,
   /data/rights/ rw,
   /data/rights/** rwk,
 

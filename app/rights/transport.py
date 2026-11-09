@@ -103,8 +103,11 @@ class HttpsFleetRightsClient:
 
     # --- heartbeat (rights fields; FLEET-RIGHTS-API §3.3) ---------------------
 
-    def heartbeat(self, rights: RightsHeartbeat) -> None:
-        self._post("/v1/heartbeat", {"device_id": self._device_id, "rights": rights.to_json()})
+    def heartbeat(self, rights: RightsHeartbeat, audit: dict | None = None) -> None:
+        body = {"device_id": self._device_id, "rights": rights.to_json()}
+        if audit is not None:
+            body["audit"] = audit  # Fleet witnesses the audit chain (§3.3)
+        self._post("/v1/heartbeat", body)
 
     # --- plumbing -------------------------------------------------------------
 

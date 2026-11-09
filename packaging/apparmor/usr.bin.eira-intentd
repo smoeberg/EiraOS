@@ -26,6 +26,9 @@
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
   # Rights cache: the gate advances the effective time (§4.1) on each read.
+  # Audit anchor for the rights agent's heartbeat (bilag A pkt. 2).
+  /data/audit/ rw,
+  /data/audit/** rw,
   /data/rights/ rw,
   /data/rights/** rwk,
 

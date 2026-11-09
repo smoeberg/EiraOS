@@ -231,5 +231,21 @@ def register_intent_handlers(
     server.register("intent.execute", gate_required("intent.execute"))
 
     register_gate_handlers(server)
+    _start_audit_anchor(server)
     server.register("health", lambda _: {"daemon": "eira-intentd", "ok": True})
     return active
+
+
+def _start_audit_anchor(server) -> None:
+    """GATE-KERNEL bilag A pkt. 2: anchor the audit chain in the journal (and,
+    via the rights agent's heartbeat, at Fleet) on an installed system."""
+    from app.gate.caller import installed
+
+    if not installed():
+        return
+    from app.gate import audit_anchor
+    from app.gate.ipc import default_gate
+
+    anchorer = audit_anchor.Anchorer(default_gate().store)
+    anchorer.start()
+    server.add_cleanup(anchorer.stop)
