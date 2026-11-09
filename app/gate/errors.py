@@ -24,6 +24,9 @@ class GateCode(str, Enum):
     E_CONSENT = "E_CONSENT"
     E_NEED_CONSENT = "E_NEED_CONSENT"
     E_UNAUTHORIZED = "E_UNAUTHORIZED"
+    # The model tried to consent or confirm. Its own code so audit, SIEM and
+    # Fleet can alert on it: it is either a UI bug or a compromised model call.
+    E_MODEL_CANNOT_DECIDE = "E_MODEL_CANNOT_DECIDE"
     E_STEP_UP_REQUIRED = "E_STEP_UP_REQUIRED"
     E_STATE = "E_STATE"
     E_PARTIAL = "E_PARTIAL"
@@ -40,6 +43,7 @@ CODE_LAYER = {
     GateCode.E_CONSENT: 5,
     GateCode.E_NEED_CONSENT: 5,
     GateCode.E_UNAUTHORIZED: 6,
+    GateCode.E_MODEL_CANNOT_DECIDE: 5,
     GateCode.E_STEP_UP_REQUIRED: 6,
     GateCode.E_STATE: 7,
     GateCode.E_PARTIAL: 8,

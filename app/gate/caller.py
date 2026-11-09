@@ -52,6 +52,36 @@ def from_peer(peer) -> Caller | None:
     return Caller(uid=peer.uid, pid=peer.pid, model=peer.uid == model_uid())
 
 
+class ModelIdentityMissing(RuntimeError):
+    """An installed gate that cannot tell the model from a human must not run."""
+
+
+def require_model_identity() -> int:
+    """Fail closed where it matters. If `eira-model` is missing, model_uid()
+    is None and the model would count as a human — able to consent. On an
+    installed system (sockets under /run/eira) the gate therefore refuses to
+    start; the reason is in the journal and systemd keeps retrying. The uid
+    must also be a system uid and not the daemons' own (`eira`).
+    """
+    uid = model_uid()
+    if uid is None:
+        raise ModelIdentityMissing(f"system user {MODEL_USER!r} does not exist")
+    if uid >= 1000:
+        raise ModelIdentityMissing(f"{MODEL_USER!r} has uid {uid}, not a system uid")
+    try:
+        if uid == pwd.getpwnam("eira").pw_uid:
+            raise ModelIdentityMissing(f"{MODEL_USER!r} shares the daemons' uid")
+    except KeyError:
+        pass
+    return uid
+
+
+def installed() -> bool:
+    from app.ipc.paths import run_dir
+
+    return str(run_dir()).rstrip("/") == "/run/eira"
+
+
 @contextmanager
 def acting_as(caller: Caller | None) -> Iterator[None]:
     token = CALLER.set(caller)

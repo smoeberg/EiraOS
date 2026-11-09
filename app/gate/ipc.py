@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.gate.caller import Caller, acting_as, from_peer
+from app.gate.caller import Caller, acting_as, from_peer, installed, require_model_identity
 from app.gate.kernel import Gate
 from app.gate.policy import Origin
 from app.ipc.auth import PEER_KEY
@@ -43,6 +43,8 @@ def gate_required(method: str):
 def default_gate() -> Gate:
     global _GATE
     if _GATE is None:
+        if installed():
+            require_model_identity()  # bilag A pkt. 1: never fail open
         _GATE = Gate()
     return _GATE
 

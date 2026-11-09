@@ -105,31 +105,37 @@ def create_session_from_claims(
     claims: dict, *, session_id: str | None = None, os_uid: int | None = None
 ) -> str:
     """The only way to a session the gate accepts: claims the caller has
-    verified, bound to the OS user who logged in (`os_uid`, from SO_PEERCRED
-    of the login request). Without `os_uid` the session is not bound, and the
-    gate refuses it."""
+    verified, bound to the OS user who logged in (`os_uid`). Without
+    `os_uid` the session is not bound, and the gate refuses it.
+
+    Session fixation: a login always creates its own row in one statement.
+    A requested id is used only if that INSERT succeeds; an id that exists —
+    or that someone inserts concurrently — is never adopted (no
+    check-then-act between transactions).
+    """
     actor_id = claims.get("email") or claims.get("sub") or "user"
     actor_name = claims.get("name") or actor_id
     org_unit = claims.get("org_unit") or "Default"
-    # Session fixation: a login never adopts an existing session (anyone can
-    # create one by naming an id). A requested id is honoured only if unused.
-    if session_id is not None and get_session(session_id) is not None:
-        session_id = None
-    sid = ensure_session(
-        session_id,
-        actor_id,
-        actor_name=actor_name,
-        org_unit=org_unit,
-        assurance_level="idp_authenticated",
-    )
+    now = utc_now_iso()
+    candidates = ([session_id] if session_id else []) + [str(uuid.uuid4())]
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE sessions SET os_uid = ?, authenticated_at = ?, actor_id = ?, assurance_level = ?"
-            " WHERE session_id = ?",
-            (os_uid, utc_now_iso(), actor_id, "idp_authenticated", sid),
-        )
-        conn.commit()
-    return sid
+        for sid in candidates:
+            cursor = conn.execute(
+                """
+                INSERT INTO sessions (
+                    session_id, actor_id, actor_name, org_unit, assurance_level,
+                    delegated_for, presentation_mode, created_at, updated_at,
+                    os_uid, authenticated_at
+                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?)
+                ON CONFLICT(session_id) DO NOTHING
+                """,
+                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now),
+            )
+            if cursor.rowcount == 1:
+                conn.commit()
+                return sid
+    raise RuntimeError("could not create a fresh session")
+
 
 def get_session(session_id: str) -> dict | None:
     with get_connection() as conn:

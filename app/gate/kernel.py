@@ -477,7 +477,15 @@ class Gate:
         if not session or not session.get("authenticated_at"):
             return None
         bound = session.get("os_uid")
-        if bound is None or (not caller.model and int(bound) != caller.uid):
+        if bound is None:
+            return None
+        if caller.model:
+            # The model proposes on behalf of a human session, never one bound
+            # to the model itself. Which human it acts for is not yet proven:
+            # that needs the UI-issued delegation of bilag A pkt. 1.
+            if int(bound) == caller.uid:
+                return None
+        elif int(bound) != caller.uid:
             return None
         identity = self.store.identity_for(session["actor_id"])
         if identity is None:
@@ -634,6 +642,9 @@ class Gate:
                 "input_hash": edp.input_hash(raw) if raw is not None else None,
                 "rendering_hash": self._rendering_hash_of(result.action_id),
                 "policy_version": POLICY_VERSION,
+                # Which process asked (SO_PEERCRED), so audit and SIEM can tell
+                # the model from the user (bilag A pkt. 1).
+                "caller": _caller_audit(),
                 **_rights_audit(),
             }
         )
@@ -684,8 +695,13 @@ _DECISION: contextvars.ContextVar[contract.Decision | None] = contextvars.Contex
 
 
 _MODEL_CANNOT_DECIDE = LayerFailure(
-    GateCode.E_UNAUTHORIZED, "the model proposes; only the user consents and confirms"
+    GateCode.E_MODEL_CANNOT_DECIDE, "the model proposes; only the user consents and confirms"
 )
+
+
+def _caller_audit() -> dict[str, Any] | None:
+    caller = current_caller()
+    return None if caller is None else {"uid": caller.uid, "pid": caller.pid, "model": caller.model}
 
 
 def _model_is_calling() -> bool:

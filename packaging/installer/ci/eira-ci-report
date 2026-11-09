@@ -114,6 +114,7 @@ PY
 check model-user-exists getent passwd eira-model
 check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"
 check model-not-in-eira sh -c "! id -nG eira-model | tr ' ' '\n' | grep -qx eira"
+check model-is-system-uid sh -c '[ "$(id -u eira-model)" -lt 1000 ] && [ "$(id -u eira-model)" -ne "$(id -u eira)" ]'
 check model-cannot-consent runuser -u eira-model -- python3 - <<'PY'
 import json, socket
 token = ""
