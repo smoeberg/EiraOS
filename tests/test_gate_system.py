@@ -15,6 +15,7 @@ from app.gate.executors import ExecutorRegistry, PowerExecutor
 from app.gate.policy import Origin
 from app.gate.store import GateStore, utc_now
 from app.gate.system import SYSTEM_SCOPE
+from tests.callers import HUMAN_SESSION
 from tests.rights_helpers import TestFleet
 
 ANNE, BO = "did:eira:anne", "did:eira:bo"
@@ -58,8 +59,8 @@ def sysworld(tmp_path):
     fleet = TestFleet(tmp_path / "rights", utc_now)
     fleet.grant(SYSTEM_SCOPE, ["system:power.request_action"], principal=ANNE).publish()
     sessions = {
-        "s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
-        "s-bo": {"actor_id": "bo@kommune.dk", "assurance_level": "eid_high"},
+        "s-anne": {**HUMAN_SESSION, "actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
+        "s-bo": {**HUMAN_SESSION, "actor_id": "bo@kommune.dk", "assurance_level": "eid_high"},
     }
     bus = FakeBusctl()
     registry = ExecutorRegistry()

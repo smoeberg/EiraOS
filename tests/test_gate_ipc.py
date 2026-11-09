@@ -9,15 +9,26 @@ from app.gate.ipc import register_gate_handlers
 from app.gate.kernel import Gate
 from app.gate.store import GateStore, utc_now
 from app.ipc.jsonrpc import JsonRpcError
+from tests.callers import HUMAN, HUMAN_SESSION, Peer
 from tests.rights_helpers import TestFleet
 from tests.test_gate_kernel import ANNE, CONV, envelope
 
 
 class FakeServer:
-    def __init__(self):
+    """Calls handlers the way the daemon server does, including the caller
+    from SO_PEERCRED for handlers that want it."""
+
+    def __init__(self, caller=HUMAN):
         self.methods = {}
+        self.caller = caller
 
     def register(self, name, handler):
+        if getattr(handler, "wants_peer", False):
+            inner = handler
+
+            def handler(params, _inner=inner):
+                return _inner({**params, "_peer": Peer(self.caller) if self.caller else None})
+
         self.methods[name] = handler
 
 
@@ -29,7 +40,7 @@ def rpc(tmp_path):
     store.add_member(CONV, ANNE)
     fleet = TestFleet(tmp_path / "rights", utc_now)
     fleet.grant(CONV, principal=ANNE).publish()
-    sessions = {"s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}}
+    sessions = {"s-anne": {**HUMAN_SESSION, "actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}}
     server = FakeServer()
     register_gate_handlers(server, Gate(store, default_registry(db), sessions=sessions.get, rights=fleet.cache))
     return server.methods

@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from app.ipc.auth import strip_and_validate_ipc_auth
+from app.ipc.auth import PEER_KEY, strip_and_validate_ipc_auth
 from app.ipc.jsonrpc import (
     INTERNAL_ERROR,
     INVALID_PARAMS,
@@ -29,6 +29,8 @@ class JsonRpcServer:
         self.name = name
         self.daemon = daemon
         self._handlers: dict[str, Handler] = {}
+        # Methods that receive the caller (SO_PEERCRED) as params["_peer"].
+        self._peer_methods: set[str] = set()
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._thread: threading.Thread | None = None
@@ -41,6 +43,10 @@ class JsonRpcServer:
 
     def register(self, method: str, handler: Handler) -> None:
         self._handlers[method] = handler
+        if getattr(handler, "wants_peer", False):
+            self._peer_methods.add(method)
+        else:
+            self._peer_methods.discard(method)
 
     def add_cleanup(self, callback: Callable[[], None]) -> None:
         self._stop_callbacks.append(callback)
@@ -49,7 +55,7 @@ class JsonRpcServer:
     def _valid_request_id(value: Any) -> bool:
         return isinstance(value, (str, int, float)) and not isinstance(value, bool)
 
-    def handle_line(self, line: str) -> str:
+    def handle_line(self, line: str, peer: Any = None) -> str:
         if len(line.encode("utf-8")) > MAX_REQUEST_BYTES:
             return json.dumps(error_response(None, INVALID_PARAMS, "Request too large"))
         try:
@@ -93,6 +99,11 @@ class JsonRpcServer:
 
         try:
             params = strip_and_validate_ipc_auth(dict(params))
+            # The caller comes from the kernel (SO_PEERCRED), never from the
+            # request: a client-supplied "_peer" is dropped (bilag A pkt. 1).
+            params.pop(PEER_KEY, None)
+            if method in self._peer_methods:
+                params[PEER_KEY] = peer
             result = self._handlers[method](params)
             return json.dumps(success_response(req_id, result), default=str)
         except JsonRpcError as exc:
@@ -104,7 +115,7 @@ class JsonRpcServer:
 
     def _serve_client(self, conn: socket.socket) -> None:
         try:
-            validate_peer_credentials(conn)
+            peer = validate_peer_credentials(conn)
             with conn:
                 buffer = b""
                 while not self._stop.is_set():
@@ -131,7 +142,7 @@ class JsonRpcServer:
                         line, buffer = buffer.split(b"\n", 1)
                         if not line.strip():
                             continue
-                        response = self.handle_line(line.decode("utf-8"))
+                        response = self.handle_line(line.decode("utf-8"), peer)
                         conn.sendall((response + "\n").encode("utf-8"))
         except (PeerCredentialError, OSError):
             conn.close()

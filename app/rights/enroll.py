@@ -84,8 +84,11 @@ def parse_invitation(data: Any, now: dt.datetime) -> Invitation:
     return Invitation(url, ca, token, expires)
 
 
-def machine_hash(path: Path = MACHINE_ID) -> str:
-    """Hardware binding for Fleet, without sending the raw machine-id."""
+def machine_hash(path: Path | None = None) -> str:
+    """Hardware binding for Fleet, without sending the raw machine-id.
+    The path is read at call time (a default bound at definition time made
+    tests read the host's real /etc/machine-id)."""
+    path = path if path is not None else MACHINE_ID
     try:
         raw = path.read_text(encoding="ascii").strip()
     except OSError as exc:

@@ -12,6 +12,7 @@ from app.gate.policy import Origin
 from app.gate.store import GateStore
 from app.rights import contract
 from app.rights.cache import RightsCache
+from tests.callers import HUMAN_SESSION
 from tests.rights_helpers import TestFleet
 from tests.test_gate_kernel import (
     ANNE,
@@ -39,8 +40,8 @@ def make_world(tmp_path, *, kind="managed", grant=True):
     w.db = str(tmp_path / "gate.db")
     w.store = GateStore(w.db)
     w.sessions = {
-        "s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
-        "s-anne-group": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low", "groups": ["laerere"]},
+        "s-anne": {**HUMAN_SESSION, "actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
+        "s-anne-group": {**HUMAN_SESSION, "actor_id": "anne@kommune.dk", "assurance_level": "eid_low", "groups": ["laerere"]},
     }
     w.store.bind_identity("anne@kommune.dk", ANNE)
     w.store.add_member(CONV, ANNE)

@@ -17,6 +17,7 @@ import pytest
 
 from app.gate import Decision, Gate, GateCode
 from app.gate import policy as gate_policy
+from app.gate.caller import acting_as
 from app.gate.executors import (
     ConversationOutboxExecutor,
     DirectCallRejected,
@@ -28,6 +29,7 @@ from app.gate.executors import (
 )
 from app.gate.policy import Origin
 from app.gate.store import GateStore
+from tests.callers import HUMAN, HUMAN_SESSION
 from tests.rights_helpers import TestFleet
 
 CONV = "obj:sag:42"
@@ -97,8 +99,8 @@ def world(tmp_path):
     db = str(tmp_path / "gate.db")
     store = GateStore(db)
     sessions = {
-        "s-anne": {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
-        "s-bo": {"actor_id": "bo@kommune.dk", "assurance_level": "eid_high"},
+        "s-anne": {**HUMAN_SESSION, "actor_id": "anne@kommune.dk", "assurance_level": "eid_low"},
+        "s-bo": {**HUMAN_SESSION, "actor_id": "bo@kommune.dk", "assurance_level": "eid_high"},
     }
     store.bind_identity("anne@kommune.dk", ANNE)
     store.bind_identity("bo@kommune.dk", BO)
@@ -341,7 +343,12 @@ def test_concurrent_confirmations_execute_once(world):
         barrier.wait()
         results.append(world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne"))
 
-    threads = [threading.Thread(target=go) for _ in range(8)]
+    def as_human():
+        # A new thread has no caller; each IPC thread sets its own.
+        with acting_as(HUMAN):
+            go()
+
+    threads = [threading.Thread(target=as_human) for _ in range(8)]
     for t in threads:
         t.start()
     for t in threads:
@@ -667,7 +674,7 @@ def test_recovery_without_proof_is_unknown_never_success(world, monkeypatch):
 def test_reauthorization_uses_the_confirming_session(world, monkeypatch):
     # Anne proposes and consents in one session, confirms in another, and the
     # confirming session loses its assurance between claim and execution.
-    world.sessions["s-anne-2"] = {"actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}
+    world.sessions["s-anne-2"] = {**HUMAN_SESSION, "actor_id": "anne@kommune.dk", "assurance_level": "eid_low"}
     env = envelope("presence_changed", {"state": "busy"}, id="dlg-p2")
     world.gate._registry.register(_RecordingExecutor("presence_changed"))
     monkeypatch.setitem(

@@ -108,6 +108,31 @@ assert rights["state"] == "active", rights
 assert rights["rights_kind"] == "default" and rights["owner_admin"] is True, rights
 assert rights["clock_rollback"] is False, rights
 PY
+# GATE-KERNEL bilag A pkt. 1: the model has its own uid, reaches the gate,
+# never owns Eira data, and over the real socket it can propose but the gate
+# refuses its consent.
+check model-user-exists getent passwd eira-model
+check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"
+check model-not-in-eira sh -c "! id -nG eira-model | tr ' ' '\n' | grep -qx eira"
+check model-is-system-uid sh -c '[ "$(id -u eira-model)" -lt 1000 ] && [ "$(id -u eira-model)" -ne "$(id -u eira)" ]'
+check model-cannot-consent runuser -u eira-model -- python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.consent",
+                       "params": {"action_id": "x", "content_hash": "sha256:" + "0" * 64,
+                                  "rendering_hash": "sha256:" + "0" * 64, "session_id": "s",
+                                  "_peer": {"uid": 1000},
+                                  "_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())["result"]
+print("model consent:", reply)
+assert reply["decision"] == "REJECT" and "only the user" in reply["detail"], reply
+PY
 # FLEET-RIGHTS-API §7: the sync timer is armed, its AppArmor profile is
 # loaded, and on a private machine a round ends as "not enrolled" (exit 2).
 check rights-sync-timer-enabled systemctl is-enabled --quiet eira-rights-sync.timer

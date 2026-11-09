@@ -9,8 +9,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.gate.caller import Caller, acting_as, from_peer, installed, require_model_identity
 from app.gate.kernel import Gate
 from app.gate.policy import Origin
+from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 
 _GATE: Gate | None = None
@@ -41,6 +43,8 @@ def gate_required(method: str):
 def default_gate() -> Gate:
     global _GATE
     if _GATE is None:
+        if installed():
+            require_model_identity()  # bilag A pkt. 1: never fail open
         _GATE = Gate()
     return _GATE
 
@@ -61,23 +65,41 @@ def _edp_input(params: dict[str, Any]) -> str | None:
     return None  # the gate rejects it as E_SYNTAX
 
 
-def _origin(params: dict[str, Any]) -> Origin:
+def _origin(params: dict[str, Any], caller: Caller | None) -> Origin:
+    """The model's proposals are origin `model` whatever it claims. A human
+    may mark a proposal as `model` (the UI relaying a suggestion), which only
+    narrows what it may do."""
     try:
-        return Origin(params.get("origin", "user"))
+        claimed = Origin(params.get("origin", "user"))
     except ValueError:
         raise JsonRpcError(-32602, "origin must be 'user' or 'model'") from None
+    if caller is not None and caller.model:
+        return Origin.MODEL
+    return claimed
+
+
+def _with_caller(handler):
+    """Every gate method runs as the process on the socket (SO_PEERCRED)."""
+
+    def wrapped(params: dict[str, Any]) -> dict[str, Any]:
+        caller = from_peer(params.pop(PEER_KEY, None))
+        with acting_as(caller):
+            return handler(params, caller)
+
+    wrapped.wants_peer = True  # the daemon server passes SO_PEERCRED only to these
+    return wrapped
 
 
 def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
     active = gate or default_gate()
 
-    def propose(params: dict[str, Any]) -> dict[str, Any]:
+    def propose(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:
         lang = params.get("lang", "da")
         if not isinstance(lang, str):
             raise JsonRpcError(-32602, "lang must be a string")
-        return active.propose(_edp_input(params), params.get("session_id"), _origin(params), lang).to_dict()
+        return active.propose(_edp_input(params), params.get("session_id"), _origin(params, caller), lang).to_dict()
 
-    def consent(params: dict[str, Any]) -> dict[str, Any]:
+    def consent(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:
         return active.grant_consent(
             _text(params, "action_id"),
             _text(params, "content_hash"),
@@ -85,7 +107,7 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             params.get("session_id"),
         ).to_dict()
 
-    def confirm(params: dict[str, Any]) -> dict[str, Any]:
+    def confirm(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:
         return active.confirm(
             _text(params, "action_id"),
             _text(params, "content_hash"),
@@ -93,13 +115,13 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             params.get("session_id"),
         ).to_dict()
 
-    def status(params: dict[str, Any]) -> dict[str, Any]:
+    def status(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:
         found = active.status(_text(params, "action_id"), params.get("session_id"))
         if found is None:
             raise JsonRpcError(-32004, "unknown action")
         return found
 
-    def capabilities(_params: dict[str, Any]) -> dict[str, Any]:
+    def capabilities(_params: dict[str, Any], _caller: Caller | None) -> dict[str, Any]:
         """Read-only: which families and system operations the gate accepts,
         and whether logind would allow each power action right now."""
         from app.gate.executors import POWER_METHODS, PowerExecutor
@@ -116,9 +138,9 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             "rights": active.rights_status(),
         }
 
-    server.register("gate.capabilities", capabilities)
-    server.register("gate.propose", propose)
-    server.register("gate.consent", consent)
-    server.register("gate.confirm", confirm)
-    server.register("gate.status", status)
+    server.register("gate.capabilities", _with_caller(capabilities))
+    server.register("gate.propose", _with_caller(propose))
+    server.register("gate.consent", _with_caller(consent))
+    server.register("gate.confirm", _with_caller(confirm))
+    server.register("gate.status", _with_caller(status))
     return active

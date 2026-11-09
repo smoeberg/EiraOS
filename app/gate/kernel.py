@@ -26,6 +26,7 @@ from typing import Any, Callable
 
 from app.clock import BootInstant, boot_now, within
 from app.gate import edp, system
+from app.gate.caller import current as current_caller
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
 from app.gate.executors import ExecutorRegistry, ExecutorUnavailable, default_registry
 from app.gate.policy import (
@@ -170,7 +171,9 @@ class Gate:
         """The user's explicit consent to exactly this action, these parameters
         and this rendering (the text the user was shown)."""
         _reset_rights()
-        actor = self._actor(session_id)
+        if _model_is_calling():
+            return self._fail("consent", None, _MODEL_CANNOT_DECIDE, None, action_id=action_id)
+        actor = self._human_actor(session_id)
         record = self.store.find(action_id)
         try:
             if record is None or record["state"] != "pending":
@@ -208,7 +211,9 @@ class Gate:
         self, action_id: str, content_hash: str, rendering_hash_: str, session_id: str | None
     ) -> GateResult:
         _reset_rights()
-        actor = self._actor(session_id)
+        if _model_is_calling():
+            return self._fail("confirm", None, _MODEL_CANNOT_DECIDE, None, action_id=action_id)
+        actor = self._human_actor(session_id)
         record = self.store.find(action_id)
         if record is None:
             return self._fail(
@@ -400,7 +405,7 @@ class Gate:
         # Authorization again, immediately before the side effect (§3.6), for
         # the session that is confirming now — not the one that proposed.
         try:
-            current = self._actor(actor["session_id"]) if actor else None
+            current = self._human_actor(actor["session_id"]) if actor else None
             self._layer_6_authorization(envelope, policy_for(action_type), current)
         except LayerFailure as failure:
             self.store.release(action_id, execution_id)
@@ -454,12 +459,33 @@ class Gate:
     # --- helpers -------------------------------------------------------------
 
     def _actor(self, session_id: str | None) -> dict[str, Any] | None:
-        """The authenticated user behind a session. Sessions are never created
-        here: an unknown session id is no session."""
-        if not session_id:
+        """The authenticated user behind a session, for the process that is
+        actually calling (bilag A pkt. 1). Sessions are never created here.
+
+        - No caller (not over the socket) → no actor.
+        - The session must have been authenticated from verified login
+          claims (`authenticated_at`); a session someone created by naming
+          an actor id is no session.
+        - A human caller may only use a session bound to its own uid.
+        - The model may name a human's session to *propose* on their behalf;
+          `grant_consent` and `confirm` refuse the model outright.
+        """
+        caller = current_caller()
+        if caller is None or not session_id:
             return None
         session = self._sessions(session_id)
-        if not session:
+        if not session or not session.get("authenticated_at"):
+            return None
+        bound = session.get("os_uid")
+        if bound is None:
+            return None
+        if caller.model:
+            # The model proposes on behalf of a human session, never one bound
+            # to the model itself. Which human it acts for is not yet proven:
+            # that needs the UI-issued delegation of bilag A pkt. 1.
+            if int(bound) == caller.uid:
+                return None
+        elif int(bound) != caller.uid:
             return None
         identity = self.store.identity_for(session["actor_id"])
         if identity is None:
@@ -471,7 +497,16 @@ class Gate:
             # Group membership comes from identity (Entra/identityd), never
             # from the request; rights for groups come from the set (ADR-0003).
             "groups": tuple(session.get("groups") or ()),
+            "caller_uid": caller.uid,
+            "caller_model": caller.model,
         }
+
+    def _human_actor(self, session_id: str | None) -> dict[str, Any] | None:
+        """Consent and confirmation come from the user, never from the model."""
+        actor = self._actor(session_id)
+        if actor is None or actor["caller_model"]:
+            return None
+        return actor
 
     def _store_pending(
         self,
@@ -607,6 +642,9 @@ class Gate:
                 "input_hash": edp.input_hash(raw) if raw is not None else None,
                 "rendering_hash": self._rendering_hash_of(result.action_id),
                 "policy_version": POLICY_VERSION,
+                # Which process asked (SO_PEERCRED), so audit and SIEM can tell
+                # the model from the user (bilag A pkt. 1).
+                "caller": _caller_audit(),
                 **_rights_audit(),
             }
         )
@@ -656,6 +694,21 @@ _DECISION: contextvars.ContextVar[contract.Decision | None] = contextvars.Contex
 )
 
 
+_MODEL_CANNOT_DECIDE = LayerFailure(
+    GateCode.E_MODEL_CANNOT_DECIDE, "the model proposes; only the user consents and confirms"
+)
+
+
+def _caller_audit() -> dict[str, Any] | None:
+    caller = current_caller()
+    return None if caller is None else {"uid": caller.uid, "pid": caller.pid, "model": caller.model}
+
+
+def _model_is_calling() -> bool:
+    caller = current_caller()
+    return caller is not None and caller.model
+
+
 def _reset_rights() -> None:
     _RIGHTS.set(None)
     _DECISION.set(None)
@@ -669,7 +722,7 @@ def action_key(action_type: str) -> str:
 def _rights_audit() -> dict[str, Any]:
     """ADR-0003: every decision records which signed set it rested on, and
     whether the owner has root (then the gate protects against mistakes and
-    programs running as the user, not against the owner)."""
+    the model and other OS users, not against the owner)."""
     rights = _RIGHTS.get()
     if rights is None:
         return {"rights_set_id": None}
