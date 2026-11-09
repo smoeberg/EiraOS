@@ -1,0 +1,7 @@
+#!/bin/sh
+# Check the gate's audit chain against its anchors (GATE-KERNEL bilag A pkt. 2).
+# Run as root: reads /data and the system journal.
+set -eu
+export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
+export EIRA_APP_DB=${EIRA_APP_DB:-/data/eira-app.db}
+exec /usr/bin/python3 -m app.gate.audit_verify "$@"

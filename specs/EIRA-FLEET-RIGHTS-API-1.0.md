@@ -74,6 +74,7 @@ Sendes efter hvert sæt, Fleet har leveret:
 | `missing` | `signing_key_expired` | nøglen bag det aktive sæt er udløbet |
 
   `missing` skal sættes op; `misconfigured` er en fejl.
+- `audit` (valgfri, OpenAPI 1.3): gatens seneste audit-anker `{seq, head, at}` (GATE-KERNEL bilag A pkt. 2). Fleet gemmer hvert par pr. enhed, alarmerer, hvis `seq` falder eller et kendt head ændres, og kan eksportere dem til `eira-audit-verify --anchors`.
 - `clock_rollback`: enheden har set sit ur gå tilbage forbi sit højvandsmærke. Fleet Console bør vise det.
 
 ## 4. Agentens runde (`sync_once`)

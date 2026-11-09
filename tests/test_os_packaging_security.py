@@ -242,6 +242,7 @@ def test_packaging_scripts_are_executable_shell_files() -> None:
         REPO_ROOT / "packaging" / "bin" / "eira-daemon",
         REPO_ROOT / "packaging" / "bin" / "eira-rights-apply",
         REPO_ROOT / "packaging" / "bin" / "eira-enroll",
+        REPO_ROOT / "packaging" / "bin" / "eira-audit-verify",
         REPO_ROOT / "packaging" / "session" / "eira-session",
     )
     for script in scripts:

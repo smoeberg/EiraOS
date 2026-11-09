@@ -78,6 +78,17 @@ def _origin(params: dict[str, Any], caller: Caller | None) -> Origin:
     return claimed
 
 
+def _audit_status(gate: Gate) -> dict[str, Any]:
+    from app.rights.fleet_api import read_enrollment
+
+    seq, head = gate.store.audit_head()
+    try:
+        witness = "fleet" if read_enrollment() is not None else "journal_only"
+    except ValueError:
+        witness = "journal_only"
+    return {"seq": seq, "head": head, "witness": witness}
+
+
 def _with_caller(handler):
     """Every gate method runs as the process on the socket (SO_PEERCRED)."""
 
@@ -138,6 +149,9 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             # Why actions are or are not possible (RIGHTS-SET §5.1): state,
             # expiry, set id/version and owner_admin. Read-only.
             "rights": active.rights_status(),
+            # Parity status of the audit anchor (bilag A pkt. 2): a machine
+            # without Fleet has only the journal as witness.
+            "audit": _audit_status(active),
         }
 
     server.register("gate.capabilities", _with_caller(capabilities))

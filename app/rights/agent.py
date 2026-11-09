@@ -250,6 +250,18 @@ def next_poll(outcome: str, consecutive_offline: int, rng: random.Random | None 
     return base * rng.uniform(0.8, 1.2)
 
 
+def audit_anchor_for_fleet() -> dict | None:
+    """The gate's latest audit anchor (written by intentd), for Fleet to keep
+    as an off-machine witness (GATE-KERNEL bilag A pkt. 2)."""
+    from app.gate.audit_anchor import ANCHOR_FILE
+
+    try:
+        data = json.loads(ANCHOR_FILE.read_text(encoding="utf-8"))
+        return {"seq": int(data["seq"]), "head": str(data["head"]), "at": data.get("at")}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def heartbeat_fields(cache: RightsCache, wall_now: datetime) -> RightsHeartbeat:
     """Same judgement as the gate's (cache.resolve), so Fleet sees exactly why
     a device has no rights: never enrolled, waiting, broken or expired."""
@@ -299,7 +311,7 @@ def sync(client: FleetRightsClient | None = None, cache: RightsCache | None = No
     heartbeat = getattr(client, "heartbeat", None)
     if heartbeat is not None and outcome != "offline":
         try:
-            heartbeat(heartbeat_fields(cache, datetime.now(timezone.utc)))
+            heartbeat(heartbeat_fields(cache, datetime.now(timezone.utc)), audit_anchor_for_fleet())
         except FleetError as exc:
             _log("rights.sync", heartbeat="not_delivered", error=str(exc))
     return SYNC_EXIT[outcome]

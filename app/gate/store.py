@@ -97,6 +97,8 @@ def iso(moment: datetime) -> str:
 class GateStore:
     def __init__(self, db_path: str | None = None) -> None:
         self.db_path = db_path or get_db_path()
+        # Called after each committed audit entry (audit_anchor.Anchorer).
+        self.audit_listeners: list = []
         with self._connect() as conn:
             conn.executescript(SCHEMA)
             for table, columns in MIGRATIONS.items():
@@ -273,12 +275,31 @@ class GateStore:
             except BaseException:
                 conn.execute("ROLLBACK")
                 raise
+        for listener in list(self.audit_listeners):
+            try:
+                listener()
+            except Exception:  # noqa: BLE001 - anchoring must never fail a decision
+                pass
         return entry_hash
 
     def audit_entries(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM gate_audit ORDER BY seq").fetchall()
         return [dict(r) for r in rows]
+
+    def audit_heads(self) -> dict[int, str]:
+        """Position in the chain (1..n, by order, not by the seq column, which
+        a rewrite could renumber) -> entry hash. Position 0 is genesis."""
+        heads = {0: GENESIS}
+        for position, row in enumerate(self.audit_entries(), start=1):
+            heads[position] = row["entry_hash"]
+        return heads
+
+    def audit_head(self) -> tuple[int, str]:
+        with self._connect() as conn:
+            count = conn.execute("SELECT COUNT(*) AS n FROM gate_audit").fetchone()["n"]
+            row = conn.execute("SELECT entry_hash FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()
+        return count, row["entry_hash"] if row else GENESIS
 
     def verify_audit_chain(self) -> bool:
         prev = GENESIS
