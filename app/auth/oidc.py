@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -202,30 +203,40 @@ def _pkce_pair() -> tuple[str, str]:
 
 
 def _store_auth_state(
-    state: str, code_verifier: str, nonce: str | None = None, os_uid: int | None = None
+    state: str,
+    code_verifier: str,
+    nonce: str | None = None,
+    os_uid: int | None = None,
+    redirect_uri: str | None = None,
 ) -> None:
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO oidc_auth_states (state, code_verifier, nonce, created_at, os_uid)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (state, code_verifier, nonce, utc_now_iso(), os_uid),
+            "INSERT INTO oidc_auth_states (state, code_verifier, nonce, created_at, os_uid, redirect_uri)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (state, code_verifier, nonce, utc_now_iso(), os_uid, redirect_uri),
         )
 
 
 def _pop_auth_state(state: str, os_uid: int | None = None) -> tuple[str, str | None] | None:
+    found = pop_login_state(state, os_uid)
+    return None if found is None else (found["code_verifier"], found["nonce"])
+
+
+def pop_login_state(state: str, os_uid: int | None = None) -> dict[str, Any] | None:
     """Use a state once. With `os_uid`, only the OS user who started the login
     can complete it; another user's attempt does not consume it."""
     # One statement: a state can be used once, even by two concurrent callbacks.
     with get_connection() as conn:
         if os_uid is None:
             row = conn.execute(
-                "DELETE FROM oidc_auth_states WHERE state = ? RETURNING code_verifier, nonce, created_at",
+                "DELETE FROM oidc_auth_states WHERE state = ?"
+                " RETURNING code_verifier, nonce, created_at, redirect_uri",
                 (state,),
             ).fetchone()
         else:
             row = conn.execute(
                 "DELETE FROM oidc_auth_states WHERE state = ? AND os_uid = ?"
-                " RETURNING code_verifier, nonce, created_at",
+                " RETURNING code_verifier, nonce, created_at, redirect_uri",
                 (state, os_uid),
             ).fetchone()
         conn.commit()
@@ -234,25 +245,41 @@ def _pop_auth_state(state: str, os_uid: int | None = None) -> tuple[str, str | N
     created = datetime.strptime(row["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     if datetime.now(timezone.utc) - created > _STATE_TTL:
         return None
-    return (row["code_verifier"], row["nonce"])
+    return {"code_verifier": row["code_verifier"], "nonce": row["nonce"], "redirect_uri": row["redirect_uri"]}
 
 
-def start_oidc_login(os_uid: int | None = None) -> dict[str, str]:
+LOOPBACK_REDIRECT = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/callback$")
+
+
+def validate_loopback_redirect(redirect_uri: str) -> str:
+    """Desktop login (RFC 8252 §7.3): only the IPv4 loopback literal, an
+    explicit port and the fixed path. Anything else could send the code to
+    another host."""
+    match = LOOPBACK_REDIRECT.match(redirect_uri or "")
+    if not match or not 1024 <= int(match.group(1)) <= 65535:
+        raise ValueError("redirect_uri must be http://127.0.0.1:<port>/callback (port 1024-65535)")
+    return redirect_uri
+
+
+def start_oidc_login(os_uid: int | None = None, redirect_uri: str | None = None) -> dict[str, str]:
     """Build Entra authorize URL with PKCE state and nonce (live mode only).
-    `os_uid` binds the login to the OS user who started it."""
+    `os_uid` binds the login to the OS user who started it; `redirect_uri`
+    is the desktop app's loopback (validated) instead of the configured one."""
     cfg = load_oidc_config()
+    if redirect_uri is not None:
+        validate_loopback_redirect(redirect_uri)
     if cfg.mock_enabled:
         raise PermissionError("Mock mode active — use POST /v1/auth/oidc/mock-login")
 
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
     verifier, challenge = _pkce_pair()
-    _store_auth_state(state, verifier, nonce, os_uid)
+    _store_auth_state(state, verifier, nonce, os_uid, redirect_uri)
 
     params = {
         "client_id": cfg.client_id,
         "response_type": "code",
-        "redirect_uri": cfg.redirect_uri,
+        "redirect_uri": redirect_uri or cfg.redirect_uri,
         "response_mode": "query",
         "scope": cfg.scopes,
         "state": state,
@@ -389,13 +416,16 @@ def claims_from_id_token(id_token: str, cfg: OidcConfig | None = None, nonce: st
     }
 
 
-def exchange_code_for_tokens(code: str, code_verifier: str, cfg: OidcConfig | None = None) -> dict[str, Any]:
+def exchange_code_for_tokens(
+    code: str, code_verifier: str, cfg: OidcConfig | None = None, redirect_uri: str | None = None
+) -> dict[str, Any]:
     cfg = cfg or load_oidc_config()
     data: dict[str, str] = {
         "client_id": cfg.client_id,
         "scope": cfg.scopes,
         "code": code,
-        "redirect_uri": cfg.redirect_uri,
+        # Must be the same redirect_uri as in the authorize request.
+        "redirect_uri": redirect_uri or cfg.redirect_uri,
         "grant_type": "authorization_code",
         "code_verifier": code_verifier,
     }
