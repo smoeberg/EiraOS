@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import timedelta
 
-from app.auth.delegation import DelegationCreateRequest, DelegationScope
 from app.ipc.client import IpcClient
 
 
@@ -41,15 +41,10 @@ def main(argv=None) -> int:
     client = IpcClient("delegationd")
 
     if args.command == "create":
-        request = DelegationCreateRequest(
-            delegee_id=args.delegee,
-            scope=DelegationScope.model_validate(json.loads(args.scope)),
-            expires_in=_delta(args.expires_in),
-        )
-        result = client.call(
-            "delegation.create",
-            {**request.model_dump(mode="json"), "session_id": args.session_id},
-        )
+        # EIRA-DELEGATION-1.0: giving the model power is a decision and takes
+        # the trusted path (a proof only the desktop app can make).
+        print("Delegation gives fra EiraOS-appen, ikke fra kommandolinjen.", file=sys.stderr)
+        return 2
     elif args.command == "revoke":
         result = client.call(
             "delegation.revoke",

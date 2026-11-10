@@ -20,7 +20,7 @@
 
 use hmac::{Hmac, Mac};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::Sha256;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -277,7 +277,7 @@ pub fn consent_proof(
     content_hash: &str,
     rendering_hash: &str,
 ) -> Result<String, String> {
-    if verb != "consent" && verb != "confirm" {
+    if verb != "consent" && verb != "confirm" && verb != "delegate" {
         return Err(format!("unknown verb {verb}"));
     }
     let uid = uid.to_string();
@@ -303,6 +303,32 @@ pub fn consent_proof(
         .collect())
 }
 
+/// The held session id and a proof for one decision, made with the held key.
+fn sign(
+    verb: &str,
+    action_id: &str,
+    content_hash: &str,
+    rendering_hash: &str,
+) -> Result<(String, String), String> {
+    let held = HELD.lock().map_err(|_| "consent key store poisoned")?;
+    let held = held.as_ref().ok_or("not logged in")?;
+    #[cfg(unix)]
+    // SAFETY: getuid has no preconditions and cannot fail.
+    let uid = unsafe { libc::getuid() };
+    #[cfg(not(unix))]
+    let uid: u32 = return Err("the trusted consent path needs a Unix user id".into());
+    let proof = consent_proof(
+        &held.consent_key,
+        verb,
+        uid,
+        &held.session_id,
+        action_id,
+        content_hash,
+        rendering_hash,
+    )?;
+    Ok((held.session_id.clone(), proof))
+}
+
 /// One decision from the user, signed with the held key and sent to the gate.
 async fn decide(
     verb: &str,
@@ -310,30 +336,36 @@ async fn decide(
     content_hash: String,
     rendering_hash: String,
 ) -> Result<Value, String> {
-    let (session_id, proof) = {
-        let held = HELD.lock().map_err(|_| "consent key store poisoned")?;
-        let held = held.as_ref().ok_or("not logged in")?;
-        #[cfg(unix)]
-        // SAFETY: getuid has no preconditions and cannot fail.
-        let uid = unsafe { libc::getuid() };
-        #[cfg(not(unix))]
-        let uid: u32 = return Err("the trusted consent path needs a Unix user id".into());
-        let proof = consent_proof(
-            &held.consent_key,
-            verb,
-            uid,
-            &held.session_id,
-            &action_id,
-            &content_hash,
-            &rendering_hash,
-        )?;
-        (held.session_id.clone(), proof)
-    };
+    let (session_id, proof) = sign(verb, &action_id, &content_hash, &rendering_hash)?;
     crate::ipc::send_ipc_request(
         "intentd".into(),
         format!("gate.{verb}"),
         json!({
             "action_id": action_id,
+            "content_hash": content_hash,
+            "rendering_hash": rendering_hash,
+            "session_id": session_id,
+            "proof": proof,
+        }),
+    )
+    .await
+}
+
+/// The user lets the model prepare actions on their behalf, exactly as the
+/// shown text says (EIRA-DELEGATION-1.0). Same trusted path as consent: only
+/// this process holds the key, so no other program can delegate.
+#[tauri::command]
+pub async fn delegation_create(
+    proposal_id: String,
+    content_hash: String,
+    rendering_hash: String,
+) -> Result<Value, String> {
+    let (session_id, proof) = sign("delegate", &proposal_id, &content_hash, &rendering_hash)?;
+    crate::ipc::send_ipc_request(
+        "delegationd".into(),
+        "delegation.create".into(),
+        json!({
+            "proposal_id": proposal_id,
             "content_hash": content_hash,
             "rendering_hash": rendering_hash,
             "session_id": session_id,
@@ -459,9 +491,11 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let waiter = tokio::spawn(async move { await_callback(&listener, STATE).await });
         assert!(get(port, "/favicon.ico").await.starts_with("HTTP/1.1 404"));
-        assert!(get(port, "/callback?code=stolen&state=guess")
-            .await
-            .starts_with("HTTP/1.1 404"));
+        assert!(
+            get(port, "/callback?code=stolen&state=guess")
+                .await
+                .starts_with("HTTP/1.1 404")
+        );
         let page = get(port, &format!("/callback?code=the-code&state={STATE}")).await;
         assert!(page.starts_with("HTTP/1.1 200") && page.contains("logget ind"));
         assert_eq!(waiter.await.unwrap(), Ok("the-code".to_string()));

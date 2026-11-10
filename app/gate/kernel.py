@@ -58,8 +58,15 @@ class Gate:
         consent_ttl: timedelta = DEFAULT_CONSENT_TTL,
         boot_clock: Callable[[], BootInstant] = boot_now,
         rights: RightsCache | None = None,
+        delegations: Any = None,
     ) -> None:
         self.store = store or GateStore()
+        if delegations is None:
+            from app.auth.delegation import DelegationService
+
+            delegations = DelegationService()
+        # Who may let the model prepare (EIRA-DELEGATION-1.0); tests inject.
+        self._delegations = delegations
         self._registry = registry if registry is not None else default_registry(self.store.db_path)
         if sessions is None:
             from app.session_store import get_session_for_gate as get_session
@@ -310,23 +317,29 @@ class Gate:
             )
         check_limits(policy, action["action"]["content"])
         self._domain(action, actor)
-        # A model may propose only when a human has explicitly delegated the
-        # prepare capability for this action type. Consent/confirm remain
-        # human-only in grant_consent() and confirm().
+        # A model may propose only under a delegation from this human
+        # (bilag A pkt. 1, EIRA-DELEGATION-1.0). Consent and confirmation
+        # stay human-only in grant_consent() and confirm().
         caller = current_caller()
         if origin is Origin.MODEL and caller is not None and caller.model:
-            from app.auth.delegation import DelegationService
-            from app.gate.caller import model_identity
-            delegee = model_identity(caller)
-            delegation_target = f"intent:{policy.action_type}"
-            delegation = DelegationService().delegation_for(delegee or "", "prepare", delegation_target)
-            if delegation is None or delegation.delegator_id != actor["identity"]:
-                raise LayerFailure(GateCode.E_UNAUTHORIZED, "no active delegation for this model and action")
-            try:
-                DelegationService().record_use(delegation, action["id"], "prepare", delegation_target)
-            except Exception as exc:
-                raise LayerFailure(GateCode.E_UNAUTHORIZED, "delegation audit unavailable") from exc
+            self._delegation(policy, actor, caller)
         return action, policy
+
+    def _delegation(self, policy, actor: dict[str, Any] | None, caller) -> None:
+        """Lag 4 for a model proposal. The delegation used is recorded in the
+        gate's own audit chain with the decision (no second audit system on
+        the decision path, and nothing to fail open)."""
+        from app.gate.caller import model_identity
+
+        delegee = model_identity(caller)
+        target = f"intent:{policy.action_type}"
+        found = None
+        if actor is not None and delegee:
+            found = self._delegations.delegation_for(delegee, "prepare", target, delegator=actor["identity"])
+        if found is None:
+            raise LayerFailure(GateCode.E_UNAUTHORIZED, "no active delegation for this model and action")
+        _DELEGATION.set({"delegation_id": found.id, "delegator": found.delegator_id,
+                         "delegee": delegee, "target": target})
 
     def _domain(self, action: dict[str, Any], actor: dict[str, Any] | None) -> None:
         """Lag 4, the user's domain (RIGHTS-SET §6, CONVERSATION-1.0 §3.2).
@@ -736,6 +749,8 @@ class Gate:
                 # Which process asked (SO_PEERCRED), so audit and SIEM can tell
                 # the model from the user (bilag A pkt. 1).
                 "caller": _caller_audit(),
+                # Which delegation let the model propose (None for humans).
+                "delegation": _DELEGATION.get(),
                 **_rights_audit(),
             }
         )
@@ -780,6 +795,9 @@ def _boot_instant(consent: dict[str, Any]) -> BootInstant | None:
 # Set by layer 6 for the audit entry of the same call. Context variables are
 # per thread and per task, so concurrent requests never see each other's.
 _RIGHTS: contextvars.ContextVar[ActiveRights | None] = contextvars.ContextVar("gate_rights", default=None)
+_DELEGATION: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "gate_delegation", default=None
+)
 _DECISION: contextvars.ContextVar[contract.Decision | None] = contextvars.ContextVar(
     "gate_rights_decision", default=None
 )
@@ -803,6 +821,7 @@ def _model_is_calling() -> bool:
 def _reset_rights() -> None:
     _RIGHTS.set(None)
     _DECISION.set(None)
+    _DELEGATION.set(None)
 
 
 def action_key(action_type: str) -> str:

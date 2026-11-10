@@ -16,7 +16,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.auth.delegation import DelegationCreateRequest, DelegationScope, DelegationService
+from app.auth.delegation import (
+    DelegationCreateRequest,
+    DelegationRepository,
+    DelegationScope,
+    DelegationService,
+)
 from app.gate import Decision, Gate, GateCode
 from app.gate import policy as gate_policy
 from app.gate.caller import acting_as, model_identity
@@ -113,8 +118,8 @@ def world(tmp_path, monkeypatch):
     boot = BootClock()
     fleet = TestFleet(tmp_path / "rights", clock, boot_clock=boot)
     fleet.grant(CONV, principal=ANNE).publish()
-    monkeypatch.setattr(DelegationService, "record_use", lambda self, delegation, action_id, action, target: None)
-    delegation = DelegationService()
+    # Anne lets the model prepare (EIRA-DELEGATION-1.0); its own database.
+    delegation = DelegationService(DelegationRepository(tmp_path / "app.db"))
     with patch.object(delegation, "_audit"):
         delegation.create_delegation(
             ANNE,
@@ -124,7 +129,8 @@ def world(tmp_path, monkeypatch):
             ),
         )
     gate = ProvingGate(Gate(
-        store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot, rights=fleet.cache
+        store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot, rights=fleet.cache,
+        delegations=delegation,
     ), sessions.get)
 
     class World:
@@ -132,7 +138,7 @@ def world(tmp_path, monkeypatch):
 
     w = World()
     w.db, w.store, w.sessions, w.clock, w.gate = db, store, sessions, clock, gate
-    w.boot, w.fleet = boot, fleet
+    w.boot, w.fleet, w.delegation = boot, fleet, delegation
     return w
 
 
@@ -650,7 +656,7 @@ def test_crash_between_outbox_and_gate_result_is_recovered_once(world, monkeypat
     restarted = ProvingGate(Gate(
         world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
         boot_clock=world.boot,  # daemon restart, same boot
-        rights=world.fleet.cache,
+        rights=world.fleet.cache, delegations=world.delegation,
     ), world.sessions.get)
     assert restarted.gate_state(env["id"]) == "executed"
     again = restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
@@ -672,7 +678,7 @@ def test_crash_before_the_outbox_write_returns_the_action_to_pending(world, monk
     restarted = ProvingGate(Gate(
         world.store, default_registry(world.db), sessions=world.sessions.get, clock=world.clock,
         boot_clock=world.boot,  # daemon restart, same boot
-        rights=world.fleet.cache,
+        rights=world.fleet.cache, delegations=world.delegation,
     ), world.sessions.get)
     assert restarted.gate_state(env["id"]) == "pending"
     assert restarted.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").decision is Decision.PASS
@@ -688,7 +694,7 @@ def test_recovery_without_proof_is_unknown_never_success(world, monkeypatch):
     monkeypatch.undo()
     restarted = ProvingGate(Gate(
         world.store, _registry_with(world, _PartialExecutor()), sessions=world.sessions.get,
-        rights=world.fleet.cache,
+        rights=world.fleet.cache, delegations=world.delegation,
     ), world.sessions.get)
     assert restarted.gate_state(env["id"]) == "unknown"
 

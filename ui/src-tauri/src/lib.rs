@@ -10,7 +10,9 @@ mod system_api_commands {
     //! The one Tauri entry point for EiraSystemAPI v1. The operation set is
     //! closed and validated in Rust (system_api::SystemApi::handle).
 
-    use crate::system_api::{power::DbusPowerAdapter, EiraRequest, EiraResponse, SystemApi, UnavailablePower};
+    use crate::system_api::{
+        EiraRequest, EiraResponse, SystemApi, UnavailablePower, power::DbusPowerAdapter,
+    };
     use tauri::State;
     use tokio::sync::OnceCell;
 
@@ -225,6 +227,7 @@ pub fn run() {
                 login::desktop_logout,
                 login::gate_consent,
                 login::gate_confirm,
+                login::delegation_create,
                 system_api_commands::eira_system,
                 terminal_commands::terminal_create,
                 terminal_commands::terminal_write,
@@ -235,7 +238,10 @@ pub fn run() {
     };
 
     #[cfg(not(unix))]
-    let builder = builder.invoke_handler(tauri::generate_handler![ipc::send_ipc_request, login::desktop_login]);
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        ipc::send_ipc_request,
+        login::desktop_login
+    ]);
 
     builder
         .run(tauri::generate_context!())

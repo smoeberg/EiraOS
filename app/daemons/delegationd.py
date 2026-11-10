@@ -1,4 +1,22 @@
+"""eira-delegationd: "på vegne af" over IPC (EIRA-DELEGATION-1.0).
+
+Creating a delegation is a decision and follows the gate's trusted path:
+
+1. ``delegation.propose`` validates the request and returns the exact text the
+   user will approve (``rendering``) with its hash and the content hash.
+2. ``delegation.create`` needs a proof made with the session's consent key
+   (``app/gate/consent_proof.py``, verb ``delegate``). Only the desktop app's
+   Rust core holds that key, so another program running as the user, even
+   with the session id, cannot delegate.
+
+Revoking needs only the user's own session: it takes power away.
+"""
+
 from __future__ import annotations
+
+from typing import Any
+
+from pydantic import ValidationError
 
 from app.auth.delegation import (
     DelegationCheckRequest,
@@ -6,43 +24,83 @@ from app.auth.delegation import (
     DelegationRevokeRequest,
     DelegationService,
 )
-from app.gate.caller import from_peer
+from app.gate import consent_proof
+from app.gate.caller import Caller, from_peer, model_identity
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 
 _SERVICE = DelegationService()
 
+NO_CALLER = -32001
+NOT_ALLOWED = -32003
+BAD_PROOF = -32004
 
-def _caller(params):
+
+def _caller(params: dict[str, Any]) -> Caller:
     caller = from_peer(params.pop(PEER_KEY, None))
     if caller is None:
-        raise JsonRpcError(-32001, "No caller context")
+        raise JsonRpcError(NO_CALLER, "No caller context")
     return caller
 
 
-def _identity(caller, session_id):
-    if caller.model or not session_id:
-        raise JsonRpcError(-32003, "Authenticated human session required")
+def _session(caller: Caller, session_id: Any) -> dict[str, Any]:
+    if caller.model or not isinstance(session_id, str) or not session_id:
+        raise JsonRpcError(NOT_ALLOWED, "Authenticated human session required")
 
     from app.session_store import get_session_for_gate
 
     session = get_session_for_gate(session_id)
     if not session or not session.get("authenticated_at"):
-        raise JsonRpcError(-32003, "Invalid authenticated session")
+        raise JsonRpcError(NOT_ALLOWED, "Invalid authenticated session")
     if session.get("os_uid") is None or int(session["os_uid"]) != caller.uid:
-        raise JsonRpcError(-32003, "Session is not bound to this OS user")
+        raise JsonRpcError(NOT_ALLOWED, "Session is not bound to this OS user")
+    return session
+
+
+def _identity(session: dict[str, Any]) -> str:
     return str(session.get("identity") or session.get("actor_id") or "")
 
 
-def register_delegation_handlers(server):
-    def create(params):
+def _text(params: dict[str, Any], name: str) -> str:
+    value = params.get(name)
+    if not isinstance(value, str) or not value:
+        raise JsonRpcError(-32602, f"{name} is required")
+    return value
+
+
+def register_delegation_handlers(server, service: DelegationService | None = None) -> None:
+    svc = service or _SERVICE
+
+    def propose(params: dict[str, Any]) -> dict[str, Any]:
         caller = _caller(params)
-        delegator = _identity(caller, params.get("session_id"))
-        request = DelegationCreateRequest.model_validate(params)
+        session = _session(caller, params.get("session_id"))
         try:
-            delegation = _SERVICE.create_delegation(delegator, request)
+            request = DelegationCreateRequest.model_validate(
+                {k: v for k, v in params.items() if k not in ("session_id", "_eira")}
+            )
+            return svc.propose_delegation(_identity(session), params["session_id"], request)
+        except ValidationError as error:
+            raise JsonRpcError(-32602, "invalid delegation request", {"errors": error.errors()}) from None
+        except (PermissionError, ValueError) as error:
+            raise JsonRpcError(NOT_ALLOWED, str(error)) from None
+
+    def create(params: dict[str, Any]) -> dict[str, Any]:
+        caller = _caller(params)
+        session = _session(caller, params.get("session_id"))
+        proposal_id = _text(params, "proposal_id")
+        content_hash = _text(params, "content_hash")
+        rendering_hash = _text(params, "rendering_hash")
+        if not consent_proof.verify(
+            session.get("consent_key"), params.get("proof"), "delegate", caller.uid,
+            params["session_id"], proposal_id, content_hash, rendering_hash,
+        ):
+            raise JsonRpcError(BAD_PROOF, "E_CONSENT_PROOF",
+                               {"user_message": "Delegation kan kun gives fra EiraOS-appen."})
+        try:
+            delegation = svc.activate(_identity(session), params["session_id"], proposal_id,
+                                      content_hash, rendering_hash)
         except (PermissionError, ValueError, RuntimeError) as error:
-            raise JsonRpcError(-32003, str(error)) from error
+            raise JsonRpcError(NOT_ALLOWED, str(error)) from None
         return {
             "status": "created",
             "delegation_id": delegation.id,
@@ -52,33 +110,32 @@ def register_delegation_handlers(server):
             "expires_at": delegation.expires_at.isoformat(),
         }
 
-    create.wants_peer = True
-
-    def revoke(params):
+    def revoke(params: dict[str, Any]) -> dict[str, Any]:
         caller = _caller(params)
-        delegator = _identity(caller, params.get("session_id"))
+        session = _session(caller, params.get("session_id"))
         try:
-            success = _SERVICE.revoke_delegation(
-                DelegationRevokeRequest(delegation_id=str(params["delegation_id"])),
-                delegator,
+            success = svc.revoke_delegation(
+                DelegationRevokeRequest(delegation_id=_text(params, "delegation_id")), _identity(session)
             )
         except (PermissionError, ValueError, RuntimeError) as error:
-            raise JsonRpcError(-32003, str(error)) from error
+            raise JsonRpcError(NOT_ALLOWED, str(error)) from None
         return {"status": "revoked" if success else "not_found"}
 
-    revoke.wants_peer = True
-
-    def check(params):
-        return {
-            "valid": _SERVICE.check_delegation(
-                DelegationCheckRequest.model_validate(params)
-            )
-        }
-
-    def listing(params):
+    def check(params: dict[str, Any]) -> dict[str, Any]:
+        # The model may ask about itself; a human about any model. Nobody
+        # anonymous learns which delegations exist.
         caller = _caller(params)
-        delegator = _identity(caller, params.get("session_id"))
-        rows = _SERVICE.repo.active_for_delegator(delegator)
+        request = DelegationCheckRequest.model_validate(
+            {k: params.get(k) for k in ("delegee_id", "action", "target")}
+        )
+        if caller.model and request.delegee_id != model_identity(caller):
+            raise JsonRpcError(NOT_ALLOWED, "a model may only check its own delegations")
+        return {"valid": svc.check_delegation(request)}
+
+    def listing(params: dict[str, Any]) -> dict[str, Any]:
+        caller = _caller(params)
+        session = _session(caller, params.get("session_id"))
+        rows = svc.repo.active_for_delegator(_identity(session))
         return {
             "delegations": [
                 {
@@ -92,13 +149,11 @@ def register_delegation_handlers(server):
             ]
         }
 
-    listing.wants_peer = True
-
+    for handler in (propose, create, revoke, check, listing):
+        handler.wants_peer = True
+    server.register("delegation.propose", propose)
     server.register("delegation.create", create)
     server.register("delegation.revoke", revoke)
     server.register("delegation.check", check)
     server.register("delegation.list", listing)
-    server.register(
-        "health",
-        lambda _: {"daemon": "eira-delegationd", "ok": True},
-    )
+    server.register("health", lambda _: {"daemon": "eira-delegationd", "ok": True})
