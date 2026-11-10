@@ -334,6 +334,28 @@ def authorize(
     return Decision(False, "no_grant")
 
 
+def has_any_grant(
+    rights_set: Mapping[str, Any] | None,
+    *,
+    principal: str,
+    groups: Iterable[str],
+    scope: str,
+    now: datetime,
+) -> bool:
+    """§6, the domain of ``device:local``: at least one live grant on the scope
+    for the principal, whatever the action. Which action is allowed is still
+    ``authorize``'s decision."""
+    if rights_set is None or now >= _ts(rights_set["expires_at"]):
+        return False
+    member = frozenset(groups)
+    return any(
+        _live(entry, now)
+        and _scope_matches(entry["scope"], scope)
+        and _subject_matches(entry["subject"], principal, member)
+        for entry in rights_set["grants"]
+    )
+
+
 def stricter_assurance(policy: str, grant: str | None) -> str:
     """§2.2: a grant can raise the policy's requirement, never lower it."""
     from app.gate.policy import ASSURANCE_RANK

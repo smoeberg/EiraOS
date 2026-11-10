@@ -24,6 +24,7 @@ from app.gate.executors import (
     Executor,
     ExecutorRegistry,
     ExecutorResult,
+    ExecutorUnavailable,
     GateTicket,
     default_registry,
 )
@@ -240,7 +241,8 @@ def test_forbidden_action_and_parameters_are_rejected_as_policy(world):
         "value_transfer_requested", {"amount": {"value": "250000.00", "currency": "DKK"}}, id="dlg-big"
     )
     assert world.gate.propose(raw(big), "s-anne", Origin.USER).code is GateCode.E_POLICY
-    # A conversation outside the user's domain.
+    # A conversation outside the user's domain: others are its members.
+    world.store.add_member("obj:sag:99", BO)
     other = envelope(conversation_id="obj:sag:99", id="dlg-other")
     assert world.gate.propose(raw(other), "s-anne", Origin.MODEL).code is GateCode.E_POLICY
 
@@ -397,6 +399,13 @@ def test_executor_cannot_be_called_directly(world):
     ticket = registry.issue(env["id"], "sha256:x", "exec-1")
     with pytest.raises(DirectCallRejected):
         registry.call(ticket, env | {"id": "dlg-other"}, "sha256:x")
+    # Even with a valid ticket, the executor writes nothing for an action the
+    # gate has no record of (the conversation layer needs its author).
+    with pytest.raises(ExecutorUnavailable):
+        registry.call(ticket, env, "sha256:x")
+    assert outbox(world) == []
+    world.gate.propose(raw(env), "s-anne", Origin.MODEL)
+    ticket = registry.issue(env["id"], "sha256:x", "exec-1")
     registry.call(ticket, env, "sha256:x")
     with pytest.raises(DirectCallRejected):
         registry.call(ticket, env, "sha256:x")
