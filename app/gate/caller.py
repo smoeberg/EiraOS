@@ -19,11 +19,11 @@ def model_identity(caller=None):
 class ModelIdentityMissing(RuntimeError):pass
 def require_model_identity():
     uid=model_uid()
-    if uid is None: raise ModelIdentityMissing(f"system user {MODEL_USER!r} does not exist")
-    if uid>=1000: raise ModelIdentityMissing(f"{MODEL_USER!r} has uid {uid}, not a system uid")
+    if uid is None:raise ModelIdentityMissing(f"system user {MODEL_USER!r} does not exist")
+    if uid>=1000:raise ModelIdentityMissing(f"{MODEL_USER!r} has uid {uid}, not a system uid")
     try:
-        if uid==pwd.getpwnam("eira").pw_uid: raise ModelIdentityMissing("model user shares daemon uid")
-    except KeyError: pass
+        if uid==pwd.getpwnam("eira").pw_uid:raise ModelIdentityMissing("model user shares daemon uid")
+    except KeyError:pass
     return uid
 def installed():
     from app.ipc.paths import run_dir
