@@ -1,7 +1,7 @@
-# EIRA Consent Agent 0.1 — betroet vej til samtykke mod programmer, der kører som brugeren
+# EIRA Consent Agent 0.2 — betroet vej til samtykke mod programmer, der kører som brugeren
 
 **Status:** Udkast til ejerens accept. **Ikke normativ**, før ejeren har accepteret det. Testplanen er et separat trin efter accept.
-**Version:** 0.1 (10. november 2026)
+**Version:** 0.2 (10. november 2026: 0.2 beslutninger om compositor, toolkit, FIDO2 og `hidepid`, §6, §10)
 **Lukker:** "Rest" under GATE-KERNEL bilag A pkt. 1, *Betroet vej til samtykke*
 **Erstatter:** Agent 3-opgaven "LD_PRELOAD Consent Path" i `docs/AGENT_WORK_ASSIGNMENTS.md` (se §2)
 **Berører:** `identityd`, Gate (`intentd`, lag 5), Tauri-appen (`ui/src-tauri`), sessionen (`eira-session`, labwc-konfiguration), pakken (`eira-os-core`), ADR-0003
@@ -77,6 +77,7 @@ Agenten forbinder til sin compositor (`WAYLAND_DISPLAY` under `XDG_RUNTIME_DIR`)
 - R-5.2 Den bruger en font, der følger med pakken, og ignorerer `FONTCONFIG_*`, locale-variabler og temaer. Ellers kan en angriber få teksten til at se ud som noget andet.
 - R-5.3 Den lukker alle arvede fd'er ud over 0–2 ved start, åbner alt med `O_CLOEXEC` og sender aldrig fd'er videre (SCM_RIGHTS), så en forbindelse med agentens GID ikke kan lånes ud.
 - R-5.4 Den tager ingen argumenter ud over `--version`.
+- R-5.5 Den er bygget på `smithay-client-toolkit` (kun Wayland, ingen X11), `softbuffer` og `fontdue` med en font, der følger med pakken. Den linker hverken mod GTK, fontconfig, D-Bus eller et webview. Pakketesten tjekker det med `ldd`/`readelf` på den byggede binære fil.
 
 ### 5.3 Login
 
@@ -110,11 +111,20 @@ Setgid beskytter nøglen. Det beskytter **ikke** det, brugeren ser og klikker p�
 - **klikke for brugeren** gennem Wayland-protokollerne `zwlr_virtual_pointer_manager_v1` og `zwp_virtual_keyboard_manager_v1`, hvis compositoren udbyder dem;
 - **lægge et vindue oven på agenten** (layer-shell `overlay`), der viser én tekst, mens klik går igennem til agentens knap (clickjacking).
 
-De to sidste kan kun compositoren lukke. Det er et **krav for udgivelse**, ikke en anbefaling, og det åbne spørgsmål O-2 afgør hvordan:
+De to sidste kan kun compositoren lukke. Det er **krav for udgivelse**:
 
-- R-6.1 Den leverede compositor udbyder ikke virtual pointer, virtual keyboard eller input-method til almindelige klienter.
+- R-6.1 Ingen klient får `zwlr_virtual_pointer_manager_v1`, `zwp_virtual_keyboard_manager_v1`, `zwp_input_method_manager_v2`, `zwlr_layer_shell_v1`, `zwlr_screencopy_manager_v1`, `ext_image_copy_capture_manager_v1`, `zwlr_export_dmabuf_manager_v1`, data-control eller foreign-toplevel. Dermed kan en angriber hverken klikke for brugeren, lægge et overlay over agenten eller se agentens vindue.
 - R-6.2 Mens agentens vindue vises, ligger intet andet vindue over det, og agenten har tastaturfokus.
 - R-6.3 Agenten tager først imod en beslutning, når vinduet har været vist og haft fokus uafbrudt i mindst 750 ms. Det dæmper "flyt vinduet ind under et klik".
+
+### 6.1 Sådan opfyldes R-6.1 og R-6.2 (besluttet i 0.2)
+
+**EiraOS leverer sin egen compositor-pakke, `eira-labwc`**, i stedet for Ubuntus. Ubuntu 26.04 har labwc 0.9.3, som ikke kan begrænse protokollerne.
+
+- **Version:** labwc ≥ 0.20.3 med den wlroots 0.20, den kræver. `<privilegedInterfaces>` findes fra 0.20.0, men logikken ("første `<privilegedInterfaces>` slår alle fra, `<allow>` tilføjer") blev først rigtig i 0.20.3. `eira-labwc` erstatter (`Conflicts`/`Replaces`) Ubuntus `labwc`, og `eira-session` kalder den med fuld sti.
+- **R-6.1 med konfiguration alene:** Den leverede `rc.xml` indeholder en tom `<privilegedInterfaces/>`. Den skjuler alle privilegerede protokoller for alle klienter. Ingen EiraOS-klient har brug for dem: appen er et fullscreen-vindue (`tauri.conf.json`), og agenten er et almindeligt `xdg_toplevel`. `<shell>layer-shell</shell>` i dagens `rc.xml` er ikke en labwc-indstilling og fjernes.
+- **R-6.2 med en lille patch:** labwc kender hver klients effektive GID gennem `wl_client_get_credentials` (SO_PEERCRED på klientens forbindelse). Patchen gør tre ting for klienter med `gid = eira-consent` og kun for dem: deres vinduer lægges i et eget scenetræ over alle andre lag, inklusive fullscreen og `overlay`; de får tastaturfokus, når de vises; og andre klienter kan ikke aktivere sig selv eller tage fokus, så længe et sådant vindue findes. GID'en angives i `rc.xml` (fx `<core><trustedGroup>eira-consent</trustedGroup></core>`), så patchen er generel og kan foreslås upstream. Indtil den er accepteret, vedligeholder EiraOS den selv. Patchen ligger i `packaging/eira-labwc/patches/` med en test pr. punkt.
+- **Konsekvens for Builder Mode (P4):** Et panel kræver layer-shell. Det må kun gives tilbage gennem en mekanisme, der begrænser protokollen til en bestemt klient (også efter GID), aldrig ved at tilføje `<allow>zwlr_layer_shell_v1</allow>` globalt.
 
 ## 7. Fejlkoder
 
@@ -133,6 +143,8 @@ Hver kode har sin egen audit-post, så SIEM og Fleet kan alarmere på dem. `E_CO
 - `app/auth/login.py`: `login_complete` returnerer ikke længere `consent_key`.
 - `app/gate/kernel.py`: lag 5 tjekker peer-GID før beviset.
 - `packaging/`: ny gruppe `eira-consent` (postinst, uden medlemmer), agenten installeres `root:eira-consent 2755`, labwc-autostart starter agenten før appen, og AppArmor-profil til agenten.
+- `packaging/eira-labwc/`: ny kildepakke (labwc ≥ 0.20.3 + wlroots 0.20 + patchen fra §6.1). `eira-os-core` afhænger af den.
+- `packaging/session/config/labwc/rc.xml`: tom `<privilegedInterfaces/>`, `<trustedGroup>eira-consent</trustedGroup>`, og `<shell>layer-shell</shell>` fjernes. En pakketest kræver, at blokken findes og er tom.
 - **ADR-0003** får en præcis sætning i stedet for "lover ikke beskyttelse mod programmer, der kører som dig": *Et program, der kører som brugeren, kan ikke samtykke eller bekræfte. Det kan forsinke brugerens samtykke (ved at dræbe agenten), men ikke samtykke i hans sted.* Sætningen gælder først, når R-6.1–R-6.3 er opfyldt.
 - `docs/AGENT_WORK_ASSIGNMENTS.md`: Agent 3-opgaven erstattes af en henvisning hertil.
 
@@ -143,17 +155,23 @@ Hver kode har sin egen audit-post, så SIEM og Fleet kan alarmere på dem. `E_CO
 - **En kompromitteret compositor.** Labwc kører som brugeren. Det beskyttes kun af, at den startes fra en root-ejet konfiguration og ikke kan ptraces af sine efterkommere (Yama ≥ 1). Beskyttelse ud over det kræver O-3.
 - **Phishing**, hvor brugeren selv samtykker til noget, han ikke forstår. Det er gengivelsens opgave (bilag A pkt. 3).
 
-## 10. Åbne spørgsmål til ejeren
+## 10. Beslutninger og åbne spørgsmål
 
-- **O-1 UI-toolkit til agenten.** Den må ikke bruge GTK. Kandidater er `winit` + `softbuffer` med egen tekstgengivelse (mindst flade, mest arbejde) og `slint` eller `iced` uden GTK-backend (hurtigere, større afhængighedstræ i en setgid-binær). *Min anbefaling:* den mindste flade. Agenten viser én tekst og to knapper.
-- **O-2 Compositor-garantier (R-6.1, R-6.2).** Det skal undersøges, om labwc kan slå virtual-input-protokollerne fra og forbeholde `overlay` for én klient via konfiguration. Hvis ikke, er valget mellem en lille, vedligeholdt patch til labwc og en anden compositor (`cage` til single-app-tilstand har samme spørgsmål). Det skal afgøres, før agenten bygges, fordi det afgør, om løftet i ADR-0003 kan gives.
-- **O-3 Fysisk tilstedeværelse til handlinger med høj værdi.** Det eneste, der også holder mod en kompromitteret compositor, er en faktor uden for sessionen, fx FIDO2-berøring med `rendering_hash` i udfordringen. Spørgsmålet er, om det skal være krav for betaling og step-up (lag 6), eller om det skal ligge uden for 1.0.
-- **O-4 `hidepid`.** Hvis `/proc` monteres med `hidepid=2`, kan `identityd` ikke læse `stat` og `loginuid` for brugerprocesser. Derfor: dokumentér, at EiraOS ikke bruger `hidepid`, eller giv `identityd` gruppen fra `gid=`-mount-option.
+### Besluttet i 0.2
+
+- **O-1 Toolkit:** den mindste flade, se R-5.5. Agenten viser én tekst og to knapper og har ikke brug for mere.
+- **O-2 Compositor:** egen `eira-labwc` ≥ 0.20.3 med tom `<privilegedInterfaces/>` (R-6.1) og en lille, generel patch til en betroet gruppe (R-6.2), se §6.1.
+- **O-3 Fysisk tilstedeværelse:** ikke i 1.0. Senere kan en FIDO2-udfordring tilføjes uden brud, fordi den kan laves over samme besked som beviset (`message(...)` i `consent_proof.py`, som allerede indeholder `rendering_hash`). Agenten er det naturlige sted at kalde nøglen.
+- **O-4 `hidepid`:** EiraOS monterer ikke `/proc` med `hidepid`. Kan `identityd` ikke læse `stat`, `loginuid` eller `sessionid` for en peer, afvises registreringen (`E_CONSENT_AGENT`). Det fejler lukket, aldrig åbent.
+
+### Stadig åbne
+
 - **O-5 Flere sessioner pr. bruger** (fx fjernskrivebord). Kontrakten antager én logind-session med én compositor pr. Eira-session.
-- **O-6 Compositorens forælder.** §5.2 pkt. 3 antager, at greetd's sessionsproces er logind-leaderen og selv starter `eira-session`, som `exec`'er labwc. Det skal verificeres i VM'en (`LEADER=` mod labwc's ppid). Hvis der ligger et led imellem, skal reglen være "første labwc-efterkommer af leaderen, der kører `/usr/bin/labwc`", og det kræver en anden måde at se exe på end `/proc/<pid>/exe`.
+- **O-6 Compositorens forælder.** §5.2 pkt. 3 antager, at greetd's sessionsproces er logind-leaderen og selv starter `eira-session`, som `exec`'er labwc. Det skal verificeres i VM'en (`LEADER=` mod labwc's ppid), før testplanen skrives. Hvis der ligger et led imellem, skal reglen være "første labwc-efterkommer af leaderen", og det kræver en anden måde at se exe på end `/proc/<pid>/exe`.
+- **O-7 Upstream.** Skal patchen fra §6.1 foreslås til labwc nu eller først efter en VM-verificeret version? Det ændrer ikke kontrakten, kun vedligeholdelsen.
 
 ## 11. Næste skridt
 
-1. Ejeren accepterer, retter eller afviser denne kontrakt og tager stilling til O-1 og O-2.
+1. Ejeren accepterer, retter eller afviser denne kontrakt (v0.2). O-6 verificeres i VM.
 2. Testplan som separat dokument: én test pr. krav i §3, §5.2 (inkl. R-5.1–R-5.4), §5.3, §6 og §7, med mutationstjek som i bilag A, plus VM-tests for setgid- og ptrace-garantierne.
-3. Implementering i tre PR'er: (a) gruppe, forudsætningstjek og `E_CONSENT_PATH` i gaten, (b) `identityd`-registrering og nøgleudlevering, (c) agenten og flytning af beviset ud af appen.
+3. Implementering i tre PR'er: (a) gruppe, forudsætningstjek og `E_CONSENT_PATH` i gaten, (b) `identityd`-registrering og nøgleudlevering, (c) `eira-labwc` med konfiguration og patch, (d) agenten og flytning af beviset ud af appen. (c) kan begynde straks, fordi R-6.1 er ren konfiguration og gør systemet bedre også uden agenten.
