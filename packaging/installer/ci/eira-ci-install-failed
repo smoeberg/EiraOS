@@ -1,0 +1,21 @@
+#!/bin/sh
+# CI only: runs from the installer's error-commands when the unattended
+# install fails, and writes what is needed to diagnose it to the serial
+# console (the workflow prints it).
+out=/dev/ttyS0
+{
+    echo "EIRA-CI INSTALL FAILED"
+    echo "---- eira-postinstall.log"
+    tail -n 150 /target/var/log/eira-postinstall.log 2>&1
+    echo "---- end eira-postinstall.log"
+    tail -n 60 /var/log/installer/subiquity-server-debug.log 2>&1
+    # apt's own reasons (the installer only reports "exit status 100").
+    echo "---- apt errors"
+    journalctl -b --no-pager -o cat 2>/dev/null \
+        | grep -E '^(Err:|E: |W: |Ign:)|Could not|Failed to fetch|NO_PUBKEY|not signed' | tail -n 60
+    echo "---- target apt sources"
+    cat /target/etc/apt/sources.list.d/*.sources /target/etc/apt/sources.list 2>&1
+    ls -l /target/etc/apt/apt.conf.d/ 2>&1
+    echo "---- end apt"
+} >"$out" 2>&1
+poweroff -f || true

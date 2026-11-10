@@ -19,15 +19,19 @@ WORK_DIR=
 DEB_PATH=
 KEEP_WORK=0
 CI_UNATTENDED=0
+OFFLINE_REPO=
 
 usage() {
     cat >&2 <<'USAGE'
 Usage: build_iso.sh --base-iso PATH [--deb PATH] [--output-dir DIR] [--work-dir DIR]
-                    [--keep-work] [--ci-unattended]
+                    [--keep-work] [--ci-unattended [--offline-repo DIR]]
 
 Builds an installable amd64 EiraOS ISO from the official Ubuntu Desktop
 26.04 LTS ISO (fetch and verify it with scripts/fetch_ubuntu_iso.sh).
 --ci-unattended: test image that wipes the first disk without asking (VM only).
+--offline-repo: with --ci-unattended, a local apt repository (scripts/
+  build_offline_repo.sh) put on the image as /eira/repo, so the VM installs
+  without network.
 If --deb is omitted, scripts/build_deb.sh creates the package first.
 EIRA_BASE_ISO may be used instead of --base-iso.
 USAGE
@@ -62,6 +66,11 @@ while (($#)); do
         --ci-unattended)
             CI_UNATTENDED=1
             shift
+            ;;
+        --offline-repo)
+            [[ $# -ge 2 ]] || { usage; exit 64; }
+            OFFLINE_REPO=$2
+            shift 2
             ;;
         -h|--help)
             usage
@@ -131,10 +140,16 @@ if [[ $CI_UNATTENDED -eq 1 ]]; then
     install -d -m 0755 "$STAGE/eira/ci"
     install -m 0755 -- "$INSTALLER/ci/eira-ci-setup" "$STAGE/eira/ci/eira-ci-setup"
     install -m 0755 -- "$INSTALLER/ci/eira-ci-report" "$STAGE/eira/ci/eira-ci-report"
+    install -m 0755 -- "$INSTALLER/ci/eira-ci-install-failed" "$STAGE/eira/ci/eira-ci-install-failed"
     install -m 0644 -- "$INSTALLER/ci/eira-ci-report.service" "$STAGE/eira/ci/eira-ci-report.service"
     install -m 0644 -- "$INSTALLER/ci/autoinstall-ci.yaml" "$STAGE/autoinstall.yaml"
+    if [[ -n $OFFLINE_REPO ]]; then
+        [[ -f $OFFLINE_REPO/Packages.gz ]] || { echo "Not an offline repo: $OFFLINE_REPO" >&2; exit 66; }
+        cp -r -- "$OFFLINE_REPO" "$STAGE/eira/repo"
+    fi
     ISO_NAME=EiraOS-1.0-RC1-amd64-ci-unattended.iso
 else
+    [[ -z $OFFLINE_REPO ]] || { echo "--offline-repo is for the CI image only" >&2; exit 64; }
     install -m 0644 -- "$INSTALLER/autoinstall.yaml" "$STAGE/autoinstall.yaml"
     ISO_NAME=EiraOS-1.0-RC1-amd64.iso
 fi

@@ -7,6 +7,7 @@ VM acceptance test checks that logind answers "yes" to the gate.
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pytest
 
@@ -126,7 +127,9 @@ def test_malformed_or_overreaching_requests_are_rejected(sysworld, raw, code):
 
 def test_without_a_device_right_nothing_happens(sysworld):
     gate, store, bus, _ = sysworld
-    store.add_member(SYSTEM_SCOPE, BO)  # Bo uses the device but has no power right
+    # Bo is on the device (a grant there) but the power right is denied him.
+    gate.fleet.grant(SYSTEM_SCOPE, ["system:power.request_action"], principal=BO)
+    gate.fleet.deny(SYSTEM_SCOPE, ["system:power.request_action"], principal=BO).publish()
     proposal, rhash = proposed(gate, session="s-bo")
     result = consent_and_confirm(gate, proposal, rhash, session="s-bo")
     assert (result.code, result.layer) == (GateCode.E_UNAUTHORIZED, 6)
@@ -134,9 +137,23 @@ def test_without_a_device_right_nothing_happens(sysworld):
 
 
 def test_a_user_who_is_not_on_the_device_is_outside_the_domain(sysworld):
-    gate, _store, bus, _ = sysworld
-    assert gate.propose(request(), "s-bo", Origin.MODEL).code is GateCode.E_POLICY
+    """RIGHTS-SET §6: the domain of device:local is a live grant there, not a
+    conversation membership (there is none on an installed machine)."""
+    gate, store, bus, _ = sysworld
+    store.add_member(SYSTEM_SCOPE, BO)  # membership is irrelevant for device:local
+    result = gate.propose(request(), "s-bo", Origin.MODEL)
+    assert (result.code, result.layer) == (GateCode.E_POLICY, 4)
     assert bus.calls == []
+
+
+def test_device_actions_need_no_conversation_membership(sysworld):
+    gate, store, bus, _ = sysworld
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute("DELETE FROM gate_members")
+    proposal, rhash = proposed(gate)
+    result = consent_and_confirm(gate, proposal, rhash)
+    assert result.decision is Decision.PASS, result
+    assert bus.actions == ["PowerOff"]
 
 
 def test_another_user_cannot_confirm_anne_s_poweroff(sysworld):
