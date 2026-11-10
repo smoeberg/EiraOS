@@ -35,7 +35,8 @@ def test_execute_and_decide_are_never_delegable():
         service.create_delegation("user:alice", request(("decide",)))
 
 
-def test_delegation_expires_and_revokes():
+def test_delegation_expires_and_revokes(tmp_path, monkeypatch):
+    monkeypatch.setenv("EIRA_DB_PATH", str(tmp_path / "delegation.db"))
     service = DelegationService()
     with patch.object(service, "_audit"):
         delegation = service.create_delegation("user:alice", request())
@@ -60,7 +61,8 @@ def test_delegation_expires_and_revokes():
     )
 
 
-def test_delegation_audit_failure_rolls_back_creation():
+def test_delegation_audit_failure_rolls_back_creation(tmp_path, monkeypatch):
+    monkeypatch.setenv("EIRA_DB_PATH", str(tmp_path / "delegation.db"))
     service = DelegationService()
     with patch.object(service, "_audit", side_effect=RuntimeError("audit unavailable")):
         with pytest.raises(RuntimeError):
@@ -68,7 +70,8 @@ def test_delegation_audit_failure_rolls_back_creation():
     assert service.repo.active_for_delegator("user:alice") == []
 
 
-def test_target_wildcard_matches_intent_namespace():
+def test_target_wildcard_matches_intent_namespace(tmp_path, monkeypatch):
+    monkeypatch.setenv("EIRA_DB_PATH", str(tmp_path / "delegation.db"))
     service = DelegationService()
     with patch.object(service, "_audit"):
         service.create_delegation(
