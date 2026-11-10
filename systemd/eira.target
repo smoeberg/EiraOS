@@ -1,4 +1,6 @@
 [Unit]
+Wants=eira-delegationd.service
+After=eira-delegationd.service
 Description=EiraOS core IPC daemon target
 Documentation=https://github.com/smoeberg/EiraOS
 Wants=eira-stated.service eira-identityd.service eira-fleetd.service
