@@ -23,6 +23,8 @@ DAEMON_ALIASES = {
     "presenced": "presenced",
     "context": "contextd",
     "contextd": "contextd",
+    "delegation": "delegationd",
+    "delegationd": "delegationd",
 }
 
 DAEMON_SOCKETS = {
