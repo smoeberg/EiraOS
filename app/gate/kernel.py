@@ -136,9 +136,11 @@ class Gate:
             self._layer_5_consent(policy, record, session_id, at_proposal=True)
             self._layer_6_authorization(envelope, policy, actor)
         except LayerFailure as failure:
-            if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6:
-                # Only reached after this user's own pending record was stored.
-                self.store.cancel(envelope["id"])
+            if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6 and record is not None:
+                # Layer 6 runs after the pending record is stored; use the record
+                # itself for cleanup so malformed/early failures cannot reference
+                # an unbound envelope.
+                self.store.cancel(record["action_id"])
             elif record is not None and record["state"] == "pending":
                 # Consent or step-up is needed: the UI shows exactly this text.
                 failure.data.setdefault("rendering", _rendering(record))
