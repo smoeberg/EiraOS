@@ -14,8 +14,10 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from unittest.mock import patch
 
 from app.gate import Decision, Gate, GateCode
+from app.auth.delegation import DelegationCreateRequest, DelegationScope, DelegationService
 from app.gate import policy as gate_policy
 from app.gate.caller import acting_as
 from app.gate.executors import (
@@ -95,7 +97,8 @@ class BootClock:
 
 
 @pytest.fixture
-def world(tmp_path):
+def world(tmp_path, monkeypatch):
+    monkeypatch.setenv("EIRA_DB_PATH", str(tmp_path / "delegation.db"))
     db = str(tmp_path / "gate.db")
     store = GateStore(db)
     sessions = {
@@ -109,6 +112,15 @@ def world(tmp_path):
     boot = BootClock()
     fleet = TestFleet(tmp_path / "rights", clock, boot_clock=boot)
     fleet.grant(CONV, principal=ANNE).publish()
+    delegation = DelegationService()
+    with patch.object(delegation, "_audit"):
+        delegation.create_delegation(
+            ANNE,
+            DelegationCreateRequest(
+                delegee_id="model:eira-model",
+                scope=DelegationScope(actions=["prepare"], targets=["intent:*"]),
+            ),
+        )
     gate = ProvingGate(Gate(
         store, default_registry(db), sessions=sessions.get, clock=clock, boot_clock=boot, rights=fleet.cache
     ), sessions.get)
