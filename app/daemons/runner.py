@@ -23,7 +23,6 @@ DAEMON_NAMES = (
     "walletd",
     "presenced",
     "contextd",
-    "modeld",
     "delegationd",
 )
 
@@ -144,9 +143,6 @@ def _register_contextd(server: JsonRpcServer) -> None:
     server.register("health", lambda _: {"daemon": "eira-contextd", "ok": True})
 
 
-def _register_modeld(server: JsonRpcServer) -> None:
-    from app.daemons.modeld import register_model_handlers
-
     register_model_handlers(server)
 
 
@@ -166,7 +162,6 @@ REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "walletd": _register_walletd,
     "presenced": _register_presenced,
     "contextd": _register_contextd,
-    "modeld": _register_modeld,
     "delegationd": _register_delegationd,
 }
 
