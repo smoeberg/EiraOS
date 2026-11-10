@@ -11,7 +11,7 @@ def with_delegation_check(action=None,target=None):
             if caller is None:raise PermissionError("no caller context")
             if caller.acting_as is None:return func(*args,**kwargs)
             if not action or not target:raise PermissionError("delegation scope is incomplete")
-            if not _SERVICE.check_delegation(DelegationCheckRequest(caller.acting_as,action,target)):
+            if not _SERVICE.check_delegation(DelegationCheckRequest(delegee_id=caller.acting_as,action=action,target=target)):
                 raise PermissionError("delegation denied")
             return func(*args,**kwargs)
         return wrapper
