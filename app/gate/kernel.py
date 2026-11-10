@@ -308,6 +308,21 @@ class Gate:
         check_limits(policy, action["action"]["content"])
         if actor is None or not self.store.is_member(action["conversation_id"], actor["identity"]):
             raise LayerFailure(GateCode.E_POLICY, "outside the user's domain")
+        # A model may propose only when a human has explicitly delegated the
+        # prepare capability for this action type. Consent/confirm remain
+        # human-only in grant_consent() and confirm().
+        caller = current_caller()
+        if origin is Origin.MODEL and caller is not None and caller.model:
+            from app.auth.delegation import DelegationService
+            from app.gate.caller import model_identity
+            delegee = model_identity(caller)
+            delegation = DelegationService().delegation_for(delegee or "", "prepare", policy.action_type)
+            if delegation is None or delegation.delegator_id != actor["identity"]:
+                raise LayerFailure(GateCode.E_UNAUTHORIZED, "no active delegation for this model and action")
+            try:
+                DelegationService().record_use(delegation, action["id"], "prepare", policy.action_type)
+            except Exception as exc:
+                raise LayerFailure(GateCode.E_UNAUTHORIZED, "delegation audit unavailable") from exc
         return action, policy
 
     def _layer_5_consent(
