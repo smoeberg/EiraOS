@@ -19,7 +19,7 @@ from unittest.mock import patch
 from app.gate import Decision, Gate, GateCode
 from app.auth.delegation import DelegationCreateRequest, DelegationScope, DelegationService
 from app.gate import policy as gate_policy
-from app.gate.caller import acting_as
+from app.gate.caller import acting_as, model_identity
 from app.gate.executors import (
     ConversationOutboxExecutor,
     DirectCallRejected,
@@ -117,7 +117,7 @@ def world(tmp_path, monkeypatch):
         delegation.create_delegation(
             ANNE,
             DelegationCreateRequest(
-                delegee_id="model:eira-model",
+                delegee_id=model_identity(MODEL) or "model:uid:990",
                 scope=DelegationScope(actions=["prepare"], targets=["intent:*"]),
             ),
         )
