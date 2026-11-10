@@ -137,9 +137,11 @@ class Gate:
             self._layer_5_consent(policy, record, session_id, at_proposal=True)
             self._layer_6_authorization(envelope, policy, actor)
         except LayerFailure as failure:
-            if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6:
-                # Only reached after this user's own pending record was stored.
-                self.store.cancel(envelope["id"])
+            if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6 and record is not None:
+                # Layer 6 runs after the pending record is stored; use the record
+                # itself for cleanup so malformed/early failures cannot reference
+                # an unbound envelope.
+                self.store.cancel(record["action_id"])
             elif record is not None and record["state"] == "pending":
                 # Consent or step-up is needed: the UI shows exactly this text.
                 failure.data.setdefault("rendering", _rendering(record))
@@ -308,6 +310,22 @@ class Gate:
             )
         check_limits(policy, action["action"]["content"])
         self._domain(action, actor)
+        # A model may propose only when a human has explicitly delegated the
+        # prepare capability for this action type. Consent/confirm remain
+        # human-only in grant_consent() and confirm().
+        caller = current_caller()
+        if origin is Origin.MODEL and caller is not None and caller.model:
+            from app.auth.delegation import DelegationService
+            from app.gate.caller import model_identity
+            delegee = model_identity(caller)
+            delegation_target = f"intent:{policy.action_type}"
+            delegation = DelegationService().delegation_for(delegee or "", "prepare", delegation_target)
+            if delegation is None or delegation.delegator_id != actor["identity"]:
+                raise LayerFailure(GateCode.E_UNAUTHORIZED, "no active delegation for this model and action")
+            try:
+                DelegationService().record_use(delegation, action["id"], "prepare", delegation_target)
+            except Exception as exc:
+                raise LayerFailure(GateCode.E_UNAUTHORIZED, "delegation audit unavailable") from exc
         return action, policy
 
     def _domain(self, action: dict[str, Any], actor: dict[str, Any] | None) -> None:

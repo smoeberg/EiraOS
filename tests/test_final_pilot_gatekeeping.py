@@ -23,10 +23,10 @@ def test_all_ten_sprint_deliverable_boundaries_exist() -> None:
     assert not {sprint: paths for sprint, paths in missing.items() if paths}
 
 
-def test_all_nine_daemons_are_registered_and_core_services_have_profiles() -> None:
+def test_all_daemons_are_registered_and_core_services_have_profiles() -> None:
     expected = {
         "stated", "identityd", "fleetd", "veritasd", "intentd", "graphd",
-        "walletd", "presenced", "contextd",
+        "walletd", "presenced", "contextd", "delegationd",
     }
     assert set(DAEMON_NAMES) == expected
     assert set(REGISTRARS) == expected

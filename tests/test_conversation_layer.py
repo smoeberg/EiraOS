@@ -300,8 +300,17 @@ def test_conversation_list_members_and_awaiting(world, server):
 
 
 def test_a_pending_model_proposal_waits_for_the_user_s_decision(world, server, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.auth.delegation import DelegationService
+
     send(world, "s-anne", meeting())
     monkeypatch.setattr(caller_module, "model_uid", lambda: MODEL.uid)
+    # The model may only propose under a delegation from Anne. Stubbed, so the
+    # shared delegation store is not touched.
+    monkeypatch.setattr(DelegationService, "delegation_for",
+                        lambda self, *_: SimpleNamespace(delegator_id=ANNE))
+    monkeypatch.setattr(DelegationService, "record_use", lambda *_: None)
     with acting_as(MODEL):
         world.gate.propose(raw(envelope("utterance", {"text": "Udkast"}, id="dlg-m",
                                         participants=participants((ANNE, "member")))), "s-anne", Origin.MODEL)

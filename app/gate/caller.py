@@ -33,9 +33,21 @@ class Caller:
     uid: int
     pid: int
     model: bool
+    acting_as: str | None = None
+    delegation_id: str | None = None
 
 
 CALLER: contextvars.ContextVar[Caller | None] = contextvars.ContextVar("gate_caller", default=None)
+
+
+def model_identity(caller: Caller | None = None) -> str | None:
+    caller = caller or CALLER.get()
+    if caller is None or not caller.model:
+        return None
+    try:
+        return f"model:{pwd.getpwuid(caller.uid).pw_name}"
+    except KeyError:
+        return f"model:uid:{caller.uid}"
 
 
 def model_uid() -> int | None:

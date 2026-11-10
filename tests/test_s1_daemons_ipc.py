@@ -75,8 +75,8 @@ def test_every_error_response_has_user_message(
     assert response["error"]["data"]["user_message"].strip()
 
 
-def test_runner_registers_nine_daemons_and_socket_names() -> None:
-    assert len(DAEMON_NAMES) == 9
+def test_runner_registers_all_daemons_and_socket_names() -> None:
+    assert len(DAEMON_NAMES) == 10
     assert set(DAEMON_NAMES) == set(REGISTRARS)
     for daemon in ("walletd", "presenced", "contextd"):
         assert canonical_daemon(daemon) == daemon
@@ -96,7 +96,7 @@ def test_non_allowlisted_non_root_peer_is_denied() -> None:
 
 
 
-def test_ipc_smoke_test_passes_for_all_nine_daemons(tmp_path, monkeypatch) -> None:
+def test_ipc_smoke_test_passes_for_all_daemons(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("EIRA_RUN_DIR", str(tmp_path))
     from scripts.ipc_smoke_test import main as run_ipc_smoke_test
 
