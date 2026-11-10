@@ -17,8 +17,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.gate import Decision, Gate, GateCode
 from app.auth.delegation import DelegationCreateRequest, DelegationScope, DelegationService
+from app.gate import Decision, Gate, GateCode
 from app.gate import policy as gate_policy
 from app.gate.caller import acting_as, model_identity
 from app.gate.executors import (
@@ -118,7 +118,7 @@ def world(tmp_path, monkeypatch):
         delegation.create_delegation(
             ANNE,
             DelegationCreateRequest(
-                delegee_id=model_identity(MODEL) or "model:uid:990",
+                delegee_id=model_identity("model:uid:990") or "model:uid:990",
                 scope=DelegationScope(actions=["prepare"], targets=["intent:*"]),
             ),
         )
