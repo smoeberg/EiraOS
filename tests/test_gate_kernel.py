@@ -13,8 +13,9 @@ import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from app.gate import Decision, Gate, GateCode
 from app.auth.delegation import DelegationCreateRequest, DelegationScope, DelegationService
