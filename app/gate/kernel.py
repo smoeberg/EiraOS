@@ -316,11 +316,12 @@ class Gate:
             from app.auth.delegation import DelegationService
             from app.gate.caller import model_identity
             delegee = model_identity(caller)
-            delegation = DelegationService().delegation_for(delegee or "", "prepare", policy.action_type)
+            delegation_target = f"intent:{policy.action_type}"
+            delegation = DelegationService().delegation_for(delegee or "", "prepare", delegation_target)
             if delegation is None or delegation.delegator_id != actor["identity"]:
                 raise LayerFailure(GateCode.E_UNAUTHORIZED, "no active delegation for this model and action")
             try:
-                DelegationService().record_use(delegation, action["id"], "prepare", policy.action_type)
+                DelegationService().record_use(delegation, action["id"], "prepare", delegation_target)
             except Exception as exc:
                 raise LayerFailure(GateCode.E_UNAUTHORIZED, "delegation audit unavailable") from exc
         return action, policy
