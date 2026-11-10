@@ -37,7 +37,7 @@ def test_legacy_session_unit_is_not_shipped():
 def test_installer_puts_eira_session_on_ubuntu_desktop():
     autoinstall = _read("packaging/installer/autoinstall.yaml")
     assert "id: ubuntu-desktop-minimal" in autoinstall
-    assert "- labwc" in autoinstall
+    assert "- labwc" not in autoinstall  # eira-labwc comes from the medium
     firstboot = _read("packaging/installer/eira-firstboot")
     assert "SESSION=eira-session" in firstboot
     assert "AccountsService" in firstboot

@@ -38,10 +38,11 @@ if [ -f "$OFFLINE_LIST" ]; then
 else
     $APT update
 fi
-chmod 0644 "$SRC/eira-os-core.deb"
-$APT install -y "$SRC/eira-os-core.deb"
-# The Wayland session (already present when the installer added them).
-$APT install -y labwc xwayland
+chmod 0644 "$SRC/eira-os-core.deb" "$SRC/eira-labwc.deb"
+# eira-labwc (labwc >= 0.20.3) replaces Ubuntu's labwc; eira-os-core depends on it.
+$APT install -y "$SRC/eira-labwc.deb" "$SRC/eira-os-core.deb"
+# XWayland for the session (already present when the installer added it).
+$APT install -y xwayland
 rm -f "$OFFLINE_LIST"
 
 install -D -m 0755 "$SRC/eira-firstboot" /usr/lib/eira/eira-firstboot
