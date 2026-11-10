@@ -117,7 +117,7 @@ def world(tmp_path, monkeypatch):
         delegation.create_delegation(
             ANNE,
             DelegationCreateRequest(
-                delegee_id=model_identity("model:uid:990") or "model:uid:990",
+                delegee_id=model_identity(MODEL) or "model:uid:990",
                 scope=DelegationScope(actions=["prepare"], targets=["intent:*"]),
             ),
         )
