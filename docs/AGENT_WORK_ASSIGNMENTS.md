@@ -95,42 +95,11 @@ This document defines the work assignments for 3 AI agents to implement the rema
 
 ---
 
-### Agent 3: LD_PRELOAD Consent Path (Bilag A, Punkt 4)
+### Agent 3: Betroet vej til samtykke (Bilag A, Punkt 4) — ⛔ opgaven trukket tilbage
 
-**Task:** Complete the trusted path to consent using LD_PRELOAD
+Den oprindelige opgave ("LD_PRELOAD Consent Path": *kun processer med LD_PRELOAD kan samtykke*) er **forkert og må ikke bygges**. I GATE-KERNEL bilag A pkt. 1 ("Rest") er `LD_PRELOAD`-injektion *truslen*, ikke mekanismen: enhver proces under brugerens UID kan selv sætte `LD_PRELOAD`, og et bibliotek, der verificerer sig selv, beviser intet over for en anden part.
 
-**Purpose:** Ensure that only the EiraOS app can consent and confirm actions, even if other processes have the same UID.
-
-**Branch:** `vibe/ld-preload-consent`
-
-**Files to Create/Modify:**
-- `app/gate/ld_preload.py` - LD_PRELOAD library for consent path
-- `app/gate/consent_proof.py` - Update to use LD_PRELOAD verification
-- `app/gate/store.py` - Store consent keys with LD_PRELOAD binding
-- `packaging/bin/ld_preload_consent.so` - Compiled shared library
-- `tests/test_ld_preload.py` - Unit tests for LD_PRELOAD consent
-
-**Requirements:**
-1. LD_PRELOAD library must verify the calling process
-2. Consent keys must be bound to the LD_PRELOAD library
-3. Only processes with LD_PRELOAD can access consent keys
-4. Consent proofs must include LD_PRELOAD verification
-5. Fail-closed: Processes without LD_PRELOAD cannot consent
-
-**Security Considerations:**
-- LD_PRELOAD library must be compiled and signed
-- Library must verify its own integrity
-- Consent keys must be encrypted at rest
-- All consent operations must be logged
-
-**Implementation Phases:**
-1. Design LD_PRELOAD library interface (1 day)
-2. Implement consent key binding (2 days)
-3. Update consent proof generation (1 day)
-4. Integration with existing consent system (1 day)
-5. Testing and validation (2 days)
-
-**Estimated Duration:** 1-2 weeks
+Erstattet af kontrakten [EIRA-CONSENT-AGENT-0.1](../specs/EIRA-CONSENT-AGENT-0.1.md) (udkast til ejerens accept). Der skrives ingen kode, før kontrakten er accepteret og testplanen foreligger.
 
 ---
 
@@ -141,7 +110,7 @@ This document defines the work assignments for 3 AI agents to implement the rema
 | 1 | Event stream for Explorer/conversation layer | User | ⏳ In Progress | - | 🔴 Critical |
 | 2 | "På vegne af" delegation protocol | Agent 1 | ⏳ Ready to Start | `vibe/delegation-protocol` | 🟡 High |
 | 3 | Packaged model process with isolation | Agent 2 | ✅ **COMPLETE** | `vibe/model-process-corrected-arch` | 🔴 Critical |
-| 4 | LD_PRELOAD consent path | Agent 3 | ⏳ Ready to Start | `vibe/ld-preload-consent` | 🟡 High |
+| 4 | Betroet vej til samtykke (consent agent) | – | ⛔ Afventer accept af kontrakt | – | 🟡 High |
 | 5 | FSS seal management (journal) | User | ⏳ Waiting for Decision | - | 🟢 Medium |
 
 ---
@@ -166,10 +135,7 @@ This document defines the work assignments for 3 AI agents to implement the rema
    - Pull request can be opened
    - All 7 critical issues resolved
 
-4. **Agent 3:** Start Punkt 4 (LD_PRELOAD Consent Path)
-   - Create branch `vibe/ld-preload-consent`
-   - Design LD_PRELOAD library interface
-   - Implement consent key binding
+4. **Agent 3:** ⛔ Trukket tilbage — se [EIRA-CONSENT-AGENT-0.1](../specs/EIRA-CONSENT-AGENT-0.1.md)
 
 ### Short-Term (Next 2-4 Weeks)
 
@@ -270,7 +236,6 @@ The implementation includes:
 **Branches Ready:**
 - `vibe/model-process-corrected-arch` - Ready for PR
 - `vibe/delegation-protocol` - Ready for Agent 1
-- `vibe/ld-preload-consent` - Ready for Agent 3
 
 **Next:** Open pull request for Punkt 3 implementation.
 

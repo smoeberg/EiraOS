@@ -8,6 +8,12 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 **Status:** Draft, binding as an implementation target; not proof that all Gate checks are implemented or tested. Reconcile its decision/error semantics with the actual intent pipeline and regression tests before enabling new protected actions.
 
+## Consent Agent
+
+- [EIRA Consent Agent 0.1](EIRA-CONSENT-AGENT-0.1.md) — trusted path to consent against programs running as the user (closes the "Rest" in GATE-KERNEL bilag A pkt. 1): setgid agent holding the consent key, gate accepts consent only from it, compositor requirements.
+
+**Status:** Draft for owner acceptance; not binding. The test plan follows as a separate step after acceptance.
+
 ## Model-independent AI interface
 
 - [AI Interface 1.0](AI-INTERFACE-1.0.md) — model adapter, EiraLang intent extraction, EiraAI action proposals, abstention and orchestration boundaries.
