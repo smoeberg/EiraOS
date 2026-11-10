@@ -23,6 +23,7 @@ DAEMON_NAMES = (
     "walletd",
     "presenced",
     "contextd",
+    "delegationd",
 )
 
 _SERVERS: dict[str, JsonRpcServer] = {}
@@ -122,6 +123,11 @@ def _register_presenced(server: JsonRpcServer) -> None:
     server.register("health", lambda _: {"daemon": "eira-presenced", "ok": True})
 
 
+def _register_delegationd(server: JsonRpcServer) -> None:
+    from app.daemons.delegationd import register_delegation_handlers
+    register_delegation_handlers(server)
+
+
 def _register_contextd(server: JsonRpcServer) -> None:
     from app.daemons.contextd import ContextDaemon
     from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
@@ -152,6 +158,7 @@ REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "walletd": _register_walletd,
     "presenced": _register_presenced,
     "contextd": _register_contextd,
+    "delegationd": _register_delegationd,
 }
 
 
