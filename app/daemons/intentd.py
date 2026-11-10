@@ -230,7 +230,11 @@ def register_intent_handlers(
     # without consent or confirmation: not reachable over IPC any more.
     server.register("intent.execute", gate_required("intent.execute"))
 
-    register_gate_handlers(server)
+    gate = register_gate_handlers(server)
+    from app.conversation.ipc import register_conversation_handlers
+
+    # Read-only: the event stream for Explorer (EIRA-CONVERSATION-1.0 §5).
+    register_conversation_handlers(server, gate)
     _start_audit_anchor(server)
     server.register("health", lambda _: {"daemon": "eira-intentd", "ok": True})
     return active

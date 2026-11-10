@@ -32,19 +32,19 @@
 
 ## 3. Hændelser og kilder skærmene kræver
 
-Intet af nedenstående findes i dag som hændelse. Bygges skærmene nu, viser de opdigtede data. Listen er input til hændelsesstrømmen (bilag A) og til presenced/contextd.
+Listen var input til hændelsesstrømmen ([EIRA-CONVERSATION-1.0](../../../specs/EIRA-CONVERSATION-1.0.md)). Rækker markeret *strøm* kan nu læses derfra; resten findes stadig ikke, og skærmene må ikke vise opdigtede data for dem.
 
 | Skærmelement | Hændelse / kilde | Daemon | Findes |
 |---|---|---|---|
 | Deadlines, Dagsorden | `commitment.due`, kalenderbegivenheder på et objekt | contextd + connector (kalender) | nej |
-| Afventer ("venter på dig") | `commitment_proposed` med brugeren som modtager, endnu ikke besvaret | presenced (EDP-samtaler) | delvist: EDP-typen findes i gaten |
-| Deltagere (bekræftet/afventer) | deltagerstatus pr. samtale | presenced | nej |
+| Afventer ("venter på dig") | `commitment_proposed` med brugeren som modtager, endnu ikke besvaret | `conversation.awaiting` | strøm |
+| Deltagere (bekræftet/afventer) | deltagerstatus pr. samtale | `conversation.members`; svar via `ref_id` | delvist: medlemmer ja, svarstatus udledes af klienten |
 | Online-status | tilstedeværelse | presenced | nej |
-| Seneste | hændelser på brugerens objekter, nyeste først | graphd + hændelsesstrøm | nej |
-| Mine workspaces | objekter brugeren er medlem af | graphd (`gate_members` er i dag kun gatens) | nej |
+| Seneste | hændelser på brugerens objekter, nyeste først | `events.since`, `conversation.events` | strøm |
+| Mine workspaces | objekter brugeren er medlem af | `conversation.list` | strøm (samtaler; objektnavne fra graphd mangler) |
 | Åbne applikationer | hvilke objekter er åbne i hvilke værktøjer | shell + app-adaptere | nej |
 | Tilstand (fanerne) | manuel tilstand nu; senere kalender + mønster | contextd | manuel: ja (UI) |
-| Forslag i intent-baren | intentd's forslag, højst fire, med Hvorfor | intentd + prioritizer | delvist |
+| Forslag i intent-baren | intentd's forslag, højst fire, med Hvorfor | intentd + prioritizer; ventende forslag i `conversation.awaiting` | delvist |
 | Godkend/udfør | `gate.propose` → samtykkeskærm → `gate_consent` → `gate_confirm` | intentd (gaten) + appen | ja, uden skærm |
 
 ## 4. Åbne spørgsmål til ejer

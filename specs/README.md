@@ -8,6 +8,12 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 **Status:** Draft, binding as an implementation target; not proof that all Gate checks are implemented or tested. Reconcile its decision/error semantics with the actual intent pipeline and regression tests before enabling new protected actions.
 
+## Conversation layer
+
+- [EIRA-CONVERSATION-1.0](EIRA-CONVERSATION-1.0.md) — membership (who may act and see in a conversation) and the read-only event stream for Explorer.
+
+**Status:** Draft, implemented in `app/conversation/`. Membership is derived only from events the gate records; there is no write method.
+
 ## Model-independent AI interface
 
 - [AI Interface 1.0](AI-INTERFACE-1.0.md) — model adapter, EiraLang intent extraction, EiraAI action proposals, abstention and orchestration boundaries.

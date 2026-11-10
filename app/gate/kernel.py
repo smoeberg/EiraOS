@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from app.clock import BootInstant, boot_now, within
+from app.conversation.feed import OutsideDomain
 from app.gate import consent_proof, edp, system
 from app.gate.caller import current as current_caller
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
@@ -308,8 +309,7 @@ class Gate:
                 GateCode.E_POLICY, f"{policy.action_type} may not be proposed by {origin.value}"
             )
         check_limits(policy, action["action"]["content"])
-        if actor is None or not self.store.is_member(action["conversation_id"], actor["identity"]):
-            raise LayerFailure(GateCode.E_POLICY, "outside the user's domain")
+        self._domain(action, actor)
         # A model may propose only when a human has explicitly delegated the
         # prepare capability for this action type. Consent/confirm remain
         # human-only in grant_consent() and confirm().
@@ -327,6 +327,33 @@ class Gate:
             except Exception as exc:
                 raise LayerFailure(GateCode.E_UNAUTHORIZED, "delegation audit unavailable") from exc
         return action, policy
+
+    def _domain(self, action: dict[str, Any], actor: dict[str, Any] | None) -> None:
+        """Lag 4, the user's domain (RIGHTS-SET §6, CONVERSATION-1.0 §3.2).
+
+        ``device:local`` is not a conversation: its domain is having at least
+        one live grant on ``device:local`` in the Fleet set; which action is
+        allowed is lag 6's decision. Elsewhere the conversation layer decides
+        who may act.
+        """
+        if actor is None:
+            raise LayerFailure(GateCode.E_POLICY, "outside the user's domain")
+        if action["conversation_id"] == system.SYSTEM_SCOPE:
+            resolved = self._rights.resolve(self._clock())
+            rights = resolved.rights
+            if rights is None or not contract.has_any_grant(
+                rights.rights_set,
+                principal=actor["identity"],
+                groups=actor.get("groups") or (),
+                scope=system.SYSTEM_SCOPE,
+                now=rights.effective_now,
+            ):
+                raise LayerFailure(GateCode.E_POLICY, "outside the user's domain: no grant on this device")
+            return
+        try:
+            self.store.check_domain(action, actor["identity"])
+        except OutsideDomain as error:
+            raise LayerFailure(GateCode.E_POLICY, f"outside the user's domain: {error}") from None
 
     def _layer_5_consent(
         self, policy: ActionPolicy, record: dict[str, Any], session_id: str | None, *, at_proposal: bool

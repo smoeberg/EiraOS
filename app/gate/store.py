@@ -83,6 +83,8 @@ MIGRATIONS = {
         "render_lang": "TEXT",
     },
     "gate_consents": {"rendering_hash": "TEXT", "boot_id": "TEXT", "boottime_ns": "INTEGER"},
+    # Conversation layer (EIRA-CONVERSATION-1.0 §3): who may act and who may see.
+    "gate_members": {"role": "TEXT NOT NULL DEFAULT 'member'", "joined_seq": "INTEGER"},
 }
 
 
@@ -242,20 +244,40 @@ class GateStore:
             ).fetchone()
         return row["identity"] if row else None
 
-    def add_member(self, conversation_id: str, identity: str) -> None:
+    def add_member(self, conversation_id: str, identity: str, role: str = "member") -> None:
+        """Tests and fixtures only. In production, membership is written by the
+        conversation layer when the gate records an event (app/conversation)."""
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO gate_members (conversation_id, identity) VALUES (?, ?)",
-                (conversation_id, identity),
+                "INSERT OR IGNORE INTO gate_members (conversation_id, identity, role) VALUES (?, ?, ?)",
+                (conversation_id, identity, role),
             )
 
-    def is_member(self, conversation_id: str, identity: str) -> bool:
+    def member_role(self, conversation_id: str, identity: str) -> str | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT 1 FROM gate_members WHERE conversation_id = ? AND identity = ?",
+                "SELECT role FROM gate_members WHERE conversation_id = ? AND identity = ?",
                 (conversation_id, identity),
             ).fetchone()
+        return row["role"] if row else None
+
+    def has_members(self, conversation_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM gate_members WHERE conversation_id = ? LIMIT 1", (conversation_id,)
+            ).fetchone()
         return row is not None
+
+    def check_domain(self, envelope: dict[str, Any], identity: str) -> None:
+        """Raises ``feed.OutsideDomain`` if the identity may not act here."""
+        from app.conversation import feed
+
+        with self._connect() as conn:
+            feed.check_domain(conn, envelope, identity)
+
+    def is_member(self, conversation_id: str, identity: str) -> bool:
+        """May see the conversation (member or observer)."""
+        return self.member_role(conversation_id, identity) is not None
 
     # --- audit -------------------------------------------------------------
 
