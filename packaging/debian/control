@@ -35,7 +35,7 @@ Depends:
  python3-jsonschema (>= 4.10),
  python3-pydantic (>= 2.10),
  python3-websockets (>= 13),
- labwc,
+ eira-labwc (>= 0.20.3),
  systemd,
  xwayland
 Recommends: gdm3, polkitd

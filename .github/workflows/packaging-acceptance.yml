@@ -9,6 +9,7 @@ on:
       - "scripts/build_iso.sh"
       - "scripts/fetch_ubuntu_iso.sh"
       - "packaging/**"
+      - "tests/test_eira_labwc_packaging.py"
       - "systemd/**"
       - "ui/**"
       - ".github/workflows/packaging-acceptance.yml"
@@ -84,8 +85,56 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # EiraOS' own labwc (>= 0.20.3, wlroots 0.20 static), built on the target
+  # release. verify-globals.sh runs it headless and proves R-6.1 of
+  # EIRA-CONSENT-AGENT: with EiraOS' rc.xml no client is offered a privileged
+  # protocol (virtual pointer/keyboard, layer-shell, screencopy, ...).
+  build-eira-labwc:
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            $(cat packaging/eira-labwc/build-deps) wayland-utils
+
+      - name: Build eira-labwc
+        run: packaging/eira-labwc/build.sh --output-dir dist
+
+      - name: Verify no client is offered a privileged protocol (R-6.1)
+        run: |
+          mkdir -p /tmp/x && dpkg-deb -x dist/eira-labwc.deb /tmp/x
+          useradd -m tester
+          chmod -R a+rX "$GITHUB_WORKSPACE" /tmp/x
+          runuser -u tester -- packaging/eira-labwc/verify-globals.sh \
+            /tmp/x/usr/bin/labwc packaging/session/config/labwc
+          # Mutation: one <allow> must make the check fail.
+          mkdir -p /tmp/mut
+          sed 's|<privilegedInterfaces></privilegedInterfaces>|<privilegedInterfaces><allow>zwlr_virtual_pointer_manager_v1</allow></privilegedInterfaces>|' \
+            packaging/session/config/labwc/rc.xml > /tmp/mut/rc.xml
+          chmod -R a+rX /tmp/mut
+          if runuser -u tester -- packaging/eira-labwc/verify-globals.sh /tmp/x/usr/bin/labwc /tmp/mut; then
+            echo "verify-globals passed a config that allows virtual pointer"; exit 1
+          fi
+          dpkg-deb --field dist/eira-labwc.deb Package Version Depends Conflicts Replaces
+
+      - name: Upload eira-labwc package
+        uses: actions/upload-artifact@v4
+        with:
+          name: eira-labwc-ubuntu-26.04
+          path: dist/eira-labwc.deb
+          if-no-files-found: error
+          retention-days: 14
+
   build-installer-iso:
-    needs: build-deb
+    needs: [build-deb, build-eira-labwc]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -96,6 +145,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: eira-deb-ubuntu-26.04
+          path: dist
+
+      - name: Download eira-labwc package
+        uses: actions/download-artifact@v4
+        with:
+          name: eira-labwc-ubuntu-26.04
           path: dist
 
       - name: Install ISO tools
@@ -117,9 +172,9 @@ jobs:
       - name: Build installer ISO and unattended CI ISO
         run: |
           scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
-            --deb dist/eira-os-core.deb --output-dir dist
+            --deb dist/eira-os-core.deb --labwc-deb dist/eira-labwc.deb --output-dir dist
           scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
-            --deb dist/eira-os-core.deb --output-dir dist --ci-unattended
+            --deb dist/eira-os-core.deb --labwc-deb dist/eira-labwc.deb --output-dir dist --ci-unattended
 
       - name: Verify ISO layout and boot records
         run: |
@@ -130,7 +185,7 @@ jobs:
             grep -qi "El Torito boot img" el-torito.txt
             xorriso -indev "$ISO" -report_system_area plain 2>/dev/null | grep -q GPT
             xorriso -indev "$ISO" -find / -type f 2>/dev/null > files.txt
-            for f in /autoinstall.yaml /eira/eira-os-core.deb /eira/eira-postinstall.sh \
+            for f in /autoinstall.yaml /eira/eira-os-core.deb /eira/eira-labwc.deb /eira/eira-postinstall.sh \
                      /eira/eira-firstboot /casper/vmlinuz; do
               grep -q "'$f'" files.txt || { echo "missing $f"; exit 1; }
             done

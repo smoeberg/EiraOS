@@ -45,7 +45,10 @@ def test_installer_installs_ubuntu_desktop_then_eira_from_the_medium():
     commands = "\n".join(config["late-commands"])
     assert "/cdrom/eira/" in commands
     assert "eira-postinstall.sh" in commands
-    assert {"labwc", "xwayland"} <= set(config["packages"])
+    assert "xwayland" in config["packages"]
+    # Ubuntu's labwc (0.9) cannot withhold privileged protocols; eira-labwc
+    # comes from the medium instead (EIRA-CONSENT-AGENT R-6.1).
+    assert "labwc" not in config["packages"]
 
 
 def test_ci_autoinstall_is_unattended_and_uses_a_non_system_test_user():

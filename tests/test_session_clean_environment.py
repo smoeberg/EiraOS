@@ -35,17 +35,21 @@ SCRIPT = REPO / "packaging" / "session" / "eira-session"
 NOBODY = 65534
 
 
-def _setup(tmp_path: Path) -> tuple[Path, Path, Path]:
+def _setup(tmp_path: Path, labwc_version: str = "0.20.3") -> tuple[Path, Path, Path]:
     bindir = tmp_path / "bin"
     bindir.mkdir()
     record = tmp_path / "labwc.env"
     fake_labwc = bindir / "labwc"
-    fake_labwc.write_text(f'#!/bin/sh\n{{ echo "ARGS=$*"; env; }} > "{record}"\n')
+    fake_labwc.write_text(
+        "#!/bin/sh\n"
+        f'if [ "$1" = "--version" ]; then echo "labwc {labwc_version} (+xwayland)"; exit 0; fi\n'
+        f'{{ echo "ARGS=$*"; env; }} > "{record}"\n'
+    )
     shell_bin = tmp_path / "eira-spatial-desktop"
     shell_bin.write_text("#!/bin/sh\n")
     for exe in (fake_labwc, shell_bin):
         exe.chmod(0o755)
-    for tool in ("sh", "env", "sed", "stat", "id", "mkdir", "chmod"):
+    for tool in ("sh", "env", "sed", "stat", "id", "mkdir", "chmod", "head", "sort", "printf"):
         found = shutil.which(tool)
         if found:
             (bindir / tool).symlink_to(found)
@@ -138,3 +142,25 @@ def test_root_owned_conf_is_still_honoured(tmp_path: Path) -> None:
 def test_session_still_refuses_root() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert 'if [ "$(id -u)" = "0" ]' in text
+
+
+def test_session_refuses_labwc_older_than_0_20_3(tmp_path: Path) -> None:
+    """EIRA-CONSENT-AGENT R-6.1: Ubuntu's labwc 0.9 ignores <privilegedInterfaces>
+    and would give every client virtual pointer, layer-shell and screencopy."""
+    script, _conf, record = _setup(tmp_path, labwc_version="0.9.3")
+    result = _run(script, {"HOME": "/nonexistent"})
+    assert result.returncode == 80, result.stderr
+    assert ">= 0.20.3" in result.stderr
+    assert record.read_text() == ""
+
+
+def test_session_refuses_0_20_2_where_the_filter_was_broken(tmp_path: Path) -> None:
+    script, _conf, _record = _setup(tmp_path, labwc_version="0.20.2")
+    assert _run(script, {"HOME": "/nonexistent"}).returncode == 80
+
+
+def test_session_accepts_newer_labwc(tmp_path: Path) -> None:
+    script, _conf, record = _setup(tmp_path, labwc_version="0.21.0")
+    result = _run(script, {"HOME": "/nonexistent"})
+    assert result.returncode == 0, result.stderr
+    assert "ARGS=-C /usr/share/eira-os/labwc" in record.read_text()

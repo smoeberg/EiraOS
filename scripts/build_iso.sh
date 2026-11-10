@@ -17,18 +17,21 @@ OUTPUT_DIR=${EIRA_ISO_OUTPUT_DIR:-${REPO_ROOT}/dist}
 BASE_ISO=${EIRA_BASE_ISO:-}
 WORK_DIR=
 DEB_PATH=
+LABWC_DEB_PATH=
 KEEP_WORK=0
 CI_UNATTENDED=0
 
 usage() {
     cat >&2 <<'USAGE'
-Usage: build_iso.sh --base-iso PATH [--deb PATH] [--output-dir DIR] [--work-dir DIR]
+Usage: build_iso.sh --base-iso PATH [--deb PATH] [--labwc-deb PATH] [--output-dir DIR] [--work-dir DIR]
                     [--keep-work] [--ci-unattended]
 
 Builds an installable amd64 EiraOS ISO from the official Ubuntu Desktop
 26.04 LTS ISO (fetch and verify it with scripts/fetch_ubuntu_iso.sh).
 --ci-unattended: test image that wipes the first disk without asking (VM only).
 If --deb is omitted, scripts/build_deb.sh creates the package first.
+If --labwc-deb is omitted, packaging/eira-labwc/build.sh builds eira-labwc
+(labwc >= 0.20.3, required by the session; EIRA-CONSENT-AGENT R-6.1).
 EIRA_BASE_ISO may be used instead of --base-iso.
 USAGE
 }
@@ -43,6 +46,11 @@ while (($#)); do
         --deb)
             [[ $# -ge 2 ]] || { usage; exit 64; }
             DEB_PATH=$2
+            shift 2
+            ;;
+        --labwc-deb)
+            [[ $# -ge 2 ]] || { usage; exit 64; }
+            LABWC_DEB_PATH=$2
             shift 2
             ;;
         --output-dir)
@@ -97,6 +105,12 @@ if [[ -z $DEB_PATH ]]; then
 fi
 [[ -f $DEB_PATH ]] || { echo "Package not found: $DEB_PATH" >&2; exit 66; }
 DEB_PATH=$(realpath -- "$DEB_PATH")
+if [[ -z $LABWC_DEB_PATH ]]; then
+    "${REPO_ROOT}/packaging/eira-labwc/build.sh" --output-dir "$OUTPUT_DIR"
+    LABWC_DEB_PATH=${OUTPUT_DIR}/eira-labwc.deb
+fi
+[[ -f $LABWC_DEB_PATH ]] || { echo "Package not found: $LABWC_DEB_PATH" >&2; exit 66; }
+LABWC_DEB_PATH=$(realpath -- "$LABWC_DEB_PATH")
 
 CREATED_WORK=0
 if [[ -z $WORK_DIR ]]; then
@@ -124,6 +138,7 @@ INSTALLER=${REPO_ROOT}/packaging/installer
 STAGE=${WORK_DIR}/stage
 install -d -m 0755 "$STAGE/eira"
 install -m 0644 -- "$DEB_PATH" "$STAGE/eira/eira-os-core.deb"
+install -m 0644 -- "$LABWC_DEB_PATH" "$STAGE/eira/eira-labwc.deb"
 install -m 0755 -- "$INSTALLER/eira-postinstall.sh" "$STAGE/eira/eira-postinstall.sh"
 install -m 0755 -- "$INSTALLER/eira-firstboot" "$STAGE/eira/eira-firstboot"
 install -m 0644 -- "$INSTALLER/eira-firstboot.service" "$STAGE/eira/eira-firstboot.service"

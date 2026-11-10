@@ -20,8 +20,9 @@ set -x
 apt-get update
 # apt's sandbox user must be able to read the local package.
 chmod 0755 "$SRC"
-chmod 0644 "$SRC/eira-os-core.deb"
-apt-get install -y "$SRC/eira-os-core.deb"
+chmod 0644 "$SRC/eira-os-core.deb" "$SRC/eira-labwc.deb"
+# eira-labwc (labwc >= 0.20.3) replaces Ubuntu's labwc; eira-os-core depends on it.
+apt-get install -y "$SRC/eira-labwc.deb" "$SRC/eira-os-core.deb"
 
 install -D -m 0755 "$SRC/eira-firstboot" /usr/lib/eira/eira-firstboot
 install -m 0644 "$SRC/eira-firstboot.service" /etc/systemd/system/eira-firstboot.service

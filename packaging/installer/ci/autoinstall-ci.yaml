@@ -22,7 +22,6 @@ autoinstall:
       name: direct
   updates: security
   packages:
-    - labwc
     - xwayland
   late-commands:
     - mkdir -p /target/var/lib/eira-install
