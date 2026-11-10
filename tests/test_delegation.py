@@ -42,9 +42,9 @@ def test_delegation_expires_and_revokes(tmp_path, monkeypatch):
         delegation = service.create_delegation("user:alice", request())
     assert service.check_delegation(
         DelegationCheckRequest(
-            "model:eira-model",
-            "prepare",
-            "intent:create",
+            delegee_id="model:eira-model",
+            action="prepare",
+            target="intent:create",
         )
     )
     with patch.object(service, "_audit"):
@@ -80,15 +80,15 @@ def test_target_wildcard_matches_intent_namespace(tmp_path, monkeypatch):
         )
     assert service.check_delegation(
         DelegationCheckRequest(
-            "model:eira-model",
-            "prepare",
-            "intent:utterance",
+            delegee_id="model:eira-model",
+            action="prepare",
+            target="intent:utterance",
         )
     )
     assert not service.check_delegation(
         DelegationCheckRequest(
-            "model:eira-model",
-            "prepare",
-            "state:update",
+            delegee_id="model:eira-model",
+            action="prepare",
+            target="state:update",
         )
     )
