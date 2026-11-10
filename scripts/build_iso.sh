@@ -131,6 +131,7 @@ if [[ $CI_UNATTENDED -eq 1 ]]; then
     install -d -m 0755 "$STAGE/eira/ci"
     install -m 0755 -- "$INSTALLER/ci/eira-ci-setup" "$STAGE/eira/ci/eira-ci-setup"
     install -m 0755 -- "$INSTALLER/ci/eira-ci-report" "$STAGE/eira/ci/eira-ci-report"
+    install -m 0755 -- "$INSTALLER/ci/eira-ci-install-failed" "$STAGE/eira/ci/eira-ci-install-failed"
     install -m 0644 -- "$INSTALLER/ci/eira-ci-report.service" "$STAGE/eira/ci/eira-ci-report.service"
     install -m 0644 -- "$INSTALLER/ci/autoinstall-ci.yaml" "$STAGE/autoinstall.yaml"
     ISO_NAME=EiraOS-1.0-RC1-amd64-ci-unattended.iso
