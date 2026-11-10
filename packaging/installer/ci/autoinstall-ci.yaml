@@ -36,5 +36,5 @@ autoinstall:
     - cp -r /cdrom/eira/. /target/var/lib/eira-install/
     - curtin in-target --target=/target -- sh /var/lib/eira-install/eira-postinstall.sh
   error-commands:
-    - sh -c 'echo EIRA-CI INSTALL FAILED > /dev/ttyS0; echo "---- eira-postinstall.log" > /dev/ttyS0; tail -n 150 /target/var/log/eira-postinstall.log > /dev/ttyS0 2>&1; echo "---- end eira-postinstall.log" > /dev/ttyS0; tail -n 60 /var/log/installer/subiquity-server-debug.log > /dev/ttyS0 2>&1; poweroff -f || true'
+    - sh -c 'echo EIRA-CI INSTALL FAILED > /dev/ttyS0; echo "---- eira-postinstall.log" > /dev/ttyS0; tail -n 150 /target/var/log/eira-postinstall.log > /dev/ttyS0 2>&1; echo "---- end eira-postinstall.log" > /dev/ttyS0; tail -n 60 /var/log/installer/subiquity-server-debug.log > /dev/ttyS0 2>&1; echo "---- apt errors" > /dev/ttyS0; journalctl -b --no-pager -o cat 2>/dev/null | grep -E "^(Err:|E: |W: |Ign:)|Could not|Failed to fetch|NO_PUBKEY|not signed" | tail -n 60 > /dev/ttyS0 2>&1; echo "---- target sources" > /dev/ttyS0; cat /target/etc/apt/sources.list.d/*.sources /target/etc/apt/sources.list /target/etc/apt/apt.conf.d/*curtin* > /dev/ttyS0 2>&1; echo "---- end apt" > /dev/ttyS0; poweroff -f || true'
   shutdown: poweroff

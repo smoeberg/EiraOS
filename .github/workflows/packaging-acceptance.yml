@@ -207,6 +207,9 @@ jobs:
             echo "::group::eira-postinstall.log"
             tr -d '\r' < install-serial.log | sed -n '/---- eira-postinstall.log/,/---- end eira-postinstall.log/p'
             echo "::endgroup::"
+            echo "::group::apt errors and target sources"
+            tr -d '\r' < install-serial.log | sed -n '/---- apt errors/,/---- end apt/p'
+            echo "::endgroup::"
             exit 1
           fi
           [ "${status:-0}" -eq 0 ]
