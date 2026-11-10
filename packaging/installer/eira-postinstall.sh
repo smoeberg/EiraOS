@@ -16,12 +16,16 @@ exec >>"$LOG" 2>&1
 echo "== eira-postinstall $(date -u +%FT%TZ)"
 set -x
 
+# A slow or flaky network must not fail the install outright: apt retries
+# each download and gives up on a stalled connection instead of hanging.
+APT="apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60"
+
 # The installer may leave the target without package lists.
-apt-get update
+$APT update
 # apt's sandbox user must be able to read the local package.
 chmod 0755 "$SRC"
 chmod 0644 "$SRC/eira-os-core.deb"
-apt-get install -y "$SRC/eira-os-core.deb"
+$APT install -y "$SRC/eira-os-core.deb"
 
 install -D -m 0755 "$SRC/eira-firstboot" /usr/lib/eira/eira-firstboot
 install -m 0644 "$SRC/eira-firstboot.service" /etc/systemd/system/eira-firstboot.service
