@@ -54,9 +54,9 @@ def test_delegation_expires_and_revokes(tmp_path, monkeypatch):
         )
     assert not service.check_delegation(
         DelegationCheckRequest(
-            "model:eira-model",
-            "prepare",
-            "intent:create",
+            delegee_id="model:eira-model",
+            action="prepare",
+            target="intent:create",
         )
     )
 
