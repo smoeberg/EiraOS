@@ -37,7 +37,8 @@ def test_execute_and_decide_are_never_delegable():
 
 def test_delegation_expires_and_revokes():
     service = DelegationService()
-    delegation = service.create_delegation("user:alice", request())
+    with patch.object(service, "_audit"):
+        delegation = service.create_delegation("user:alice", request())
     assert service.check_delegation(
         DelegationCheckRequest(
             "model:eira-model",
@@ -45,10 +46,11 @@ def test_delegation_expires_and_revokes():
             "intent:create",
         )
     )
-    assert service.revoke_delegation(
-        DelegationRevokeRequest(delegation_id=delegation.id),
-        "user:alice",
-    )
+    with patch.object(service, "_audit"):
+        assert service.revoke_delegation(
+            DelegationRevokeRequest(delegation_id=delegation.id),
+            "user:alice",
+        )
     assert not service.check_delegation(
         DelegationCheckRequest(
             "model:eira-model",
@@ -68,10 +70,11 @@ def test_delegation_audit_failure_rolls_back_creation():
 
 def test_target_wildcard_matches_intent_namespace():
     service = DelegationService()
-    service.create_delegation(
-        "user:alice",
-        request(targets=("intent:*",)),
-    )
+    with patch.object(service, "_audit"):
+        service.create_delegation(
+            "user:alice",
+            request(targets=("intent:*",)),
+        )
     assert service.check_delegation(
         DelegationCheckRequest(
             "model:eira-model",
