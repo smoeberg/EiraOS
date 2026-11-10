@@ -112,6 +112,7 @@ def world(tmp_path, monkeypatch):
     boot = BootClock()
     fleet = TestFleet(tmp_path / "rights", clock, boot_clock=boot)
     fleet.grant(CONV, principal=ANNE).publish()
+    monkeypatch.setattr(DelegationService, "record_use", lambda self, delegation, action_id, action, target: None)
     delegation = DelegationService()
     with patch.object(delegation, "_audit"):
         delegation.create_delegation(
