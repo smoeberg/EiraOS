@@ -12,7 +12,6 @@ import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
-
 from unittest.mock import patch
 
 import pytest
@@ -32,7 +31,7 @@ from app.gate.executors import (
 )
 from app.gate.policy import Origin
 from app.gate.store import GateStore
-from tests.callers import HUMAN, HUMAN_SESSION, ProvingGate
+from tests.callers import HUMAN, HUMAN_SESSION, MODEL, ProvingGate
 from tests.rights_helpers import TestFleet
 
 CONV = "obj:sag:42"
