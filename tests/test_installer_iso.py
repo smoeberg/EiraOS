@@ -155,10 +155,13 @@ def _base_iso(tmp_path: Path) -> Path:
 def _build(tmp_path: Path, *extra: str) -> tuple[Path, str, str]:
     deb = tmp_path / "eira-os-core.deb"
     deb.write_bytes(b"not a real package")
+    # A given eira-labwc package: building one needs meson and a toolchain.
+    labwc = tmp_path / "eira-labwc.deb"
+    labwc.write_bytes(b"not a real package")
     out = tmp_path / "out"
     result = subprocess.run(
         ["bash", str(BUILD_ISO), "--base-iso", str(_base_iso(tmp_path)),
-         "--deb", str(deb), "--output-dir", str(out), *extra],
+         "--deb", str(deb), "--labwc-deb", str(labwc), "--output-dir", str(out), *extra],
         capture_output=True,
         text=True,
         check=False,

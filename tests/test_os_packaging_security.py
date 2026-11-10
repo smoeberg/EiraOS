@@ -193,7 +193,7 @@ def test_iso_builder_remasters_ubuntu_installer_and_embeds_local_deb() -> None:
     postinstall = (REPO_ROOT / "packaging" / "installer" / "eira-postinstall.sh").read_text(
         encoding="utf-8"
     )
-    assert 'apt-get install -y "$SRC/eira-labwc.deb" "$SRC/eira-os-core.deb"' in postinstall
+    assert '$APT install -y "$SRC/eira-labwc.deb" "$SRC/eira-os-core.deb"' in postinstall
     assert "systemctl enable eira.target" in postinstall
     assert "systemctl enable eira-firstboot.service" in postinstall
 

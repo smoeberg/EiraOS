@@ -109,6 +109,12 @@ READ_ONLY = {
     "journey.get",
     "capability.list",
     "presentation.mode_get",
+    # Conversation layer: reads for an authenticated human session only.
+    "events.since",
+    "conversation.list",
+    "conversation.events",
+    "conversation.members",
+    "conversation.awaiting",
 }
 POLICY_GATED_SETTINGS = {"presentation.mode_set"}  # Builder needs device policy
 # Former bypasses, now answering E_GATE_REQUIRED (proved below).
