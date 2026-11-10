@@ -17,6 +17,7 @@
   /run/eira/*.sock rwk,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
+  /var/log/eira/** rw,
 
   network unix stream,
   deny network inet,
