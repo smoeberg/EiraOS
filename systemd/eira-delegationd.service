@@ -1,0 +1,35 @@
+[Unit]
+Description=EiraOS Delegation Daemon
+After=eira-stated.service eira-identityd.service
+Requires=eira-stated.service
+
+[Service]
+Type=simple
+User=eira
+Group=eira
+ExecStart=/usr/bin/python3 -m app.daemons.runner --daemon delegationd
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Resource limits
+LimitNOFILE=512
+LimitNPROC=128
+MemoryLimit=256M
+CPUQuota=50%
+
+# Environment
+Environment=EIRA_RUN_DIR=/run/eira
+Environment=EIRA_STATE_DB=/data/eira.db
+Environment=EIRA_DELEGATION_KEY_FILE=/data/eira-delegation.key
+
+[Install]
+WantedBy=eira.target
