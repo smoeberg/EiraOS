@@ -125,6 +125,7 @@ def _register_presenced(server: JsonRpcServer) -> None:
 
 def _register_delegationd(server: JsonRpcServer) -> None:
     from app.daemons.delegationd import register_delegation_handlers
+
     register_delegation_handlers(server)
 
 
