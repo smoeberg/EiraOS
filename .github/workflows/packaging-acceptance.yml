@@ -118,8 +118,11 @@ jobs:
         run: |
           scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
             --deb dist/eira-os-core.deb --output-dir dist
+          # The CI image carries its packages: the VM installs without network.
+          EIRA_APT_MIRROR=http://azure.archive.ubuntu.com/ubuntu/ \
+            scripts/build_offline_repo.sh --deb dist/eira-os-core.deb --output offline-repo
           scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
-            --deb dist/eira-os-core.deb --output-dir dist --ci-unattended
+            --deb dist/eira-os-core.deb --output-dir dist --ci-unattended --offline-repo offline-repo
 
       - name: Verify ISO layout and boot records
         run: |
@@ -136,6 +139,9 @@ jobs:
             done
           done
           ! xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -find /eira/ci 2>/dev/null | grep -q "'/eira/ci"
+          ! xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -find /eira/repo 2>/dev/null | grep -q "'/eira/repo"
+          xorriso -indev dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso -find /eira/repo/Packages.gz 2>/dev/null \
+            | grep -q "'/eira/repo/Packages.gz'"
 
       - name: Upload installer ISO
         uses: actions/upload-artifact@v4
@@ -186,6 +192,8 @@ jobs:
           cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
           qemu-img create -f qcow2 disk.qcow2 40G
           mkdir -p screens
+          # No network (-nic none): the install must not depend on the Ubuntu
+          # archive; the CI image carries what EiraOS needs (/eira/repo).
           # A screenshot every 5 minutes shows where an install stalls.
           ( for n in $(seq -w 1 15); do sleep 300; [ -S qemu-mon.sock ] || break
               echo "screendump screens/install-$n.ppm" | socat - UNIX-CONNECT:qemu-mon.sock >/dev/null 2>&1
@@ -198,7 +206,7 @@ jobs:
             -drive if=pflash,format=raw,file=vars.fd \
             -drive file=disk.qcow2,if=virtio,format=qcow2 \
             -cdrom dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso -boot order=d \
-            -device virtio-vga -display none -nic user,model=virtio-net-pci \
+            -device virtio-vga -display none -nic none \
             -serial file:install-serial.log -no-reboot || status=$?
           echo "installer VM exited with ${status:-0} (124 = timeout)"
           tail -c 20000 install-serial.log | tr -d '\r' || true
