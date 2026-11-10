@@ -20,6 +20,7 @@ DAEMON_NAMES = (
     "veritasd",
     "intentd",
     "graphd",
+    "modeld",
     "walletd",
     "presenced",
     "contextd",
@@ -64,6 +65,12 @@ def _register_graphd(server: JsonRpcServer) -> None:
     from app.daemons.graphd import register_graph_handlers
 
     register_graph_handlers(server)
+
+
+def _register_modeld(server: JsonRpcServer) -> None:
+    from app.daemons.modeld import register_model_handlers
+
+    register_model_handlers(server)
 
 
 def _register_walletd(server: JsonRpcServer) -> None:
@@ -149,6 +156,7 @@ REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "veritasd": _register_veritasd,
     "intentd": _register_intentd,
     "graphd": _register_graphd,
+    "modeld": _register_modeld,
     "walletd": _register_walletd,
     "presenced": _register_presenced,
     "contextd": _register_contextd,

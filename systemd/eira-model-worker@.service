@@ -1,0 +1,33 @@
+[Unit]
+Description=EiraOS Model Worker (%i)
+After=eira-modeld.service
+Requires=eira-modeld.service
+
+[Service]
+Type=simple
+User=eira-model
+Group=eira-models
+ExecStart=/usr/bin/python3 -m app.daemons.model_worker_process %i
+Restart=on-failure
+RestartSec=5
+
+# Security hardening - ultra-strict for model execution
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Resource limits - strict for model execution
+MemoryLimit=512M
+CPUQuota=50%
+LimitNOFILE=256
+LimitNPROC=32
+
+# Environment
+Environment=EIRA_RUN_DIR=/run/eira
+
+[Install]
+WantedBy=eira.target

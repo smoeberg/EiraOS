@@ -1,0 +1,32 @@
+# Last Modified: 2026-11-10
+#include <tunables/global>
+
+/usr/bin/python3 {
+  # Minimal required paths only - ultra-strict
+
+  # Required for EiraOS model workers
+  /usr/lib/eira-os/models/** r,
+  /usr/lib/eira-os/ r,
+
+  # Socket access (only worker's own socket and modeld)
+  /run/eira/ r,
+  /run/eira/model-*.sock rw,
+  /run/eira/modeld.sock rw,
+
+  # Model data (read-write for workers)
+  /data/model/ r,
+  /data/model/** rw,
+
+  # Ollama socket (for Mistral worker)
+  /run/eira/ollama.sock rw,
+
+  # Deny everything else - ultra-strict
+  DENY /** rwklx,
+  DENY /usr/lib/** rwklx,
+  DENY /usr/bin/** rwklx,
+  DENY /etc/** r,
+  DENY /home/** rwklx,
+  DENY /root/** rwklx,
+  DENY /tmp/** rwklx,
+  DENY /var/** rwklx,
+}

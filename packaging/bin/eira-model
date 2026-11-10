@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""EiraOS Model Administration CLI Tool.
+
+Usage:
+    eira-model list              # List available model workers
+    eira-model health            # Check health of model gateway and workers
+    eira-model execute --type script --script-id my-script --input '{"key": "value"}'
+    eira-model start             # Start model gateway and workers
+    eira-model stop              # Stop model gateway and workers
+    eira-model status            # Show status of model services
+"""
+
+import argparse
+import json
+import sys
+from typing import Any
+
+
+def get_client():
+    """Get an IPC client for modeld."""
+    from app.ipc.client import IpcClient
+    return IpcClient("modeld", timeout=10.0)
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    """List available model workers."""
+    try:
+        client = get_client()
+        result = client.call("model.list")
+        print("Available model workers:")
+        for worker in result.get("workers", []):
+            print(f"  - {worker}")
+        return 0
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    """Check health of model gateway and workers."""
+    try:
+        client = get_client()
+        result = client.call("model.health")
+        print(json.dumps(result, indent=2))
+        return 0
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_execute(args: argparse.Namespace) -> int:
+    """Execute a model request."""
+    try:
+        client = get_client()
+        
+        # Parse input JSON
+        input_data = {}
+        if args.input:
+            try:
+                input_data = json.loads(args.input)
+            except json.JSONDecodeError as exc:
+                print(f"Invalid JSON input: {exc}", file=sys.stderr)
+                return 1
+        
+        params = {
+            "model_type": args.type,
+            "input": input_data,
+        }
+        
+        if args.script_id:
+            params["script_id"] = args.script_id
+        if args.model_name:
+            params["model_name"] = args.model_name
+        if args.session_id:
+            params["session_id"] = args.session_id
+        
+        result = client.call("model.execute", params)
+        print(json.dumps(result, indent=2))
+        return 0
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    """Start model gateway and workers."""
+    import subprocess
+    
+    print("Starting model gateway (modeld)...")
+    try:
+        # Start modeld via runner
+        subprocess.Popen(
+            ["python3", "-m", "app.daemons.runner", "--daemon", "modeld"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print("  modeld started")
+    except Exception as exc:
+        print(f"  Failed to start modeld: {exc}", file=sys.stderr)
+        return 1
+    
+    # Start workers
+    for worker_type in ["script", "mistral", "veritas"]:
+        print(f"Starting {worker_type} worker...")
+        try:
+            subprocess.Popen(
+                ["python3", "-m", "app.daemons.model_worker_process", worker_type],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            print(f"  {worker_type} worker started")
+        except Exception as exc:
+            print(f"  Failed to start {worker_type} worker: {exc}", file=sys.stderr)
+            return 1
+    
+    print("All model services started")
+    return 0
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    """Stop model gateway and workers."""
+    import signal
+    import os
+    from app.ipc.paths import socket_path
+    
+    # Find and kill processes
+    processes_to_kill = []
+    
+    # Find modeld process
+    try:
+        import psutil
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            if proc.info['name'] == 'python3':
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                if '--daemon modeld' in cmdline or 'app.daemons.runner' in cmdline:
+                    processes_to_kill.append(proc.pid)
+                if 'app.daemons.model_worker_process' in cmdline:
+                    processes_to_kill.append(proc.pid)
+    except ImportError:
+        # Fallback without psutil
+        print("Warning: psutil not installed, using socket removal only")
+    
+    # Kill processes
+    for pid in processes_to_kill:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            print(f"Sent SIGTERM to PID {pid}")
+        except ProcessLookupError:
+            pass
+        except Exception as exc:
+            print(f"Failed to kill PID {pid}: {exc}", file=sys.stderr)
+    
+    # Remove sockets
+    for worker_type in ["script", "mistral", "veritas", "modeld"]:
+        socket = socket_path(f"model-{worker_type}") if worker_type != "modeld" else socket_path("modeld")
+        try:
+            if socket.exists():
+                socket.unlink()
+                print(f"Removed socket: {socket}")
+        except Exception as exc:
+            print(f"Failed to remove socket {socket}: {exc}", file=sys.stderr)
+    
+    print("Model services stopped")
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Show status of model services."""
+    from app.ipc.paths import socket_path
+    from app.ipc.transport import endpoint_ready
+    
+    print("Model Services Status:")
+    print()
+    
+    # Check modeld
+    modeld_socket = socket_path("modeld")
+    if modeld_socket.exists():
+        print(f"  modeld:        RUNNING (socket: {modeld_socket})")
+    else:
+        print(f"  modeld:        STOPPED")
+    
+    # Check workers
+    for worker_type in ["script", "mistral", "veritas"]:
+        worker_socket = socket_path(f"model-{worker_type}")
+        if worker_socket.exists():
+            print(f"  {worker_type} worker: RUNNING (socket: {worker_socket})")
+        else:
+            print(f"  {worker_type} worker: STOPPED")
+    
+    print()
+    
+    # Try health check
+    try:
+        client = get_client()
+        result = client.call("model.health", timeout=5.0)
+        print("Health Check:")
+        print(json.dumps(result, indent=2))
+        return 0
+    except Exception as exc:
+        print(f"Health check failed: {exc}")
+        return 1
+
+
+def main() -> int:
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description="EiraOS Model Administration CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  eira-model list              # List available workers
+  eira-model health            # Check health
+  eira-model execute --type script --script-id my-script --input '{"key": "value"}'
+  eira-model start             # Start all services
+  eira-model stop              # Stop all services
+  eira-model status            # Show status
+"""
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # list command
+    list_parser = subparsers.add_parser("list", help="List available model workers")
+    list_parser.set_defaults(func=cmd_list)
+    
+    # health command
+    health_parser = subparsers.add_parser("health", help="Check health of model services")
+    health_parser.set_defaults(func=cmd_health)
+    
+    # execute command
+    execute_parser = subparsers.add_parser("execute", help="Execute a model request")
+    execute_parser.add_argument("--type", required=True, choices=["script", "mistral", "veritas"],
+                                  help="Model type")
+    execute_parser.add_argument("--script-id", help="Script ID (for script type)")
+    execute_parser.add_argument("--model-name", help="Model name (for mistral type)")
+    execute_parser.add_argument("--input", help="Input JSON")
+    execute_parser.add_argument("--session-id", help="Session ID")
+    execute_parser.set_defaults(func=cmd_execute)
+    
+    # start command
+    start_parser = subparsers.add_parser("start", help="Start model gateway and workers")
+    start_parser.set_defaults(func=cmd_start)
+    
+    # stop command
+    stop_parser = subparsers.add_parser("stop", help="Stop model gateway and workers")
+    stop_parser.set_defaults(func=cmd_stop)
+    
+    # status command
+    status_parser = subparsers.add_parser("status", help="Show status of model services")
+    status_parser.set_defaults(func=cmd_status)
+    
+    args = parser.parse_args()
+    
+    if args.command is None:
+        parser.print_help()
+        return 1
+    
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

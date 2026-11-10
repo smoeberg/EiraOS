@@ -1,0 +1,36 @@
+# Last Modified: 2026-11-10
+#include <tunables/global>
+
+/usr/bin/python3 {
+  #include <abstractions/base>
+  #include <abstractions/python>
+
+  # Required for EiraOS model gateway
+  /usr/lib/eira-os/** r,
+  /usr/lib/eira-os/ r,
+
+  # Socket access
+  /run/eira/ r,
+  /run/eira/** rw,
+  /run/eira/modeld.sock rw,
+  /run/eira/model-*.sock rw,
+
+  # Database access (read-only for modeld)
+  /data/eira.db r,
+  /data/eira.db-wal r,
+  /data/eira.db-shm r,
+
+  # State directory
+  /data/ r,
+  /data/** r,
+
+  # Logs
+  /var/log/eira/ r,
+  /var/log/eira/** rw,
+
+  # Deny everything else
+  DENY /** rwklx,
+  DENY /etc/** r,
+  DENY /usr/lib/** rwklx,
+  DENY /usr/bin/** rwklx,
+}
