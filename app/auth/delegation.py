@@ -233,6 +233,15 @@ class DelegationService:
             for delegation in self.repo.active_for_delegee(request.delegee_id)
         )
 
+    def record_use(self, delegation: Delegation, action_id: str, action: str, target: str) -> None:
+        self._audit("delegation.used", delegation.delegator_id, {
+            "delegation_id": delegation.id,
+            "delegee_id": delegation.delegee_id,
+            "action_id": action_id,
+            "action": action,
+            "target": target,
+        })
+
     def delegation_for(self, delegee_id: str, action: str, target: str) -> Delegation | None:
         for delegation in self.repo.active_for_delegee(delegee_id):
             if delegation.can_perform(action, target):
