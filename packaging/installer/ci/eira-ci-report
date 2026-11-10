@@ -111,6 +111,23 @@ PY
 # GATE-KERNEL bilag A pkt. 1: the model has its own uid, reaches the gate,
 # never owns Eira data, and over the real socket it can propose but the gate
 # refuses its consent.
+# EIRA-CONVERSATION-1.0 §5: the event stream is served by the installed
+# intentd and refuses a caller without an authenticated session of its own.
+check events-need-session python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+for method in ("events.since", "conversation.awaiting", "conversation.list"):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(5)
+    s.connect("/run/eira/intentd.sock")
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
+                           "params": {"session_id": "forged", "_eira": {"ipc_token": token}}}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    assert reply.get("error", {}).get("message") == "E_NO_SESSION", (method, reply)
+PY
 check model-user-exists getent passwd eira-model
 check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"
 check model-not-in-eira sh -c "! id -nG eira-model | tr ' ' '\n' | grep -qx eira"
