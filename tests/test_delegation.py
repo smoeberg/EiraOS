@@ -24,3 +24,10 @@ def test_delegation_audit_failure_rolls_back_creation():
         with pytest.raises(RuntimeError):
             service.create_delegation("user:alice",request())
     assert service.repo.active_for_delegator("user:alice")==[]
+
+
+def test_target_wildcard_matches_intent_namespace():
+    service=DelegationService()
+    service.create_delegation("user:alice", request(targets=("intent:*",)))
+    assert service.check_delegation(DelegationCheckRequest("model:eira-model","prepare","intent:utterance"))
+    assert not service.check_delegation(DelegationCheckRequest("model:eira-model","prepare","state:update"))
