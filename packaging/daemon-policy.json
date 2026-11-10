@@ -6,7 +6,8 @@
     "fleetd",
     "veritasd",
     "intentd",
-    "graphd"
+    "graphd",
+    "delegationd"
   ],
   "prototype_daemons": [
     "walletd",
