@@ -2,6 +2,12 @@
 
 This directory contains protocol and interface specifications for EiraOS. The integrated architecture map is [EiraOS Architecture Baseline 1.0](../docs/architecture/eiraos-architecture-baseline-1.0.md).
 
+## Contexts, storage and sync
+
+- [EIRA Context 1.0](EIRA-CONTEXT-1.0.md) — the context as data, one Linux user per context, lifecycle on a device, key hierarchy, the open storage format (exit guarantee), sync over S3/WebDAV, ID home contents, glimt (ADR-0005, ADR-0006 L5).
+
+**Status:** Draft v0.1 for owner acceptance; not binding. Test plan follows as a separate step.
+
 ## Gate Kernel
 
 - [Gate Kernel 1.0](GATE-KERNEL-1.0.md) — authoritative protected-action boundary: validation, semantic/policy checks, consent, authorization, state safety, execution and result verification.
