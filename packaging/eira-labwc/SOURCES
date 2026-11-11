@@ -1,0 +1,20 @@
+# Pinned upstream sources for eira-labwc (EIRA-CONSENT-AGENT §6.1).
+# build.sh reads this file; nothing else is downloaded.
+#
+# wlroots: Ubuntu's copy of the upstream release tarball. Its SHA-512 is the
+# one in Ubuntu's signed Sources index (stonking, wlroots 0.20.2-1), so the
+# pin is checkable against the archive's signature chain.
+WLROOTS_VERSION=0.20.2
+WLROOTS_URL=http://archive.ubuntu.com/ubuntu/pool/universe/w/wlroots/wlroots_0.20.2.orig.tar.bz2
+WLROOTS_SHA256=20c37b521dc3054b6e9627b79bdd45fc716db9ebc58bdf97e57e84d04b04610f
+WLROOTS_SHA512=0103d558b0cbcaaa527778f827da73a5baa1061c21de7b693766101703d07fc58dcafdc12df8860dc33502b8db8ae795d773b2e925111a4bc500c939f9b1fbff
+
+# labwc: >= 0.20.3 is required. <privilegedInterfaces> exists from 0.20.0,
+# but "first <privilegedInterfaces> disables all" only works from 0.20.3
+# (labwc #3705). Pinned by tag and commit; the build refuses any other commit.
+LABWC_VERSION=0.20.3
+LABWC_GIT=https://github.com/labwc/labwc.git
+LABWC_COMMIT=e0a3970b0c70e321814e8004ff7c6dbc7aeaf884
+
+# Debian revision of the eira-labwc binary package.
+EIRA_REVISION=1eira1

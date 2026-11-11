@@ -26,7 +26,9 @@ import hmac
 import secrets
 
 DOMAIN = b"EIRA-CONSENT-V1"
-VERBS = frozenset({"consent", "confirm"})
+# "delegate": the user lets the model prepare actions (app/auth/delegation.py);
+# action_id is then the delegation proposal id.
+VERBS = frozenset({"consent", "confirm", "delegate"})
 KEY_BYTES = 32
 
 

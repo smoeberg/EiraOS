@@ -5,7 +5,7 @@ daemon=${0##*/}
 daemon=${daemon#eira-}
 
 case "$daemon" in
-    stated|identityd|fleetd|veritasd|intentd|graphd) ;;
+    stated|identityd|fleetd|veritasd|intentd|graphd|delegationd) ;;
     *)
         echo "Unsupported EiraOS daemon name: $daemon" >&2
         exit 64

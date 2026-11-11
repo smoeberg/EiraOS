@@ -4,12 +4,50 @@
 #
 # EiraOS viser ingen skrivebord, ingen startmenu: labwc starter fullscreen
 # eira-shell via labwc autostart. Builder Mode kræver labwc panel (P4).
+#
+# Rent miljø (GATE-KERNEL bilag A pkt. 1, "Rest"): hvad sessionen starter,
+# og hvor appen finder daemonerne, bestemmes af pakken og af
+# /etc/eira/eira.conf (root-ejet) — aldrig af det miljø, sessionen arver.
+# Arvede EIRA_*-overrides og dynamic-loader-variabler fjernes, før noget
+# andet læses. Det lukker ikke angrebet "et program, der kører som brugeren,
+# genstarter appen med LD_PRELOAD"; det kræver samtykkeagenten
+# (specs/EIRA-CONSENT-AGENT-0.1.md). Det sikrer kun, at sessionen selv
+# starter fra kendte stier.
 set -eu
 
-if [ -r /etc/eira/eira.conf ]; then
-    set -a
-    . /etc/eira/eira.conf
-    set +a
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+# Fjern alt arvet, der kan pege sessionen et andet sted hen.
+for var in $(env | sed -n 's/^\(EIRA_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    unset "$var"
+done
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT GTK_MODULES GTK3_MODULES GIO_EXTRA_MODULES \
+    WEBKIT_INJECTED_BUNDLE_PATH PYTHONPATH PYTHONSTARTUP 2>/dev/null || true
+
+EIRA_CONF=/etc/eira/eira.conf
+
+# Konfigurationen læses kun, hvis root ejer den, og kun root kan skrive i den.
+conf_trusted() {
+    [ -f "$1" ] && [ -r "$1" ] || return 1
+    owner=$(stat -c '%u' "$1") || return 1
+    mode=$(stat -c '%a' "$1") || return 1
+    [ "$owner" = "0" ] || return 1
+    # Ingen skriveret til gruppe eller andre.
+    case "$mode" in
+        *[2367]? | *[2367]) return 1 ;;
+    esac
+    return 0
+}
+
+if [ -e "$EIRA_CONF" ]; then
+    if conf_trusted "$EIRA_CONF"; then
+        set -a
+        . "$EIRA_CONF"
+        set +a
+    else
+        echo "eira-session: ignorerer $EIRA_CONF (ikke root-ejet eller skrivbar for andre)" >&2
+    fi
 fi
 
 EIRA_RUN_DIR=${EIRA_RUN_DIR:-/run/eira}
@@ -41,6 +79,19 @@ esac
 if ! command -v "$WM" >/dev/null 2>&1; then
     echo "eira-session: $WM er ikke installeret (apt install $WM)" >&2
     exit 78
+fi
+
+# EIRA-CONSENT-AGENT R-6.1: rc.xml skjuler alle privilegerede Wayland-protokoller
+# med <privilegedInterfaces/>. Det virker først fra labwc 0.20.3 (eira-labwc);
+# en ældre labwc ignorerer blokken og giver alle klienter virtual pointer,
+# layer-shell og screencopy. Derfor starter sessionen ikke med en ældre labwc.
+LABWC_MIN=0.20.3
+if [ "$WM" = "labwc" ]; then
+    have=$(labwc --version 2>/dev/null | sed -n 's/^labwc \([0-9][0-9.]*\).*/\1/p' | head -n 1)
+    if [ -z "$have" ] || [ "$(printf '%s\n%s\n' "$LABWC_MIN" "$have" | sort -V | head -n 1)" != "$LABWC_MIN" ]; then
+        echo "eira-session: labwc ${have:-ukendt} er for gammel; EiraOS kræver >= $LABWC_MIN (pakken eira-labwc)" >&2
+        exit 80
+    fi
 fi
 
 if [ ! -x "$SHELL_BIN" ]; then

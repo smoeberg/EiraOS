@@ -18,6 +18,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app.conversation import feed
 from app.gate.store import iso, utc_now
 
 
@@ -155,6 +156,7 @@ class ConversationOutboxExecutor(Executor):
         self._connect = connect
         with closing(self._connect()) as conn:
             conn.executescript(OUTBOX_SCHEMA)
+            feed.ensure_schema(conn)
 
     def reconcile(self, action_id: str, execution_id: str) -> bool | None:
         # The outbox row is written in one transaction with the execution id,
@@ -180,20 +182,41 @@ class ConversationOutboxExecutor(Executor):
         }
 
     def run(self, envelope: dict[str, Any], execution_id: str) -> ExecutorResult:
+        # One transaction: the outbox row, the feed entry and the membership it
+        # implies (EIRA-CONVERSATION-1.0 §3.3). Either all exist or none do, so
+        # reconcile() above still proves the effect from the outbox alone.
         with closing(self._connect()) as conn:
-            conn.execute(
-                """INSERT INTO conversation_outbox (event_id, conversation_id, action_type, envelope,
-                   execution_id, delivery_state, recorded_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)""",
-                (
-                    envelope["id"],
-                    envelope["conversation_id"],
-                    self.action_type,
-                    json.dumps(envelope, sort_keys=True, ensure_ascii=False),
-                    execution_id,
-                    iso(utc_now()),
-                ),
-            )
-            conn.commit()
+            conn.isolation_level = None
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute(
+                    "SELECT actor_identity FROM gate_actions WHERE action_id = ?", (envelope["id"],)
+                ).fetchone()
+                if row is None:
+                    raise feed.OutsideDomain("the gate has no record of this action")
+                seq = feed.record(conn, envelope, row[0])
+                conn.execute(
+                    """INSERT INTO conversation_outbox (event_id, conversation_id, action_type, envelope,
+                       execution_id, delivery_state, recorded_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)""",
+                    (
+                        envelope["id"],
+                        envelope["conversation_id"],
+                        self.action_type,
+                        json.dumps(envelope, sort_keys=True, ensure_ascii=False),
+                        execution_id,
+                        iso(utc_now()),
+                    ),
+                )
+                conn.execute("COMMIT")
+            except feed.OutsideDomain as error:
+                conn.execute("ROLLBACK")
+                # The conversation was opened by someone else between the last
+                # check and now. Nothing was written.
+                raise ExecutorUnavailable(f"outside the user's domain: {error}") from None
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+        feed.NOTIFIER.notify(seq)
         return ExecutorResult(
             status="succeeded",
             state_transition=("executing", "recorded"),
@@ -201,6 +224,7 @@ class ConversationOutboxExecutor(Executor):
                 "conversation_id": envelope["conversation_id"],
                 "visible_state": VISIBLE_STATE.get(self.action_type, "recorded_not_delivered"),
                 "delivery": "pending",
+                "seq": seq,
             },
         )
 

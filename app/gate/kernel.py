@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from app.clock import BootInstant, boot_now, within
+from app.conversation.feed import OutsideDomain
 from app.gate import consent_proof, edp, system
 from app.gate.caller import current as current_caller
 from app.gate.errors import GATE_VERSION, Decision, GateCode, GateResult, LayerFailure
@@ -57,8 +58,15 @@ class Gate:
         consent_ttl: timedelta = DEFAULT_CONSENT_TTL,
         boot_clock: Callable[[], BootInstant] = boot_now,
         rights: RightsCache | None = None,
+        delegations: Any = None,
     ) -> None:
         self.store = store or GateStore()
+        if delegations is None:
+            from app.auth.delegation import DelegationService
+
+            delegations = DelegationService()
+        # Who may let the model prepare (EIRA-DELEGATION-1.0); tests inject.
+        self._delegations = delegations
         self._registry = registry if registry is not None else default_registry(self.store.db_path)
         if sessions is None:
             from app.session_store import get_session_for_gate as get_session
@@ -118,6 +126,11 @@ class Gate:
         self, raw: str | bytes | None, session_id: str | None, origin: Origin, lang: str = "da"
     ) -> GateResult:
         _reset_rights()
+        # The model's proposals are origin model, whatever the caller claims:
+        # the IPC layer already does this, the gate does not rely on it.
+        caller = current_caller()
+        if caller is not None and caller.model:
+            origin = Origin.MODEL
         actor = self._actor(session_id)
         record: dict[str, Any] | None = None
         try:
@@ -136,9 +149,11 @@ class Gate:
             self._layer_5_consent(policy, record, session_id, at_proposal=True)
             self._layer_6_authorization(envelope, policy, actor)
         except LayerFailure as failure:
-            if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6:
-                # Only reached after this user's own pending record was stored.
-                self.store.cancel(envelope["id"])
+            if failure.code is GateCode.E_UNAUTHORIZED and failure.layer == 6 and record is not None:
+                # Layer 6 runs after the pending record is stored; use the record
+                # itself for cleanup so malformed/early failures cannot reference
+                # an unbound envelope.
+                self.store.cancel(record["action_id"])
             elif record is not None and record["state"] == "pending":
                 # Consent or step-up is needed: the UI shows exactly this text.
                 failure.data.setdefault("rendering", _rendering(record))
@@ -306,9 +321,57 @@ class Gate:
                 GateCode.E_POLICY, f"{policy.action_type} may not be proposed by {origin.value}"
             )
         check_limits(policy, action["action"]["content"])
-        if actor is None or not self.store.is_member(action["conversation_id"], actor["identity"]):
-            raise LayerFailure(GateCode.E_POLICY, "outside the user's domain")
+        self._domain(action, actor)
+        # A model may propose only under a delegation from this human
+        # (bilag A pkt. 1, EIRA-DELEGATION-1.0). Consent and confirmation
+        # stay human-only in grant_consent() and confirm().
+        caller = current_caller()
+        if origin is Origin.MODEL and caller is not None and caller.model:
+            self._delegation(policy, actor, caller)
         return action, policy
+
+    def _delegation(self, policy, actor: dict[str, Any] | None, caller) -> None:
+        """Lag 4 for a model proposal. The delegation used is recorded in the
+        gate's own audit chain with the decision (no second audit system on
+        the decision path, and nothing to fail open)."""
+        from app.gate.caller import model_identity
+
+        delegee = model_identity(caller)
+        target = f"intent:{policy.action_type}"
+        found = None
+        if actor is not None and delegee:
+            found = self._delegations.delegation_for(delegee, "prepare", target, delegator=actor["identity"])
+        if found is None:
+            raise LayerFailure(GateCode.E_UNAUTHORIZED, "no active delegation for this model and action")
+        _DELEGATION.set({"delegation_id": found.id, "delegator": found.delegator_id,
+                         "delegee": delegee, "target": target})
+
+    def _domain(self, action: dict[str, Any], actor: dict[str, Any] | None) -> None:
+        """Lag 4, the user's domain (RIGHTS-SET §6, CONVERSATION-1.0 §3.2).
+
+        ``device:local`` is not a conversation: its domain is having at least
+        one live grant on ``device:local`` in the Fleet set; which action is
+        allowed is lag 6's decision. Elsewhere the conversation layer decides
+        who may act.
+        """
+        if actor is None:
+            raise LayerFailure(GateCode.E_POLICY, "outside the user's domain")
+        if action["conversation_id"] == system.SYSTEM_SCOPE:
+            resolved = self._rights.resolve(self._clock())
+            rights = resolved.rights
+            if rights is None or not contract.has_any_grant(
+                rights.rights_set,
+                principal=actor["identity"],
+                groups=actor.get("groups") or (),
+                scope=system.SYSTEM_SCOPE,
+                now=rights.effective_now,
+            ):
+                raise LayerFailure(GateCode.E_POLICY, "outside the user's domain: no grant on this device")
+            return
+        try:
+            self.store.check_domain(action, actor["identity"])
+        except OutsideDomain as error:
+            raise LayerFailure(GateCode.E_POLICY, f"outside the user's domain: {error}") from None
 
     def _layer_5_consent(
         self, policy: ActionPolicy, record: dict[str, Any], session_id: str | None, *, at_proposal: bool
@@ -691,6 +754,8 @@ class Gate:
                 # Which process asked (SO_PEERCRED), so audit and SIEM can tell
                 # the model from the user (bilag A pkt. 1).
                 "caller": _caller_audit(),
+                # Which delegation let the model propose (None for humans).
+                "delegation": _DELEGATION.get(),
                 **_rights_audit(),
             }
         )
@@ -735,6 +800,9 @@ def _boot_instant(consent: dict[str, Any]) -> BootInstant | None:
 # Set by layer 6 for the audit entry of the same call. Context variables are
 # per thread and per task, so concurrent requests never see each other's.
 _RIGHTS: contextvars.ContextVar[ActiveRights | None] = contextvars.ContextVar("gate_rights", default=None)
+_DELEGATION: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "gate_delegation", default=None
+)
 _DECISION: contextvars.ContextVar[contract.Decision | None] = contextvars.ContextVar(
     "gate_rights_decision", default=None
 )
@@ -758,6 +826,7 @@ def _model_is_calling() -> bool:
 def _reset_rights() -> None:
     _RIGHTS.set(None)
     _DECISION.set(None)
+    _DELEGATION.set(None)
 
 
 def action_key(action_type: str) -> str:

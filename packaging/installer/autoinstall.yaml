@@ -20,7 +20,6 @@ autoinstall:
     id: ubuntu-desktop-minimal
   updates: security
   packages:
-    - labwc
     - xwayland
   late-commands:
     - mkdir -p /target/var/lib/eira-install

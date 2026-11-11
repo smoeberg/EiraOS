@@ -45,7 +45,10 @@ def test_installer_installs_ubuntu_desktop_then_eira_from_the_medium():
     commands = "\n".join(config["late-commands"])
     assert "/cdrom/eira/" in commands
     assert "eira-postinstall.sh" in commands
-    assert {"labwc", "xwayland"} <= set(config["packages"])
+    assert "xwayland" in config["packages"]
+    # Ubuntu's labwc (0.9) cannot withhold privileged protocols; eira-labwc
+    # comes from the medium instead (EIRA-CONSENT-AGENT R-6.1).
+    assert "labwc" not in config["packages"]
 
 
 def test_ci_autoinstall_is_unattended_and_uses_a_non_system_test_user():
@@ -152,10 +155,13 @@ def _base_iso(tmp_path: Path) -> Path:
 def _build(tmp_path: Path, *extra: str) -> tuple[Path, str, str]:
     deb = tmp_path / "eira-os-core.deb"
     deb.write_bytes(b"not a real package")
+    # A given eira-labwc package: building one needs meson and a toolchain.
+    labwc = tmp_path / "eira-labwc.deb"
+    labwc.write_bytes(b"not a real package")
     out = tmp_path / "out"
     result = subprocess.run(
         ["bash", str(BUILD_ISO), "--base-iso", str(_base_iso(tmp_path)),
-         "--deb", str(deb), "--output-dir", str(out), *extra],
+         "--deb", str(deb), "--labwc-deb", str(labwc), "--output-dir", str(out), *extra],
         capture_output=True,
         text=True,
         check=False,

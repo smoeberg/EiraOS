@@ -6,7 +6,8 @@ export type EiraDaemon =
   | "fleetd"
   | "veritasd"
   | "intentd"
-  | "graphd";
+  | "graphd"
+  | "delegationd";
 
 type TestIpc = (
   daemon: EiraDaemon,
