@@ -59,7 +59,7 @@ En kontekst beskrives af en **kontekst-post**. Posten ligger i kontekstens hjem 
 |---|---|
 | `kind` | `organisation` (styret af en organisations Fleet) eller `personal` (styret af personen) |
 | `identity.provider_id` | Udbyderen, personen logger ind med for at låse konteksten op. En bestyrelseskontekst uden egen udbyder bruger personens private udbyder (ADR-0005, "Begreber") |
-| `governance.source` | `fleet` (rettigheder og politik fra organisationen) eller `person` |
+| `governance.source` | `fleet` (rettigheder og politik fra organisationen), `person` eller `guardian` (barnets kontekst, styret af værgernes signerede regler, ADR-0005 K12) |
 | `home` | Kontekst-hjemmet (K3). `type` er `s3` eller `webdav` (K8 lag 1). `prefix` er et pseudonym, så hjemmet ikke ser kontekstens navn |
 | `policy.max_offline_days` | K4/K10. Standard 7 for `personal`. Sat af Fleet for `organisation` |
 | `policy.glimt_allowed` | ADR-0006 L5. En organisation kan forbyde glimt fra sin kontekst |
@@ -293,6 +293,10 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 - Skallen slår `display_name` op i sin egen krypterede cache, der kun findes, mens personen er logget ind.
 - Intet andet felt er tilladt. Skallen afviser beskeder med andre felter, og kalender-glimt fra en kontekst med `glimt_level` = `activity`.
 - En låst kontekst sender ikke glimt (dens processer kører ikke). Glimt fra låste kontekster findes ikke i 1.0 (O-4): det ville kræve, at hjemmet kan tælle nye manifester og dermed ser personens aktivitetsmønstre.
+
+### 11.1 Overfør glimt (ADR-0005 K12)
+
+Skallen kan på personens anmodning oprette en begivenhed i en anden åben kontekst ud fra et kalender-glimt. Kun `start`, `end` og `place` fra glimtet overføres; titlen indtastes af personen. Handlingen går gennem gaten i målkonteksten. Kildekonteksten får ingen besked og ingen data retur.
 
 ## 12. Fejlkoder
 
