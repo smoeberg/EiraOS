@@ -154,7 +154,17 @@ PY
 check modeld-active wait_for 60 systemctl is-active --quiet eira-modeld.service
 check modeld-runs-as-model sh -c '[ "$(ps -o uid= -p "$(systemctl show -p MainPID --value eira-modeld.service)" | tr -d " ")" = "$(id -u eira-model)" ]'
 check modeld-profile-enforced sh -c "grep -q '^/usr/bin/eira-modeld (enforce)' /sys/kernel/security/apparmor/profiles"
-check modeld-confined sh -c 'ps -o label= -p "$(systemctl show -p MainPID --value eira-modeld.service)" | grep -q "eira-modeld (enforce)"'
+modeld_confined() {
+    pid=$(systemctl show -p MainPID --value eira-modeld.service)
+    # With stacked LSMs the AppArmor label is in attr/apparmor/current.
+    label=$(cat "/proc/$pid/attr/apparmor/current" 2>/dev/null || cat "/proc/$pid/attr/current" 2>/dev/null)
+    case "$label" in
+        "/usr/bin/eira-modeld (enforce)"*) return 0 ;;
+    esac
+    say "diag modeld-label: apparmor/current=[$(cat "/proc/$pid/attr/apparmor/current" 2>&1)] current=[$(cat "/proc/$pid/attr/current" 2>&1)] ps=[$(ps -o label= -p "$pid" 2>&1)] exe=[$(readlink "/proc/$pid/exe" 2>&1)]"
+    return 1
+}
+check modeld-confined modeld_confined
 
 check modeld-no-network sh -c '[ "$(systemctl show -p PrivateNetwork --value eira-modeld.service)" = yes ]'
 check modeld-reaches-gate-and-is-refused python3 - <<'PY'
