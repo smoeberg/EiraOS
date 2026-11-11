@@ -33,7 +33,20 @@ curl -fsSL --retry 3 -o SHA256SUMS.gpg "$RELEASE_URL/SHA256SUMS.gpg"
 GNUPGHOME=$(mktemp -d)
 export GNUPGHOME
 trap 'rm -rf -- "$GNUPGHOME"' EXIT
-gpg --batch --quiet --keyserver hkps://keyserver.ubuntu.com --recv-keys "$CDIMAGE_KEY" >&2
+# The key ships in ubuntu-keyring on Ubuntu hosts; the keyserver is only a
+# fallback. Trust still rests on the pinned fingerprint (VALIDSIG below).
+LOCAL_KEYRING=${EIRA_UBUNTU_KEYRING:-/usr/share/keyrings/ubuntu-archive-keyring.gpg}
+have_key() { gpg --batch --list-keys "$CDIMAGE_KEY" >/dev/null 2>&1; }
+if [[ -r $LOCAL_KEYRING ]]; then
+    gpg --batch --quiet --no-default-keyring --keyring "$LOCAL_KEYRING" \
+        --export "$CDIMAGE_KEY" | gpg --batch --quiet --import >&2 2>/dev/null || true
+fi
+for attempt in 1 2 3 4 5; do
+    have_key && break
+    gpg --batch --quiet --keyserver hkps://keyserver.ubuntu.com --recv-keys "$CDIMAGE_KEY" >&2 \
+        || { echo "keyserver attempt $attempt failed" >&2; sleep $((attempt * 5)); }
+done
+have_key || { echo "Cannot obtain the Ubuntu CD image key $CDIMAGE_KEY" >&2; exit 69; }
 gpg --batch --status-fd 1 --verify SHA256SUMS.gpg SHA256SUMS 2>/dev/null \
     | grep -q "^\[GNUPG:\] VALIDSIG ${CDIMAGE_KEY} " || {
     echo "SHA256SUMS is not signed by the Ubuntu CD image key" >&2
