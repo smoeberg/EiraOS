@@ -71,3 +71,12 @@ def test_a_human_proposal_needs_no_delegation(world):
     world.store.add_member(CONV, BO)
     result = world.gate.propose(raw(envelope(id="dlg-human")), "s-bo", Origin.USER)
     assert result.code is not GateCode.E_UNAUTHORIZED or result.layer != 4
+
+
+def test_the_model_cannot_claim_to_be_a_user(world):
+    """Defence in depth: the gate itself forces origin model for the model's
+    UID, not only the IPC layer."""
+    world.store.add_member(CONV, BO)
+    with acting_as(MODEL):
+        result = world.gate.propose(raw(envelope(id="dlg-claim")), "s-bo", Origin.USER)
+    assert result.code is GateCode.E_UNAUTHORIZED and "delegation" in result.detail

@@ -1,0 +1,56 @@
+[Unit]
+Description=EiraOS model process (proposes only; GATE-KERNEL bilag A)
+Documentation=https://github.com/smoeberg/EiraOS
+PartOf=eira.target
+After=eira-intentd.service
+Wants=eira-intentd.service
+
+[Service]
+Type=simple
+# Its own UID: the gate tells the model from a human by SO_PEERCRED.
+# Not in the "eira" group, so it cannot reach daemon data.
+User=eira-model
+Group=eira-clients
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/usr/lib/eira-os
+# It calls the gate in /run/eira; its own socket is in /run/eira-model.
+Environment=EIRA_RUN_DIR=/run/eira
+Environment=EIRA_MODEL_RUN_DIR=/run/eira-model
+EnvironmentFile=-/etc/eira/eira.conf
+ExecStart=/usr/bin/eira-modeld
+Restart=on-failure
+RestartSec=2s
+# 78 = wrong user: restarting would not help.
+RestartPreventExitStatus=78
+RuntimeDirectory=eira-model
+RuntimeDirectoryMode=0750
+UMask=0117
+# No network at all (the rule adapter needs none); AF_UNIX still works.
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX
+# No /data, no home, nothing writable but its socket directory.
+ProtectSystem=strict
+ProtectHome=true
+InaccessiblePaths=-/data -/var/lib/eira -/var/log/eira
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+AppArmorProfile=/usr/bin/eira-modeld
+
+[Install]
+WantedBy=eira.target
