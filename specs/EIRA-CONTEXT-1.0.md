@@ -195,6 +195,14 @@ Formatet er en del af exit-garantien: alt i dette afsnit skal kunne læses med �
 
 Alt er **kun tilføjelse**: en blok eller et manifest overskrives aldrig. Det gør synkronisering mod "dum" lagring sikker uden låse (§7).
 
+**Lagerkrav (H-1, normativt):** skrivning til `blocks/…` og `manifests/…` SKAL være atomisk *opret-hvis-fraværende*. Et eksisterende objekt må aldrig overskrives, heller ikke med en ellers gyldig chiffertekst. Konkret:
+
+- **S3:** `PutObject` med `If-None-Match: *`; svaret `412 Precondition Failed` betyder "findes allerede" og er ikke en fejl for en blok, men en fejl for et manifest (så har en anden skrevet samme `<device_id>/<seq>`).
+- **WebDAV/HTTP:** `PUT` med `If-None-Match: *` (RFC 9110 §13.1.2) med samme betydning.
+- Et hjem, der ikke kan garantere opret-hvis-fraværende, understøttes ikke. EiraOS tjekker det, når et hjem tilknyttes (prøveskrivning af samme objekt to gange), og nægter at bruge hjemmet ellers.
+
+For blokke er konsekvensen af et overskrevet objekt begrænset (begge chiffertekster dekrypterer til samme klartekst, B-1), men for manifester ville det være omskrivning af historikken. Derfor gælder kravet begge.
+
 ### 6.2 Blokke
 
 - Filer opdeles med FastCDC (min 256 KiB, gennemsnit 1 MiB, maks 4 MiB). Små filer er én blok.
@@ -346,9 +354,10 @@ Testplanen (separat dokument) skal have mindst én test pr. invariant, og hver t
 
 | # | Invariant | Afsnit |
 |---|---|---|
-| B-1 | `block_id` beregnes af præcis den krypterede klartekst; krypteringsfunktionens signatur tillader ikke et id udefra; en blok med forkert id afvises ved læsning (`E_CONTEXT_INTEGRITY`) | §6.2 |
+| B-1 | `block_id` beregnes af præcis den krypterede klartekst. Testene skal mindst dække: (a) klartekst → `block_id` → kryptér → dekryptér → samme `block_id`; (b) ændret chiffertekst → AEAD-fejl; (c) en blok, der læses under et andet id end HMAC'en af dens klartekst → `E_CONTEXT_INTEGRITY`; (d) krypteringsfunktionens signatur kan ikke modtage et id fra kalderen (statisk tjek); (e) samme klartekst krypteret to gange → samme `block_id`, forskellig salt, nonce og chiffertekst | §6.2 |
 | B-2 | Salt og nonce er friske pr. kryptering: to krypteringer af samme klartekst giver forskellige chiffertekster | §6.2 |
 | B-3 | AAD binder til `context_id` og `block_id`: en blok flyttet til en anden kontekst eller et andet id kan ikke dekrypteres | §6.2 |
+| H-1 | Opret-hvis-fraværende: to enheder uploader samtidig hver sin uafhængigt krypterede udgave af samme blok; det lagrede objekt ændres ikke efter første skrivning, og begge udgaver dekrypterer til samme klartekst. Et manifest med et eksisterende `<device_id>/<seq>` afvises. Et hjem uden opret-hvis-fraværende afvises ved tilknytning | §6.1 |
 | M-1 | Et manifest fra en enhed uden for den signerede enhedsliste, eller med Merkle-afvigelse, ignoreres og auditeres | §6.3, §8 |
 | S-1 | Samtidige ændringer af samme fil giver to versioner og et konfliktobjekt; intet overskrives | §7 |
 | U-1 | Linux-UID forekommer aldrig i data, manifester, protokolbeskeder, audit uden for enheden eller rettighedssæt | §1 |
