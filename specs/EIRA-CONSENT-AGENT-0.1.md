@@ -8,6 +8,25 @@
 
 ---
 
+## 0. Status for sikkerhedsegenskaberne
+
+Intet i denne kontrakt er en opnået sikkerhedsegenskab. Alle punkter nedenfor er **krav, der afventer verifikation**. Et punkt markeres først som verificeret, når der findes en test, der fejler, hvis egenskaben brydes (mutationstjek), og for kerne- og compositoregenskaber en VM-test.
+
+| Egenskab | Krav | Implementeret | Verificeret |
+|---|---|---|---|
+| Ingen privilegerede Wayland-protokoller til klienter | R-6.1 | `eira-labwc` + tom `<privilegedInterfaces>` (#163) | Kun lokalt (headless, mutationstjek). Ikke i VM-session |
+| Intet vindue over agenten; agenten har fokus | R-6.2 | Nej (labwc-patch mangler) | Nej |
+| Beslutning tidligst efter 750 ms fokus | R-6.3 | Nej | Nej |
+| setgid-installation `root:eira-consent 2755` og gruppe uden medlemmer/adgangskode, fail-closed ved start | §3 | Nej | Nej |
+| Effektiv GID via `SO_PEERCRED` identificerer agenten | §3 pkt. 3 | Nej | Nej. Holder kun, hvis installationskæden ovenfor er fail-closed |
+| `LD_PRELOAD`/ptrace/`/proc/<pid>/mem` mod agenten afvist af kernen | §3 pkt. 1–2 | Nej | Nej |
+| Agentregistrering mod sessionens compositor | §5.2 | Nej | Nej (forudsætning O-6 ikke verificeret) |
+| Nøgleudlevering kun til registreret agent; appen får ingen nøgle | §5.3 | Nej (appen har i dag nøglen) | Nej |
+| Gaten afviser samtykke uden agentens GID (`E_CONSENT_PATH`) | §7 | Nej | Nej |
+| Agentens miljø-, fd- og argumentkrav | R-5.1–R-5.5 | Nej | Nej |
+
+Indtil alle rækker er verificeret, gælder den nuværende formulering i ADR-0003 og GATE-KERNEL bilag A pkt. 1 ("Rest") uændret: et program, der kører som brugeren, kan i dag stadig få fat i samtykkenøglen.
+
 ## 1. Problemet
 
 I dag får appens Rust-del samtykkenøglen ved login og laver `proof = HMAC(nøgle, …)` for `gate.consent` og `gate.confirm` (`app/gate/consent_proof.py`, `ui/src-tauri/src/login.rs`). Gaten afviser alt uden gyldigt bevis med `E_CONSENT_PROOF`.
