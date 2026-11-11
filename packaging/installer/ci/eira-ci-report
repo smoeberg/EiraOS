@@ -245,7 +245,9 @@ PY
 seal_owner_handover() {
     key=$(/usr/bin/eira-audit-seal show | grep -E '^[0-9a-f]+(-[0-9a-f]+)*/[0-9a-f]+-[0-9a-f]+$') || return 1
     [ -n "$key" ] && [ ! -e /var/lib/eira-audit-seal/verify-key ] || return 1
-    journalctl --rotate >/dev/null 2>&1 || true
+    # No forced rotation here: rotating twice within one sealing interval
+    # makes journald write two tags with the same epoch, which
+    # journalctl --verify reports as corruption (seen in this VM).
     if ! journalctl --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
         say "diag seal-verify: $(tr '\n' ' ' </tmp/seal-verify.txt | cut -c1-1500)"
         return 1
