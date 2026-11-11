@@ -1,7 +1,7 @@
 # EIRA Context 1.0 — kontekster, lagring og synkronisering
 
 **Status:** Accepteret af ejer 11. november 2026. Normativ. Testplan: [EIRA-CONTEXT-1.0-TESTPLAN](EIRA-CONTEXT-1.0-TESTPLAN.md).
-**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`)
+**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`; invariant A-1)
 **Grundlag:** [ADR-0005](../docs/decisions/ADR-0005-kontekster-og-datas-hjem.md) (K1–K11), [ADR-0004](../docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [ADR-0006](../docs/decisions/ADR-0006-livets-indbakke.md) L5 (glimt)
 **Berører:** ny `eira-contextd` (rod-formidler), `identityd`, gaten, graphd, samtalelaget, den neutrale skal, compositoren, `eira-governance-agent`/Fleet, RIGHTS-SET (revision, §10)
 
@@ -371,6 +371,7 @@ Testplanen (separat dokument) skal have mindst én test pr. invariant, og hver t
 | V-1 | En værgestyret kontekst låses uden for tidsrummet, og dens DNS kan ikke gå uden om filtret | §11a |
 | X-1 | `eira-context-export` læser et kontekst-hjem med kun CMK og uden EiraOS (exit-garantien) | §6.5 |
 | R-1 | En tilbagekaldt enhed kan ikke læse noget, der er skrevet efter rotationen; dens pakkede nøgle er fjernet; den fjerner konteksten, næste gang den er online, og låser den senest ved `max_offline_days`, hvis den er offline | §5.5, §8 |
+| A-1 | Gendannelse eller kloning af en enheds data giver aldrig autoritet. En klonet disk på anden hardware kan hverken åbne kontekster, signere manifester, bruge rettighedssæt (RIGHTS-SET) eller få samtykkenøglen (EIRA-CONSENT-AGENT), heller ikke hvis angriberen kender diskens gendannelsesnøgle. Autoritet på en ny enhed opstår kun ad den normale vej (§4.1, §8) | §5.2, §8 |
 | F-1 | En glemt kontekst efterlader intet læsbart på enheden: ingen forsegling i TPM'en, ingen LUKS-fil, ingen Linux-bruger, ingen kobling `context_id` → UID og intet `display_name` eller indhold uden for kontekstens volumen (journal, swap, `/tmp`, skallens cache) | §4.3 |
 
 ## 13. Uden for scope
