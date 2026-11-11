@@ -158,8 +158,10 @@ modeld_confined() {
     pid=$(systemctl show -p MainPID --value eira-modeld.service)
     # With stacked LSMs the AppArmor label is in attr/apparmor/current.
     label=$(cat "/proc/$pid/attr/apparmor/current" 2>/dev/null || cat "/proc/$pid/attr/current" 2>/dev/null)
+    # On Ubuntu 26.04 systemd stacks the profile on "unconfined"; a stack
+    # grants only what every member allows, so eira-modeld's rules decide.
     case "$label" in
-        "/usr/bin/eira-modeld (enforce)"*) return 0 ;;
+        "/usr/bin/eira-modeld (enforce)" | "/usr/bin/eira-modeld//&unconfined (enforce)") return 0 ;;
     esac
     say "diag modeld-label: apparmor/current=[$(cat "/proc/$pid/attr/apparmor/current" 2>&1)] current=[$(cat "/proc/$pid/attr/current" 2>&1)] ps=[$(ps -o label= -p "$pid" 2>&1)] exe=[$(readlink "/proc/$pid/exe" 2>&1)]"
     return 1
