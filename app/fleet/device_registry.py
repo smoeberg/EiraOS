@@ -15,6 +15,17 @@ from typing import Any
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 
 
+def device_fingerprint(public_key: str) -> str:
+    """The device's identity: SHA-256 of its raw public key, in hex.
+
+    EIRA-CONTEXT §1 defines ``device_id`` as a fingerprint of the device's key,
+    never a name the device picks. Until enrollment carries the Ed25519 signing
+    key, the fingerprint is taken of the registered X25519 key.
+    """
+    raw = base64.b64decode(public_key, validate=True)
+    return hashlib.sha256(raw).hexdigest()
+
+
 class DeviceAuthorizationError(PermissionError):
     """Raised when an unknown or revoked device attempts fleet access."""
 
@@ -143,17 +154,25 @@ class DeviceRegistry:
         self,
         *,
         pairing_code: str,
-        device_id: str,
         name: str,
         os_type: str,
         public_key: str,
+        device_id: str | None = None,
     ) -> DeviceEnrollment:
-        if not device_id or not name:
-            raise ValueError("device_id and name are required")
+        if not name:
+            raise ValueError("name is required")
         if os_type.casefold() not in {"ubuntu", "android"}:
             raise ValueError("os_type must be ubuntu or android")
         os_type = os_type.casefold()
         self._validate_public_key(public_key)
+        # The id is derived from the key, never chosen by the caller: a caller
+        # cannot claim another device's id or keep an id with a new key.
+        fingerprint = device_fingerprint(public_key)
+        if device_id is not None and device_id != fingerprint:
+            raise DeviceAuthorizationError(
+                "device_id must be the fingerprint of public_key"
+            )
+        device_id = fingerprint
         digest = hashlib.sha256(pairing_code.encode("ascii")).hexdigest()
         auth_token = secrets.token_urlsafe(32)
         auth_token_hash = hashlib.sha256(auth_token.encode("ascii")).hexdigest()
@@ -171,6 +190,14 @@ class DeviceRegistry:
                 if self._shared is None:
                     connection.close()
                 raise DeviceAuthorizationError("Pairing code is invalid, used, or expired")
+            # Checked before the code is consumed, so a refused enrollment
+            # does not burn the administrator's code.
+            if connection.execute(
+                "SELECT 1 FROM fleet_devices WHERE device_id = ?", (device_id,)
+            ).fetchone():
+                if self._shared is None:
+                    connection.close()
+                raise DeviceAuthorizationError("Device is already enrolled")
             updated = connection.execute(
                 """
                 UPDATE pairing_codes SET consumed_at = ?
