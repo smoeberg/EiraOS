@@ -48,6 +48,7 @@ fn canonical_daemon(daemon: &str) -> Option<&'static str> {
         "fleet" | "fleetd" => Some("fleetd"),
         "veritas" | "veritasd" => Some("veritasd"),
         "intent" | "intentd" => Some("intentd"),
+        "delegation" | "delegationd" => Some("delegationd"),
         "graph" | "graphd" => Some("graphd"),
         "wallet" | "walletd" => Some("walletd"),
         "presence" | "presenced" => Some("presenced"),
@@ -94,11 +95,9 @@ async fn exchange_with_retry(
     timeout: Duration,
 ) -> Result<Value, String> {
     for attempt in 0..IPC_MAX_ATTEMPTS {
-        let outcome = tokio::time::timeout(
-            timeout,
-            exchange(path, daemon, method, request_id, request),
-        )
-        .await;
+        let outcome =
+            tokio::time::timeout(timeout, exchange(path, daemon, method, request_id, request))
+                .await;
 
         match outcome {
             Ok(Ok(result)) => return Ok(result),
@@ -222,9 +221,8 @@ async fn exchange(
     }
     response_bytes.pop();
 
-    let envelope: Value = serde_json::from_slice(&response_bytes).map_err(|error| {
-        bridge_error("invalid_response", error.to_string(), daemon, method)
-    })?;
+    let envelope: Value = serde_json::from_slice(&response_bytes)
+        .map_err(|error| bridge_error("invalid_response", error.to_string(), daemon, method))?;
     if envelope.get("id") != Some(&Value::from(request_id)) {
         return Err(bridge_error(
             "response_mismatch",
@@ -270,9 +268,8 @@ pub async fn send_ipc_request(
             &method,
         ));
     }
-    let params = authenticated_params(params).map_err(|message| {
-        bridge_error("invalid_params", message, canonical, &method)
-    })?;
+    let params = authenticated_params(params)
+        .map_err(|message| bridge_error("invalid_params", message, canonical, &method))?;
     let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
     let mut request = serde_json::to_vec(&json!({
         "jsonrpc": "2.0",
@@ -320,10 +317,10 @@ pub async fn send_ipc_request(
 #[cfg(test)]
 mod tests {
     use super::{
-        authenticated_params, bridge_error, canonical_daemon, socket_path, socket_root,
-        MAX_REQUEST_BYTES,
+        MAX_REQUEST_BYTES, authenticated_params, bridge_error, canonical_daemon, socket_path,
+        socket_root,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::sync::Mutex;
 
     // These tests mutate process-global EIRA_* env vars; serialize them so
@@ -334,6 +331,7 @@ mod tests {
     fn daemon_names_are_allowlisted() {
         assert_eq!(canonical_daemon("graph"), Some("graphd"));
         assert_eq!(canonical_daemon("intentd"), Some("intentd"));
+        assert_eq!(canonical_daemon("delegationd"), Some("delegationd"));
         assert_eq!(canonical_daemon("wallet"), Some("walletd"));
         assert_eq!(canonical_daemon("presenced"), Some("presenced"));
         assert_eq!(canonical_daemon("context"), Some("contextd"));
@@ -366,25 +364,45 @@ mod tests {
     #[test]
     fn socket_root_prefers_eira_socket_dir() {
         let _env_guard = ENV_LOCK.lock().unwrap();
-        unsafe { std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sock-test"); }
-        unsafe { std::env::remove_var("EIRA_RUN_DIR"); }
-        assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-sock-test"));
-        unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
-        unsafe { std::env::set_var("EIRA_RUN_DIR", "/tmp/eira-run-test"); }
-        assert_eq!(socket_root(), std::path::PathBuf::from("/tmp/eira-run-test"));
-        unsafe { std::env::remove_var("EIRA_RUN_DIR"); }
+        unsafe {
+            std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sock-test");
+        }
+        unsafe {
+            std::env::remove_var("EIRA_RUN_DIR");
+        }
+        assert_eq!(
+            socket_root(),
+            std::path::PathBuf::from("/tmp/eira-sock-test")
+        );
+        unsafe {
+            std::env::remove_var("EIRA_SOCKET_DIR");
+        }
+        unsafe {
+            std::env::set_var("EIRA_RUN_DIR", "/tmp/eira-run-test");
+        }
+        assert_eq!(
+            socket_root(),
+            std::path::PathBuf::from("/tmp/eira-run-test")
+        );
+        unsafe {
+            std::env::remove_var("EIRA_RUN_DIR");
+        }
         assert_eq!(socket_root(), std::path::PathBuf::from("/run/eira"));
     }
 
     #[test]
     fn socket_path_joins_daemon_sock() {
         let _env_guard = ENV_LOCK.lock().unwrap();
-        unsafe { std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sp"); }
+        unsafe {
+            std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sp");
+        }
         assert_eq!(
             socket_path("intentd"),
             std::path::PathBuf::from("/tmp/eira-sp/intentd.sock")
         );
-        unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
+        unsafe {
+            std::env::remove_var("EIRA_SOCKET_DIR");
+        }
     }
 
     #[test]
@@ -396,18 +414,20 @@ mod tests {
     mod mock_socket {
         use super::super::{exchange, send_ipc_request, socket_path};
         use super::ENV_LOCK;
-        use serde_json::{json, Value};
+        use serde_json::{Value, json};
         use std::path::PathBuf;
         use std::time::Duration;
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
         use tokio::net::UnixListener;
 
+        /// Unique per test even when parallel tests start in the same
+        /// nanosecond: a shared directory let one test delete another's
+        /// socket (AddrInUse / flaky CI). Short, because sun_path is 108 bytes.
         fn short_temp_dir() -> PathBuf {
-            let stamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let dir = std::env::temp_dir().join(format!("e{:x}", stamp % 0xffff_ffff));
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static NEXT: AtomicU32 = AtomicU32::new(0);
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!("e{:x}-{n}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("create short temp dir");
             dir
@@ -461,7 +481,7 @@ mod tests {
 
         #[tokio::test]
         async fn exchange_fails_after_maximum_connect_attempts() {
-            use super::super::{exchange_with_retry, IPC_MAX_ATTEMPTS};
+            use super::super::{IPC_MAX_ATTEMPTS, exchange_with_retry};
 
             let dir = short_temp_dir();
             let sock = dir.join("missing.sock");
@@ -481,14 +501,20 @@ mod tests {
             let parsed: Value = serde_json::from_str(&err).expect("structured error");
             assert_eq!(parsed["kind"], "socket_unavailable");
             assert_eq!(IPC_MAX_ATTEMPTS, 4);
-            assert!(elapsed >= Duration::from_millis(650), "all backoffs should run: {elapsed:?}");
+            assert!(
+                elapsed >= Duration::from_millis(650),
+                "all backoffs should run: {elapsed:?}"
+            );
             let _ = std::fs::remove_dir_all(&dir);
         }
 
         #[tokio::test]
         async fn exchange_does_not_retry_protocol_errors() {
             use super::super::exchange_with_retry;
-            use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+            use std::sync::{
+                Arc,
+                atomic::{AtomicUsize, Ordering},
+            };
 
             let dir = short_temp_dir();
             let sock = dir.join("intentd.sock");
@@ -528,7 +554,10 @@ mod tests {
         #[tokio::test]
         async fn exchange_does_not_retry_timeout_with_unknown_delivery() {
             use super::super::exchange_with_retry;
-            use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+            use std::sync::{
+                Arc,
+                atomic::{AtomicUsize, Ordering},
+            };
 
             let dir = short_temp_dir();
             let sock = dir.join("intentd.sock");
@@ -638,8 +667,12 @@ mod tests {
             let sock_path = dir.join("walletd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind walletd");
 
-            unsafe { std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str()); }
-            unsafe { std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "2000"); }
+            unsafe {
+                std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
+            }
+            unsafe {
+                std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "2000");
+            }
 
             let server = tokio::spawn(async move {
                 let (mut stream, _) = listener.accept().await.expect("accept");
@@ -669,20 +702,20 @@ mod tests {
             assert_eq!(result["status"], "ok");
             assert_eq!(result["rails"][0], "sepa_instant");
             server.await.expect("server");
-            unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
-            unsafe { std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS"); }
+            unsafe {
+                std::env::remove_var("EIRA_SOCKET_DIR");
+            }
+            unsafe {
+                std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS");
+            }
             let _ = std::fs::remove_dir_all(&dir);
         }
 
         #[tokio::test]
         async fn send_ipc_request_rejects_unknown_daemon() {
-            let err = send_ipc_request(
-                "evil-daemon".to_owned(),
-                "hack".to_owned(),
-                json!({}),
-            )
-            .await
-            .expect_err("unknown daemon");
+            let err = send_ipc_request("evil-daemon".to_owned(), "hack".to_owned(), json!({}))
+                .await
+                .expect_err("unknown daemon");
             let parsed: Value = serde_json::from_str(&err).expect("json");
             assert_eq!(parsed["kind"], "invalid_daemon");
         }
@@ -693,32 +726,42 @@ mod tests {
             let dir = short_temp_dir();
             let sock_path = dir.join("fleetd.sock");
             let listener = UnixListener::bind(&sock_path).expect("bind");
-            unsafe { std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str()); }
-            unsafe { std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "150"); }
+            unsafe {
+                std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
+            }
+            unsafe {
+                std::env::set_var("EIRA_UI_IPC_TIMEOUT_MS", "150");
+            }
 
             let server = tokio::spawn(async move {
                 let (_stream, _) = listener.accept().await.expect("accept");
                 tokio::time::sleep(Duration::from_secs(5)).await;
             });
-            let err = send_ipc_request(
-                "fleetd".to_owned(),
-                "fleet.heartbeat".to_owned(),
-                json!({}),
-            )
-            .await
-            .expect_err("timeout");
+            let err =
+                send_ipc_request("fleetd".to_owned(), "fleet.heartbeat".to_owned(), json!({}))
+                    .await
+                    .expect_err("timeout");
             let parsed: Value = serde_json::from_str(&err).expect("json");
             assert_eq!(parsed["kind"], "timeout");
             assert_eq!(parsed["daemon"], "fleetd");
             server.abort();
-            unsafe { std::env::remove_var("EIRA_SOCKET_DIR"); }
-            unsafe { std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS"); }
+            unsafe {
+                std::env::remove_var("EIRA_SOCKET_DIR");
+            }
+            unsafe {
+                std::env::remove_var("EIRA_UI_IPC_TIMEOUT_MS");
+            }
             let _ = std::fs::remove_dir_all(&dir);
         }
 
         #[tokio::test]
         async fn path_like_daemon_names_rejected() {
-            for evil in ["../../tmp/evil", "/tmp/x", "stated/../fleetd", "stated.sock"] {
+            for evil in [
+                "../../tmp/evil",
+                "/tmp/x",
+                "stated/../fleetd",
+                "stated.sock",
+            ] {
                 let err = send_ipc_request(evil.to_owned(), "health".to_owned(), json!({}))
                     .await
                     .expect_err("must reject");

@@ -1,0 +1,16 @@
+{
+  "name": "grant-outlives-set",
+  "description": "En grants expires_at ligger efter sættets.",
+  "raw": "{\"denies\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"vikarer\"}}],\"device_id\":\"dev-0001\",\"eira_rights\":\"1\",\"expires_at\":\"2026-11-21T11:00:00Z\",\"grants\":[{\"actions\":[\"system:power.request_action\"],\"expires_at\":\"2026-12-01T00:00:00Z\",\"scope\":\"device:local\",\"subject\":{\"group\":\"laerere\"}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"req-7f3a\",\"fleet\":\"fleet.kk.example\"},\"kind\":\"managed\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-tenant-kk-1\",\"value\":\"HyEoDKnMcmwgMIiCyvh0BK4kOpwThdpxivbDn3XpdVrjtLK-UMixk2AkqhSXqKd6x37nnvjdBpC68Y5tV4oQDQ\"},\"template\":{\"id\":\"skoleforvaltning-laerer\",\"version\":\"3\"},\"tenant_id\":\"kk\",\"version\":42}",
+  "device": {
+    "enrolled": true,
+    "tenant_id": "kk",
+    "device_id": "dev-0001"
+  },
+  "active": null,
+  "now": "2026-11-07T12:00:00Z",
+  "expect": {
+    "ok": false,
+    "reason": "grant_outlives_set"
+  }
+}

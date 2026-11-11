@@ -28,19 +28,48 @@ override_dh_auto_install:
 		install -m 0755 packaging/bin/eira-daemon \
 			debian/eira-os-core/usr/bin/eira-$$daemon; \
 	done
+	install -m 0755 packaging/bin/eira-rights-apply \
+		debian/eira-os-core/usr/bin/eira-rights-apply
+	# Signed default rights set; the one-time build key is never written.
+	python3 scripts/build_default_rights.py debian/eira-os-core/usr/lib/eira-os/rights
 	install -m 0755 ui/src-tauri/target/release/eira-spatial-desktop \
 		debian/eira-os-core/usr/bin/eira-spatial-desktop
 	install -m 0755 packaging/session/eira-session \
 		debian/eira-os-core/usr/bin/eira-session
-	install -d debian/eira-os-core/usr/share/xsessions
+	install -d debian/eira-os-core/usr/share/wayland-sessions
 	install -m 0644 packaging/session/eira-session.desktop \
-		debian/eira-os-core/usr/share/xsessions/eira-session.desktop
+		debian/eira-os-core/usr/share/wayland-sessions/eira-session.desktop
+	install -d debian/eira-os-core/usr/share/eira-os/labwc
+	install -m 0644 packaging/session/config/labwc/rc.xml \
+		debian/eira-os-core/usr/share/eira-os/labwc/rc.xml
+	install -m 0755 packaging/session/config/labwc/autostart \
+		debian/eira-os-core/usr/share/eira-os/labwc/autostart
 	install -d debian/eira-os-core/usr/lib/systemd/system
 	install -m 0644 systemd/eira-*.service systemd/eira.target \
 		debian/eira-os-core/usr/lib/systemd/system/
+	install -D -m 0755 packaging/session/eira-session-policy \
+		debian/eira-os-core/usr/lib/eira/eira-session-policy
+	install -m 0644 packaging/session/eira-session-policy.service \
+		debian/eira-os-core/usr/lib/systemd/system/eira-session-policy.service
+	install -D -m 0644 packaging/polkit/50-eira-power.rules \
+		debian/eira-os-core/usr/share/polkit-1/rules.d/50-eira-power.rules
 	install -d debian/eira-os-core/etc/apparmor.d
 	install -m 0644 packaging/apparmor/usr.bin.eira-* \
 		debian/eira-os-core/etc/apparmor.d/
+	# Rights sync with Fleet (oneshot + timer) and enrollment (FLEET-RIGHTS-API §7-8).
+	install -m 0644 packaging/rights/eira-rights-sync.service packaging/rights/eira-rights-sync.timer \
+		debian/eira-os-core/usr/lib/systemd/system/
+	install -m 0644 packaging/rights/usr.bin.eira-rights-apply \
+		debian/eira-os-core/etc/apparmor.d/usr.bin.eira-rights-apply
+	install -m 0755 packaging/bin/eira-enroll debian/eira-os-core/usr/bin/eira-enroll
+	install -m 0755 packaging/bin/eira-audit-verify debian/eira-os-core/usr/bin/eira-audit-verify
+	# The model process (GATE-KERNEL bilag A): its own user, no network, no /data.
+	install -m 0755 packaging/bin/eira-modeld debian/eira-os-core/usr/bin/eira-modeld
+	install -m 0644 packaging/model/eira-modeld.service debian/eira-os-core/usr/lib/systemd/system/
+	install -m 0644 packaging/model/usr.bin.eira-modeld debian/eira-os-core/etc/apparmor.d/usr.bin.eira-modeld
+	# The journal's Forward Secure Sealing, set up once at first boot.
+	install -m 0755 packaging/bin/eira-audit-seal debian/eira-os-core/usr/bin/eira-audit-seal
+	install -m 0644 packaging/audit/eira-audit-seal.service debian/eira-os-core/usr/lib/systemd/system/
 
 override_dh_installsystemd:
 	dh_installsystemd --no-start

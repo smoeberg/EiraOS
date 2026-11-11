@@ -1,0 +1,371 @@
+#!/bin/sh
+# CI-only boot acceptance check for the installed EiraOS system.
+#
+# Prints one "EIRA-CI <check> PASS|FAIL" line per check and a final
+# "EIRA-CI RESULT PASS|FAIL" to the serial console (/dev/ttyS0), which the CI
+# job reads from QEMU's serial log. Then powers the VM off.
+set -u
+
+OUT=${EIRA_CI_OUT:-/dev/ttyS0}
+USER_NAME=tester
+DAEMONS="stated identityd fleetd veritasd intentd graphd delegationd"
+failed=0
+
+say() { echo "EIRA-CI $*" > "$OUT" 2>/dev/null || echo "EIRA-CI $*"; }
+check() {
+    name=$1
+    shift
+    if "$@" >/dev/null 2>&1; then
+        say "$name PASS"
+    else
+        say "$name FAIL"
+        failed=1
+    fi
+}
+wait_for() {
+    seconds=$1
+    shift
+    while [ "$seconds" -gt 0 ]; do
+        "$@" >/dev/null 2>&1 && return 0
+        sleep 5
+        seconds=$((seconds - 5))
+    done
+    return 1
+}
+
+say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME") uptime=$(cut -d' ' -f1 /proc/uptime)s"
+check eira.target wait_for 300 systemctl is-active --quiet eira.target
+for daemon in $DAEMONS; do
+    check "daemon-$daemon" systemctl is-active --quiet "eira-$daemon.service"
+    check "socket-$daemon" test -S "/run/eira/$daemon.sock"
+done
+check stated-ipc-health python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(5)
+s.connect("/run/eira/stated.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "health",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+assert reply["result"]["ok"] is True, reply
+PY
+# Gate Kernel is loaded in intentd and can write its audit: a malformed
+# proposal must come back as an explicit REJECT (E_SYNTAX), never execute.
+check gate-ipc-reject python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(5)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.propose",
+                       "params": {"edp": "{", "_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+result = reply["result"]
+assert result["decision"] == "REJECT" and result["error"] == "E_SYNTAX", reply
+PY
+# Gate 1.1 power executor on the installed system: AppArmor lets intentd run
+# busctl, polkit grants the eira user the login1 power actions, and logind
+# answers "yes". Read-only (CanPowerOff etc.); nothing is shut down.
+check gate-power-capability python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.capabilities",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+power = reply["result"]["power"]
+print("gate power capability:", power)
+assert power["poweroff"] == "yes" and power["reboot"] == "yes", reply
+PY
+# EIRA-RIGHTS-SET-1.0 §5: an unmanaged install runs the bundle's signed
+# default set, and the gate says it is a private machine (owner_admin).
+check rights-default-active python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.capabilities",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+rights = json.loads(s.makefile().readline())["result"]["rights"]
+print("gate rights:", rights)
+assert rights["state"] == "active", rights
+assert rights["rights_kind"] == "default" and rights["owner_admin"] is True, rights
+assert rights["clock_rollback"] is False, rights
+PY
+# GATE-KERNEL bilag A pkt. 1: the model has its own uid, reaches the gate,
+# never owns Eira data, and over the real socket it can propose but the gate
+# refuses its consent.
+# EIRA-CONVERSATION-1.0 §5: the event stream is served by the installed
+# intentd and refuses a caller without an authenticated session of its own.
+check events-need-session python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+for method in ("events.since", "conversation.awaiting", "conversation.list"):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(5)
+    s.connect("/run/eira/intentd.sock")
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
+                           "params": {"session_id": "forged", "_eira": {"ipc_token": token}}}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    assert reply.get("error", {}).get("message") == "E_NO_SESSION", (method, reply)
+PY
+# EIRA Delegation Protocol v1.1: nothing but the app (with the session's
+# consent key) can create a delegation; a forged request is refused.
+check delegation-needs-trusted-path python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+for method, params in (
+    ("delegation.propose", {"session_id": "forged", "delegee_id": "model:x", "scope": {"actions": ["prepare"]}}),
+    ("delegation.create", {"session_id": "forged", "proposal_id": "p", "content_hash": "c",
+                           "rendering_hash": "r", "proof": "0" * 64}),
+):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(5)
+    s.connect("/run/eira/delegationd.sock")
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
+                           "params": {**params, "_eira": {"ipc_token": token}}}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    assert reply.get("error", {}).get("code") == -32003, (method, reply)
+PY
+# The packaged model process (GATE-KERNEL bilag A): its own user, confined,
+# and it reaches the gate, which refuses it without a human's delegation.
+check modeld-active wait_for 60 systemctl is-active --quiet eira-modeld.service
+check modeld-runs-as-model sh -c '[ "$(ps -o uid= -p "$(systemctl show -p MainPID --value eira-modeld.service)" | tr -d " ")" = "$(id -u eira-model)" ]'
+check modeld-profile-enforced sh -c "grep -q '^/usr/bin/eira-modeld (enforce)' /sys/kernel/security/apparmor/profiles"
+modeld_confined() {
+    pid=$(systemctl show -p MainPID --value eira-modeld.service)
+    # With stacked LSMs the AppArmor label is in attr/apparmor/current.
+    label=$(cat "/proc/$pid/attr/apparmor/current" 2>/dev/null || cat "/proc/$pid/attr/current" 2>/dev/null)
+    # On Ubuntu 26.04 systemd stacks the profile on "unconfined"; a stack
+    # grants only what every member allows, so eira-modeld's rules decide.
+    case "$label" in
+        "/usr/bin/eira-modeld (enforce)" | "/usr/bin/eira-modeld//&unconfined (enforce)") return 0 ;;
+    esac
+    say "diag modeld-label: apparmor/current=[$(cat "/proc/$pid/attr/apparmor/current" 2>&1)] current=[$(cat "/proc/$pid/attr/current" 2>&1)] ps=[$(ps -o label= -p "$pid" 2>&1)] exe=[$(readlink "/proc/$pid/exe" 2>&1)]"
+    return 1
+}
+check modeld-confined modeld_confined
+
+check modeld-no-network sh -c '[ "$(systemctl show -p PrivateNetwork --value eira-modeld.service)" = yes ]'
+check modeld-reaches-gate-and-is-refused python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(15)
+s.connect("/run/eira-model/modeld.sock")
+params = {"session_id": "forged", "conversation_id": "obj:sag:1", "me": "did:eira:anne",
+          "text": "send besked til Bo: hej",
+          "participants": [{"identity": "did:eira:anne", "role": "member", "name": "Anne"},
+                           {"identity": "did:eira:bo", "role": "member", "name": "Bo"}],
+          "_eira": {"ipc_token": token}}
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "model.prepare", "params": params}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+gate = reply["result"]["gate"]
+assert gate["decision"] == "REJECT", reply
+PY
+check model-user-exists getent passwd eira-model
+check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"
+check model-not-in-eira sh -c "! id -nG eira-model | tr ' ' '\n' | grep -qx eira"
+check model-is-system-uid sh -c '[ "$(id -u eira-model)" -lt 1000 ] && [ "$(id -u eira-model)" -ne "$(id -u eira)" ]'
+check model-cannot-consent runuser -u eira-model -- python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.consent",
+                       "params": {"action_id": "x", "content_hash": "sha256:" + "0" * 64,
+                                  "rendering_hash": "sha256:" + "0" * 64, "session_id": "s",
+                                  "_peer": {"uid": 1000},
+                                  "_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())["result"]
+print("model consent:", reply)
+assert reply["decision"] == "REJECT" and "only the user" in reply["detail"], reply
+PY
+# GATE-KERNEL bilag A pkt. 1 (login): identityd has its database, and a login
+# needs a real login session (loginuid) that matches the socket peer. This
+# script has none, so the answer must be exactly that refusal, with no
+# AppArmor denial behind it (an unreadable loginuid would look the same).
+IDENTITY_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/identityd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": sys.argv[1],
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+print(s.makefile().readline().strip())'
+identity_reply_has() {
+    runuser -u "$USER_NAME" -- python3 -c "$IDENTITY_PY" "$1" | grep -q -- "$2"
+}
+check identityd-has-database identity_reply_has identity.session '"session_id"'
+check login-needs-login-session identity_reply_has identity.login_start caller_not_in_a_login_session
+check identityd-no-apparmor-denials sh -c "! journalctl -k -b --no-pager | grep 'apparmor=\"DENIED\"' | grep -q 'eira-identityd'"
+# GATE-KERNEL bilag A pkt. 2: intentd anchors the audit chain in its
+# journal; the chain agrees with the anchors; a whole-chain rewrite of a copy
+# (triggers dropped, hashes recomputed) is caught.
+check audit-anchor-in-journal sh -c "journalctl -u eira-intentd.service -b -o cat --no-pager | grep -q '^EIRA_AUDIT_ANCHOR '"
+check audit-anchor-file test -s /data/audit/anchor.json
+check audit-verify-journal /usr/bin/eira-audit-verify --journal
+audit_rewrite_is_caught() {
+    tmp=$(mktemp -d)
+    cp /data/eira-app.db "$tmp/copy.db"
+    python3 - "$tmp/copy.db" <<'PY'
+import hashlib, sqlite3, sys
+conn = sqlite3.connect(sys.argv[1])
+conn.execute("DROP TRIGGER IF EXISTS gate_audit_no_update")
+conn.execute("DROP TRIGGER IF EXISTS gate_audit_no_delete")
+rows = [r[0] for r in conn.execute("SELECT entry FROM gate_audit ORDER BY seq")]
+if not rows:
+    rows = ["{}"]
+rows[0] = '{"rewritten":true}'
+conn.execute("DELETE FROM gate_audit")
+prev = "sha256:" + "0" * 64
+for entry in rows:
+    h = "sha256:" + hashlib.sha256((prev + entry).encode()).hexdigest()
+    conn.execute("INSERT INTO gate_audit (entry, prev_hash, entry_hash) VALUES (?, ?, ?)", (entry, prev, h))
+    prev = h
+conn.commit()
+PY
+    /usr/bin/eira-audit-verify --journal --db "$tmp/copy.db"
+    status=$?
+    rm -rf "$tmp"
+    [ "$status" -eq 1 ]
+}
+check audit-rewrite-caught audit_rewrite_is_caught
+# GATE-KERNEL bilag A pkt. 2, drift: the journal is sealed (FSS) at first
+# boot; on a private machine the owner takes the verification key once, it
+# is gone from the machine, and the journal verifies against it.
+gate_seal() {
+    python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.capabilities",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+print(json.loads(s.makefile().readline())["result"]["audit"]["seal"])
+PY
+}
+seal_owner_handover() {
+    key=$(/usr/bin/eira-audit-seal show | grep -E '^[0-9a-f]+(-[0-9a-f]+)*/[0-9a-f]+-[0-9a-f]+$') || return 1
+    [ -n "$key" ] && [ ! -e /var/lib/eira-audit-seal/verify-key ] || return 1
+    # No forced rotation here: rotating twice within one sealing interval
+    # makes journald write two tags with the same epoch, which
+    # journalctl --verify reports as corruption (seen in this VM).
+    if ! journalctl --system --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+        say "diag seal-verify: $(tr '\n' ' ' </tmp/seal-verify.txt | cut -c1-1500)"
+        return 1
+    fi
+    /usr/bin/eira-audit-verify --journal --verify-key "$key" >/tmp/seal-audit.txt 2>&1 || {
+        say "diag seal-audit-verify: $(tr '\n' ' ' </tmp/seal-audit.txt | cut -c1-800)"
+        return 1
+    }
+}
+check audit-seal-set-up wait_for 120 test -f /var/lib/eira-audit-seal/state.json
+check audit-seal-journal-keys sh -c 'ls /var/log/journal/*/fss >/dev/null 2>&1'
+gate_seal_is() { [ "$(gate_seal)" = "$1" ]; }
+check audit-seal-key-pending gate_seal_is sealed_key_on_device
+check audit-seal-owner-handover seal_owner_handover
+check audit-seal-status-sealed gate_seal_is sealed
+# FLEET-RIGHTS-API §7: the sync timer is armed, its AppArmor profile is
+# loaded, and on a private machine a round ends as "not enrolled" (exit 2).
+check rights-sync-timer-enabled systemctl is-enabled --quiet eira-rights-sync.timer
+check rights-sync-profile-loaded sh -c "grep -q '^/usr/bin/eira-rights-apply ' /sys/kernel/security/apparmor/profiles"
+check rights-sync-not-enrolled sh -c 'runuser -u eira -- env EIRA_RIGHTS_DIR=/data/rights /usr/bin/eira-rights-apply sync; [ $? -eq 2 ]'
+check enroll-tool-installed test -x /usr/bin/eira-enroll
+# The desktop user can read neither the cache nor change it.
+check user-cannot-touch-rights-cache sh -c "! runuser -u $USER_NAME -- test -r /data/rights/active.json && ! runuser -u $USER_NAME -- test -w /data/rights"
+check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
+# Explorer has no escape hatch: EiraOS is the only selectable session.
+check only-eira-session sh -c '[ "$(ls /usr/share/wayland-sessions /usr/share/xsessions 2>/dev/null | grep "\.desktop$")" = "eira-session.desktop" ]'
+check gnome-session-hidden sh -c '! ls /usr/share/wayland-sessions/ubuntu*.desktop >/dev/null 2>&1'
+check session-policy-active systemctl is-active --quiet eira-session-policy.service
+check firstboot-done test -e /var/lib/eira/firstboot.done
+check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
+check user-in-eira-clients sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira-clients"
+# ADR-0003: the desktop user reaches the daemons but cannot touch their state.
+check user-not-in-eira sh -c "! id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
+check user-cannot-write-gate-db sh -c "test -e /data/eira-app.db && ! runuser -u $USER_NAME -- test -w /data/eira-app.db && ! runuser -u $USER_NAME -- test -r /data/eira-app.db"
+# A full round-trip: connect() proves the socket's group/mode, the reply proves
+# the daemon's peer-credential check accepts the user via eira-clients.
+REACH_PY='import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(10)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "health",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+assert reply["result"]["ok"] is True, reply'
+check user-can-reach-intentd runuser -u "$USER_NAME" -- python3 -c "$REACH_PY"
+if [ "$failed" -ne 0 ]; then
+    say "diag run-eira: $(ls -ln /run/eira 2>&1 | tr '\n' ' ')"
+    say "diag user-ids: $(id "$USER_NAME" 2>&1)"
+    say "diag reach: $(runuser -u "$USER_NAME" -- python3 -c "$REACH_PY" 2>&1 | tail -n 2 | tr '\n' ' ')"
+    say "diag intentd-log: $(journalctl -u eira-intentd.service -b --no-pager -n 15 2>&1 | tr '\n' ' ' | cut -c1-1500)"
+    say "diag apparmor: $(journalctl -k -b --no-pager 2>&1 | grep -i 'apparmor=\"DENIED\"' | tail -n 5 | tr '\n' ' ' | cut -c1-1500)"
+fi
+check login-screen wait_for 300 systemctl is-active --quiet display-manager.service
+check labwc-running wait_for 600 pgrep -u "$USER_NAME" -x labwc
+# EIRA-CONSENT-AGENT R-6.1: the session runs eira-labwc, not Ubuntu's labwc 0.9.
+check labwc-is-eira-labwc sh -c 'dpkg-query -W -f="\${Status}" eira-labwc | grep -q "install ok installed" && labwc --version | grep -Eq "^labwc 0\.(2[0-9]|[3-9][0-9])\."'
+check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop
+
+if [ "$failed" -ne 0 ]; then
+    {
+        echo "---- systemctl --failed"
+        systemctl --failed --no-pager
+        echo "---- pending jobs"
+        systemctl list-jobs --no-pager
+        echo "---- sessions"
+        loginctl list-sessions --no-pager
+        ps -eo user,pid,cmd | grep -E "labwc|eira-|gdm-wayland|gnome-session" | grep -v grep
+        echo "---- journal (eira, gdm, labwc)"
+        journalctl -b --no-pager -n 300 -u 'eira-*' -u gdm.service
+        journalctl -b --no-pager -n 150 _COMM=labwc _COMM=eira-spatial-de _COMM=eira-session
+        echo "---- user journal ($USER_NAME)"
+        journalctl -b --no-pager -n 120 _UID="$(id -u "$USER_NAME")"
+    } > "$OUT" 2>&1
+fi
+
+if [ "$failed" -eq 0 ]; then say "RESULT PASS"; else say "RESULT FAIL"; fi
+sleep 2
+[ -n "${EIRA_CI_NO_POWEROFF:-}" ] || systemctl poweroff

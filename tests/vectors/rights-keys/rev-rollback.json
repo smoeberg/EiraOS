@@ -1,0 +1,19 @@
+{
+  "name": "rev-rollback",
+  "description": "Lavere sekvens.",
+  "kind": "revocations",
+  "raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-06T00:00:00Z\",\"revoked\":[\"old-1\"],\"sequence\":1,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"UGGSJIQ5aHNATv8xO-oWzN8BljD4w5UImnGbauhDPEKuPiO03khCArTlH5Pr-M8I8VTdqJRN5IbkYfl7RWNsDg\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": {
+    "sequence": 2,
+    "revoked": [
+      "old-1"
+    ],
+    "digest": "sha256:841c36030717a37aa5f43a1e297e8bc1bfd59f5f25f2e515e38a743aad4d7c6a"
+  },
+  "expect": {
+    "ok": false,
+    "reason": "sequence_rollback"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "rev-unrevoke",
+  "description": "Højere sekvens, men old-1 er fjernet.",
+  "kind": "revocations",
+  "raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-07T10:00:00Z\",\"revoked\":[],\"sequence\":2,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"zdbDCcdXtTYFu8zRIZfIYS71iiQ7ijdWvamDoSdRfTTbAGGh42C4CFXBPaM7tWdZHJ9CKuJ-Di7GmAYbzWl3DA\"},\"tenant_id\":\"kk\"}",
+  "tenant_id": "kk",
+  "now": "2026-11-07T12:00:00Z",
+  "previous": {
+    "sequence": 1,
+    "revoked": [
+      "old-1"
+    ],
+    "digest": "sha256:841c36030717a37aa5f43a1e297e8bc1bfd59f5f25f2e515e38a743aad4d7c6a"
+  },
+  "expect": {
+    "ok": false,
+    "reason": "sequence_rollback"
+  }
+}

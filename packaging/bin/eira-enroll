@@ -1,0 +1,6 @@
+#!/bin/sh
+# Enroll this device with Fleet (FLEET-RIGHTS-API §8). Run as root by IT,
+# with the invitation file from Fleet.
+set -eu
+export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -m app.rights.enroll "$@"

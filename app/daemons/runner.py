@@ -23,6 +23,7 @@ DAEMON_NAMES = (
     "walletd",
     "presenced",
     "contextd",
+    "delegationd",
 )
 
 _SERVERS: dict[str, JsonRpcServer] = {}
@@ -142,6 +143,12 @@ def _register_contextd(server: JsonRpcServer) -> None:
     server.register("health", lambda _: {"daemon": "eira-contextd", "ok": True})
 
 
+def _register_delegationd(server: JsonRpcServer) -> None:
+    from app.daemons.delegationd import register_delegation_handlers
+
+    register_delegation_handlers(server)
+
+
 REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "stated": _register_stated,
     "identityd": _register_identityd,
@@ -152,6 +159,7 @@ REGISTRARS: dict[str, Callable[[JsonRpcServer], None]] = {
     "walletd": _register_walletd,
     "presenced": _register_presenced,
     "contextd": _register_contextd,
+    "delegationd": _register_delegationd,
 }
 
 
@@ -166,7 +174,7 @@ def _selected_daemons(daemon: str) -> tuple[str, ...]:
 def start_daemons(
     daemon: str = "all", socket_dir: str | os.PathLike[str] | None = None
 ) -> dict[str, JsonRpcServer]:
-    """Start one daemon or the complete nine-daemon set in background threads."""
+    """Start one daemon or the complete daemon set in background threads."""
     requested = _selected_daemons(daemon)
     if socket_dir is not None:
         resolved_dir = str(Path(socket_dir).resolve())

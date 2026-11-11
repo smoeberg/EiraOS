@@ -1,0 +1,16 @@
+{
+  "name": "tampered-after-signing",
+  "description": "Indhold ændret efter signering.",
+  "raw": "{\"denies\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"vikarer\"}}],\"device_id\":\"dev-0001\",\"eira_rights\":\"1\",\"expires_at\":\"2026-11-21T11:00:00Z\",\"grants\":[{\"actions\":[\"edp:utterance\",\"edp:commitment_proposed\",\"edp:commitment_accepted\",\"edp:value_transfer_requested\"],\"scope\":\"obj:sag:*\",\"subject\":{\"group\":\"laerere\"}},{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"laerere\"}},{\"actions\":[\"edp:value_transfer_requested\"],\"expires_at\":\"2026-11-07T15:00:00Z\",\"required_assurance\":\"eid_high\",\"scope\":\"obj:sag:42\",\"subject\":{\"principal\":\"did:eira:entra.9f3\"}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"req-7f3a\",\"fleet\":\"fleet.kk.example\"},\"kind\":\"managed\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-tenant-kk-1\",\"value\":\"JkW95fiMILHco-eqCcNyc5GesPizjHlFeegXM18l8vBt8NXM3DC2HayFfPwgGFQiTIcBGxWEKH2by1ZIdBIjCg\"},\"template\":{\"id\":\"skoleforvaltning-laerer\",\"version\":\"3\"},\"tenant_id\":\"kk\",\"version\":42}",
+  "device": {
+    "enrolled": true,
+    "tenant_id": "kk",
+    "device_id": "dev-0001"
+  },
+  "active": null,
+  "now": "2026-11-07T12:00:00Z",
+  "expect": {
+    "ok": false,
+    "reason": "bad_signature"
+  }
+}

@@ -224,6 +224,32 @@ def register_intent_handlers(
     except ImportError:
         pass
     active = service or default_service()
-    server.register("intent.execute", active.execute)
+    from app.gate.ipc import gate_required, register_gate_handlers
+
+    # IntentDaemonService.execute appends to stated after a CEL check but
+    # without consent or confirmation: not reachable over IPC any more.
+    server.register("intent.execute", gate_required("intent.execute"))
+
+    gate = register_gate_handlers(server)
+    from app.conversation.ipc import register_conversation_handlers
+
+    # Read-only: the event stream for Explorer (EIRA-CONVERSATION-1.0 §5).
+    register_conversation_handlers(server, gate)
+    _start_audit_anchor(server)
     server.register("health", lambda _: {"daemon": "eira-intentd", "ok": True})
     return active
+
+
+def _start_audit_anchor(server) -> None:
+    """GATE-KERNEL bilag A pkt. 2: anchor the audit chain in the journal (and,
+    via the rights agent's heartbeat, at Fleet) on an installed system."""
+    from app.gate.caller import installed
+
+    if not installed():
+        return
+    from app.gate import audit_anchor
+    from app.gate.ipc import default_gate
+
+    anchorer = audit_anchor.Anchorer(default_gate().store)
+    anchorer.start()
+    server.add_cleanup(anchorer.stop)

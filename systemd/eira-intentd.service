@@ -10,17 +10,26 @@ After=eira-stated.service
 Type=simple
 User=eira
 Group=eira
+# May hand its socket to the client group (not a data group).
+SupplementaryGroups=eira-clients
 WorkingDirectory=/usr/lib/eira-os
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/usr/lib/eira-os
 Environment=EIRA_APP_DB=/data/eira-app.db
+# Rights cache (EIRA-RIGHTS-SET-1.0): written by the governance agent, read by the gate.
+Environment=EIRA_RIGHTS_DIR=/data/rights
 EnvironmentFile=-/etc/eira/eira.conf
+# Apply the bundle's signed default set before the gate starts. '-': a
+# rejected or missing set must not stop the gate; it then has no rights
+# (fails closed) and gate.capabilities says why.
+Environment=EIRA_RIGHTS_BUNDLE_DIR=/usr/lib/eira-os/rights
+ExecStartPre=-/usr/bin/eira-rights-apply apply-default
 ExecStart=/usr/bin/eira-intentd
 Restart=always
 RestartSec=2s
 RuntimeDirectory=eira
-RuntimeDirectoryMode=0770
+RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes
 StateDirectory=eira
 StateDirectoryMode=0770

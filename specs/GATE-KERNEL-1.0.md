@@ -107,9 +107,12 @@ Constrained decoding (JSON Schema i Ollama, GBNF i llama.cpp) kan reducere synta
 
 | Kontrol | Krav |
 |---|---|
-| Rettighed findes | Har `participants[].identity` rettighed til `action.type` på `conversation_id`? |
-| Rettighed gælder nu | Er rettigheden ikke tilbagekaldt eller udløbet? |
-| Step-up niveau | Kræver handlingen et højere assurance-niveau end sessionens? |
+| Rettighedssæt findes | Er der et aktivt, Fleet-signeret rettighedssæt i cachen (EIRA-RIGHTS-SET-1.0)? Ellers `E_UNAUTHORIZED` med `rights: missing`. |
+| Rettighed findes | Giver sættet brugeren (principal eller gruppe fra sessionen) handlingsnøglen (`edp:<type>` / `system:<operation>`) på scope `conversation_id`, og rammer ingen deny? (`contract.authorize`) |
+| Rettighed gælder nu | Er sæt og grant ikke udløbet målt i effektiv tid (RIGHTS-SET §4.1)? Ellers `rights: expired`. |
+| Step-up niveau | Kræver politikken eller granten (den strengeste af dem) et højere assurance-niveau end sessionens? |
+
+Rettighedssættet er den eneste kilde til rettigheder. Gaten har ingen lokal tildelingsvej og ingen IPC-metode, der skriver rettigheder. Hver audit-post indeholder sættets id, version og art, den autoriserende grant ved PASS, `owner_admin` (privat maskine, ADR-0003) og `clock_rollback`.
 
 **Ved fejl:** `REJECT` med `E_UNAUTHORIZED` eller `E_STEP_UP_REQUIRED`. `E_STEP_UP_REQUIRED` kan starte en separat autentifikationsproces, men handlingen er ikke autoriseret, før Gate kontrollerer den igen efter step-up.
 
@@ -239,3 +242,141 @@ Audit-loggen må ikke kunne ændres af modeller eller adaptere.
 1. Skal `CLARIFY` kunne føre til en ny EDP-handling (`utterance`), eller skal det være en separat UI-tilstand? **Anbefaling:** separat UI-tilstand, så gaten ikke bliver en dialogmotor.
 2. Skal `policy_version` kunne tvinge en `REJECT`, hvis en handling er planlagt under en ældre policy? **Anbefaling:** ja, hvis policyen er ændret på en måde, der påvirker handlingen.
 3. Hvordan håndteres executor-timeout? **Anbefaling:** `E_PARTIAL` med `state: unknown`, og en efterfølgende verifikationshandling.
+
+---
+
+## Bilag A — Implementering (november 2026)
+
+**Kode:** `app/gate/` (`kernel.py`, `edp.py`, `policy.py`, `store.py`, `executors.py`, `ipc.py`). Gaten kører i `intentd` og eksponeres som `gate.propose`, `gate.consent`, `gate.confirm` og `gate.status`. Ingen IPC-metode kalder en executor direkte.
+
+**Flow:**
+1. `propose` kører lag 1–4, gemmer handlingen som `pending`, bundet til et indholdshash, og rapporterer bagefter, hvad lag 5–6 mangler.
+2. `consent` registrerer brugerens samtykke til netop det hash. Samtykket udløber efter 10 minutter.
+3. `confirm` validerer igen fra lag 1 ud fra den gemte rå input. Derefter følger hash-binding, atomar claim, ny autorisation lige før udførelse og executoren med en engangsbillet.
+
+**Indholdshashet** dækker `id`, `conversation_id`, `participants`, `action` og `valid_from`. `transport` og `veritas` er ikke med: de beriges efter brugerens beslutning og må ikke ændre handlingen.
+
+**Afklaringer af §11:**
+1. `CLARIFY` er en separat UI-tilstand, og gaten fører ingen dialog.
+2. En ændret policy for handlingstypen siden forslaget giver `REJECT (E_POLICY)`. Det afgøres via et fingeraftryk af policy-posten.
+3. Timeout eller crash i executoren giver `E_PARTIAL` med `state: unknown`, og handlingen prøves ikke automatisk igen.
+
+**§7-tests → `tests/test_gate_kernel.py`:**
+
+| §7-krav | Test |
+|---|---|
+| Ugyldig JSON | `test_invalid_json_is_rejected_as_syntax` |
+| Ukendt `action.type` | `test_unknown_action_type_is_rejected_as_schema` |
+| Manglende obligatorisk felt | `test_missing_content_field_is_rejected_as_schema` |
+| Forbudt handling eller parameter | `test_forbidden_action_and_parameters_are_rejected_as_policy` |
+| Manglende samtykke | `test_missing_consent_for_irreversible_action_is_rejected` |
+| Ændrede parametre | `test_changed_parameters_after_confirmation_are_rejected` |
+| Dobbelt eksekvering | `test_double_execution_returns_the_existing_result`, `test_concurrent_confirmations_execute_once` |
+| Rettighed tilbagekaldt | `test_right_revoked_after_planning_is_rejected`, `test_right_revoked_between_claim_and_execution_is_rejected` |
+| Direkte executor-kald | `test_executor_cannot_be_called_directly` |
+| Model-runtime utilgængelig | `test_unavailable_model_runtime_is_a_safe_reject` |
+| Delvis fejl | `test_partial_failure_is_reported_with_its_state` |
+| Korrekt schema uden tilladelse | `test_correct_schema_without_permission_is_unauthorized` |
+
+Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input (afvises af schemaet), degraded transport, udløbet samtykke, manipuleret lagret input, step-up til betaling, ukendt session, at handle på en andens vegne, et append-only og hash-kædet audit-log samt at en PASS først logges efter executorens resultat.
+
+**Mutationstjek:** Hver af disse kontroller er fjernet én ad gangen, og testsuiten fejlede hver gang: samtykke, hash-binding, autorisation lige før udførelse, idempotens, policy-fingeraftryk, verifikation af tilstandsovergangen og rettigheder.
+
+**Kendte begrænsninger (åbne), ordnet efter alvor:**
+
+> **Trusselsmodel i dag:** Lag 5–6 beskytter mod *fejl* (en model, der foreslår forkert, en UI-bug, en forældet plan), ikke mod en *kompromitteret lokal proces*. Grunden er, at kalderens identitet endnu ikke kommer fra forbindelsen.
+
+1. ~~**Kalderens identitet er påstået, ikke bevist.**~~ **Delvist lukket** (`app/gate/caller.py`). Kalderen kommer nu fra forbindelsen (`SO_PEERCRED`), aldrig fra forespørgslen; serveren sender den kun til handlere, der beder om den, og en klient-sendt `_peer` smides væk.
+   - **Modellen har sin egen bruger, `eira-model`** (system-UID, i `eira-clients`, aldrig i `eira`). Fra den UID har et forslag altid `origin: model`, uanset hvad der påstås, og `gate.consent` og `gate.confirm` afvises altid med sin egen kode, `E_MODEL_CANNOT_DECIDE`, så audit, SIEM og Fleet kan alarmere på netop den hændelse. Hver audit-post har kalderens UID, PID og om det var modellen. Verificeret over den rigtige socket i VM (`model-cannot-consent`).
+   - **Fejler lukket, ikke åbent:** Mangler `eira-model`, ville modellen tælle som et menneske. På en installeret maskine nægter gaten derfor at starte, hvis brugeren mangler, ikke har en system-UID eller deler UID med `eira`. En test kræver, at enhver fremtidig modeltjeneste kører som `User=eira-model`.
+   - Modellen kan kun foreslå på vegne af en session bundet til et andet UID end sit eget. *Hvilket* menneske den handler for, er endnu ikke bevist; det kræver delegationen fra den betroede vej (nedenfor). Et forslag gør intet, før det menneske, sessionen er bundet til, samtykker fra sit eget UID.
+   - **En session tæller kun, hvis den er autentificeret og bundet til kalderens UID.** Kun `create_session_from_claims` sætter `authenticated_at` og `os_uid`. Sessioner, som `ensure_session` opretter ud fra et påstået `actor_id` (`dashboard.get`, `identity.session`), giver aldrig adgang til gaten. Et login overtager aldrig en eksisterende session: rækken oprettes i én sætning (`INSERT … ON CONFLICT DO NOTHING`, kræver én indsat række), så en række, der dukker op samtidig, ikke kan overtages.
+   - **Fundet undervejs:** `dashboard.get` og `identity.session` opretter sessioner for ethvert `actor_id` med `eid_low`. Det var kun ufarligt, fordi `gate_identities` er tom i produktion; det ville have åbnet sig, så snart identiteter blev koblet på.
+   - **Tilbage:**
+     - ~~*Betroet vej til samtykke.*~~ **Lavet** (`app/gate/consent_proof.py`, `ui/src-tauri/src/login.rs`). Ved login får sessionen en tilfældig samtykkenøgle (32 byte). `identityd` sender den kun til den proces, der fuldførte login (appens Rust-del), hvor den ligger i hukommelsen; webview'et ser den aldrig, og `identity.session`/`dashboard.get` udleverer den aldrig (`get_session` stripper den, kun gaten bruger `get_session_for_gate`). `gate.consent` og `gate.confirm` kræver `proof = HMAC-SHA256(nøgle, "EIRA-CONSENT-V1" ‖ verbum ‖ uid ‖ session ‖ handling ‖ indholdshash ‖ gengivelseshash)`, så beviset hverken kan genbruges på tværs af handlinger, trin, sessioner eller brugere. Uden gyldigt bevis: `E_CONSENT_PROOF`, egen kode i audit. Python og Rust deler testvektorer (`tests/vectors/consent-proof.json`). Log ud glemmer nøglen.
+       - **Rest:** Beviset holder, så længe den kørende app er den ægte. Et program under brugerens UID kan dræbe appen og starte en ny kopi med indsprøjtede biblioteker (`LD_PRELOAD`), og brugeren logger så ind gennem den. Det lukkes først ved, at appen startes af sessionen (ikke af brugeren) med et rent miljø, eller ved at login verificerer den kaldende proces' binære fil. Derfor lover ADR-0003 stadig ikke beskyttelse mod "programmer, der kører som dig".
+       - ~~Modellens "på vegne af" har stadig ingen definition.~~ **Lavet** ([EIRA Delegation Protocol v1.1](../docs/specs/EIRA_Delegation_Protocol_v1.0.md)): appen udsteder delegationen ad den betroede vej (verbet `delegate` med samme samtykkenøgle), og gaten lader kun modellen foreslå under en delegation fra *det menneske*, hvis session den handler i. Delegationen står i gatens egen audit-kæde.
+     - ~~*Login i installeret system.*~~ **Lavet** (`app/auth/login.py`, `identity.login_start` / `identity.login_complete`). Entra-login med PKCE og obligatorisk nonce; login-tilstanden er bundet til den UID, der startede den, og kan kun bruges én gang (én `DELETE … RETURNING`). UID'en bevises af to kilder, der skal stemme: kernens `loginuid` for den kaldende proces og `SO_PEERCRED`; system-UID'er logger ikke ind. Sessionen får identiteten `did:eira:entra.<oid>` og grupperne fra det verificerede token og udløber efter 12 timer. `identityd` har nu databasen (unit og AppArmor) og kører migrationerne ved start. Verificeret i VM (`identityd-has-database`, `login-needs-login-session`, `identityd-no-apparmor-denials`). **Fundet undervejs:** et rigtigt Entra-login ville være gået ned ved start, fordi `oidc_auth_states` manglede kolonnen `nonce`, og identiteten `entra:oid:…` ville være afvist af EDP 1.0, som kun kender `did:eira:` og `external:`.
+     - ~~*UI'en*~~ **Lavet** (`ui/src-tauri/src/login.rs`, Tauri-kommandoen `desktop_login`; RFC 8252). Appen binder en tilfældig port på `127.0.0.1`, får login-URL'en fra `identityd` med netop den redirect (kun `http://127.0.0.1:<port>/callback` accepteres, og den gemmes med login-tilstanden til token-udvekslingen), åbner systembrowseren og venter på ét svar på `/callback` med den rigtige `state`. Andre forespørgsler på porten får 404 og videresendes aldrig. Koden går direkte fra loopback-socket'en til `identityd`; webview'et ser kun session-id'et. Ikke afprøvet mod et rigtigt Entra-tenant endnu (kræver app-registrering med redirect `http://127.0.0.1`).
+   - **Udgivelsesbetingelse:** Efter dette punkt accepterer gaten kun sessioner fra installeret login (ovenfor). Daemon- og UI-siden er lavet; betingelsen er opfyldt, når login er afprøvet mod et rigtigt Entra-tenant. Det er ikke en regression (identitetstabellen var tom i produktion, så gaten afviste også før), men **der må ikke laves en udgivelse med procesidentitet uden installeret login**: gaten ville være død i praksis.
+     - ~~*Modelprocessen* findes endnu ikke som pakket tjeneste.~~ **Lavet** (`app/model/`, `eira-modeld`): kører som `eira-model` med egen AppArmor-profil, intet netværk (`PrivateNetwork`), ingen adgang til `/data`, og kan kun nå gatens socket. Den foreslår EDP-handlinger *som sig selv*; gaten kræver en delegation fra mennesket og samtykke ad den betroede vej. Gaten tvinger nu selv `origin=model` for modellens UID (før kun IPC-laget). Første adapter er regelbaseret (dansk, afstår hellere end at gætte); en sprogmodel kan sættes ind bag samme kontrakt (AI-INTERFACE-1.0 §4). Verificeret i VM (`modeld-*`).
+2. ~~**Audit-kæden mangler et eksternt anker.**~~ **Lavet** (`app/gate/audit_anchor.py`, `eira-audit-verify`). Et anker er `(position, head)` for kæden; positionen er rækkefølgen, ikke `seq`-kolonnen, som en omskrivning kan nummerere om.
+   - **Efter hver audit-post** (og ved start, hvert 5. minut og ved stop) skriver `intentd` `EIRA_AUDIT_ANCHOR {…}` til sin journal og til `/data/audit/anchor.json`. Der er altså intet vindue, hvor de nyeste poster er uforankrede. Et anker, der ikke kan skrives, fejler aldrig en beslutning.
+   - **Fleet er vidnet uden for maskinen.** Sync-agentens heartbeat sender ankeret (`audit` i FLEET-RIGHTS-API, OpenAPI 1.3). Fleet gemmer hvert `(seq, head)` pr. enhed, alarmerer hvis `seq` falder eller et kendt head ændres, og kan eksportere dem til `eira-audit-verify --anchors`. *Afvigelse fra den oprindelige plan:* ikke Merkle-sync til en anden enhed. Fleet er allerede uden for maskinen og har allerede kontakten, og en enkeltstående enhed har ingen peer.
+   - **`eira-audit-verify`** kontrollerer først journalens FSS-segl (`--verify-key`), derefter kædens indre gyldighed og til sidst, at hver forankret position stadig har det forankrede head, og at kæden ikke er kortere. Exit 0 i orden, 1 manipulation, 2 intet at verificere mod eller segl fejlet. Verificeret i VM: en kopi, hvor triggerne fjernes, en post ændres og hele kæden genberegnes, så den er internt gyldig, afvises (`audit-rewrite-caught`).
+   - **Paritetsstatus:** `gate.capabilities` viser `audit.witness` (`fleet` på en enrolled enhed, ellers `journal_only`) og `audit.seal` (`journal_unsealed`, `sealed_key_on_device` eller `sealed`).
+   - **Dækker ikke**, sagt ærligt: en kompromitteret `intentd` kan forankre et falsk head; journalen forsegles kun pr. forseglingsinterval, så poster siden seneste segl kan omskrives sammen med deres ankerlinjer (Fleet-vidnet dækker det, hvis heartbeat nåede frem); en enkeltstående pc har kun journalen.
+   - ~~**Drift (ikke automatiseret)**~~ **Lavet** (`app/gate/audit_seal.py`, `eira-audit-seal`): FSS sættes op ved første opstart (`journalctl --setup-keys --interval=15min`). Verifikationsnøglen kan genskabe forseglingsnøglerne og forlader derfor maskinen én gang: på en enrolled enhed med næste heartbeat til Fleet (`audit_seal`, FLEET-RIGHTS-API OpenAPI 1.4), på en privat pc til ejeren med `sudo eira-audit-seal show` (vises én gang). Derefter slettes den lokalt. **Ærlig grænse:** indtil overdragelsen ligger nøglen på disken (root:eira 0640), så en angriber med root i det vindue kan forfalske journalen; Fleet-vidnet dækker stadig kæden. Planlagt verifikation hos Fleet (`journalctl --verify --verify-key`) mod en eksporteret journal er Fleets ansvar. Verificeret i VM (`audit-seal-*`): seglet sættes op, ejeren tager nøglen, den er væk, og journalen verificerer. **Kendt falsk alarm:** roteres journalen manuelt (`journalctl --rotate`) to gange inden for samme seglinterval, skriver journald to segl med samme epoke, og `journalctl --verify` melder den arkiverede fil som korrupt (set i VM). Opsætningen roterer kun én gang, før der er segl; rotér ikke manuelt på en forseglet maskine, og læs en fejl i en arkiveret fil fra et rotationstidspunkt med det for øje. **Kun systemjournalen:** seglet verificeres med `--system`, fordi gatens ankre står dér. Brugerjournalen (`user-1000.journal`) fejlede seglverifikationen på samme position i to VM-kørsler ("Tag failed verification"); den indeholder ingen audit-ankre og er ikke dækket.
+3. ~~**Ingen kanonisk gengivelse af samtykket.**~~ **Lukket** med `app/gate/render.py` (renderer v1, dansk og engelsk).
+   - Rendereren læser kun den validerede konvolut og gatens policy, aldrig modellen.
+   - Gengivelsen viser handlingen og alle dens parametre, samtalen, modtagerne og reversibiliteten fra registret.
+   - Brugerleveret tekst står i «…». Linjeskift vises som ⏎, og usynlige tegn, bidi-styring, særlige mellemrum og rendererens egne afgrænsere vises som ⟨U+XXXX⟩. Derfor kan en besked ikke forfalske en linje som "Kan fortrydes".
+   - Tidspunkter skrives ud fra tidsstemplets egne felter og konverteres aldrig.
+   - **Binding:** Ved `propose` gemmes tekst, hash, version og sprog sammen med handlingen. `gate.consent` og `gate.confirm` kræver `rendering_hash`. Lag 5 godtager kun et samtykke til netop den tekst, og samtykker fra før rendereren (NULL) tæller ikke. Lag 7 tjekker, at den gemte tekst stadig hasher til den gemte hash. Teksten gen-renderes aldrig, så en nyere renderer ændrer ikke det, der er samtykket til.
+   - Sproget indgår i hashen. Samme handling på et andet sprog er et nyt samtykke (`E_STATE` ved genbrug af id'et), og et ukendt sprog giver `E_POLICY`.
+   - **Ikke dækket:** Ruten (`transport`) er ikke med i gengivelsen, fordi den vælges efter samtykket. Hvis en rute ændrer privatliv, pris eller levering væsentligt, kræver EDP §2.4 et nyt samtykke. Det hører til route-selection i adapter-laget.
+4. **Rettigheder og medlemskab.** *Rettigheder: lag 6 læser nu kun det Fleet-signerede rettighedssæt (`app/rights/cache.py`, `/data/rights`); tabellen `gate_grants` og den lokale tildelingsvej er fjernet.* *Standardsættet: bundlen har et signeret default-sæt, som anvendes før gaten starter (RIGHTS-SET §5.2); verificeret i VM (`rights-default-active`).* Tilbage: `eira-governance-agent` skal hente, verificere og installere managed-sæt fra Fleet, og enrollment skal skrive enhedens identitet. ~~Medlemskab (`gate_members`) har stadig ingen produktionskilde.~~ **Lavet** ([EIRA-CONVERSATION-1.0](EIRA-CONVERSATION-1.0.md), `app/conversation/`). Medlemskab skrives kun af samtalelaget, i samme transaktion som executoren optager en hændelse; ingen IPC-metode tilføjer medlemmer. En samtale uden medlemmer kan åbnes af den første handlende deltager (lag 6 afgør stadig, om scopet er tilladt), og domænet tjekkes igen i transaktionen. `device:local` kræver ikke medlemskab, men mindst én gyldig grant på `device:local` (RIGHTS-SET §6). **Fundet undervejs:** uden det afviste en installeret gate *alle* handlinger i lag 4, også sluk og genstart, fordi tabellen altid var tom. Identitet (`gate_identities`, session, assurance) kommer fra `identityd`. Begge dele kræver procesidentitet (punkt 1). **Fundet i VM-testen:** Den installerede `identityd` har hverken database-sti eller skriveadgang (ingen `/data` i unit eller AppArmor). Sessioner, som `identityd` opretter, deles derfor ikke med `intentd` på en installeret maskine. Gaten fejler lukket (ukendt session giver `REJECT`), men flowet virker først installeret, når denne PR er lavet.
+5. ~~**Tre gamle skriveveje går uden om gaten.**~~ **Lukket.** `intent.confirm`, `intent.execute` og `journey.advance` svarer nu `E_GATE_REQUIRED` med et pejl til `gate.propose` og en `user_message`. De er omdirigeret, ikke slettet. Bevis:
+   - `test_former_bypasses_answer_gate_required_and_never_execute` kører over den rigtige JSON-RPC-server og viser, at hverken `execute_intent`, `stated`-appenderen eller journey-lageret nås.
+   - `test_every_intentd_method_is_classified` har en tom `KNOWN_BYPASSES`.
+   - Mutationstjek: at gen-eksponere `intent.execute` får testen til at fejle.
+6. ~~**Samtykkets udløb regnes på vægur-tid.**~~ **Lukket** med `app/clock.py`. Ved samtykket gemmes `(boot_id, CLOCK_BOOTTIME)`. Lag 5 godtager kun et samtykke fra samme boot, og kun hvis der er gået mindre end TTL'en (10 min.) på `CLOCK_BOOTTIME`, som også tæller tid i suspend. Vægur-tiden (`expires_at`) bruges kun til visning og audit.
+   - Et tilbagestillet ur forlænger ikke samtykket, og et vægur-spring frem (NTP, tidszone) afbryder det ikke.
+   - En genstart af maskinen afslutter samtykket. En genstart af daemonen i samme boot gør ikke.
+   - Rækker uden boot-tidspunkt (fra før migrationen) er aldrig gyldige.
+   - Uden kernens `boot_id` (udviklingsmaskiner uden Linux) er "boot" lig processen. Det er strengere, aldrig løsere.
+
+**Rettet efter review af #136:**
+- *Crash-recovery.* Et crash mellem claim og registreret resultat efterlader handlingen i `executing`. `Gate.recover()` kører ved opstart og lader executorens egen varige tilstand afgøre udfaldet: outbox-rækken findes → `executed`, den findes ikke → `pending` igen, kan ikke afgøres → `unknown`. Executoren køres aldrig igen, og tests dræber processen før og efter outbox-skrivningen.
+- *Genautorisation lige før udførelse* bruger den session, der bekræfter, ikke den, der foreslog.
+- *`gate.status`* er sessionsbundet: kun den handlende bruger og samtalens medlemmer får svar. Alle andre får samme svar som ved et ukendt id.
+- *Database-sti på den installerede maskine.* VM-testen fangede, at `intentd` crash-loopede. Rettet, og VM-testen kalder nu gaten over socket'en.
+
+**Note til punkt 1:** Alle daemons kører i dag som samme systembruger (`eira`). `SO_PEERCRED` kan derfor kun skelne modelprocessen fra UI'en, hvis modellen kører under sin egen UID og ikke er medlem af gruppen, der har adgang til gatens kommandosocket. Socket-adgang skal gives pr. socket, ikke til hele `/run/eira`.
+
+**Rækkefølge (besluttet efter review, november 2026):**
+1. Merge Gate Kernel 1.0.
+2. Omdirigér den gamle vej.
+3. Lav rendereren, fordi den blokerer punkt 4.
+4. Flyt den første executor, der ændrer maskinens tilstand, ind under gaten: `SystemExecutor` med EiraSystemAPI's strøm-operationer og en test, der beviser, at det direkte Tauri-kald fejler.
+5. Lav procesidentitet. Identitet og grupper kommer fra `identityd`, rettigheder fra Fleet via `eira-governance-agent` (ADR-0003).
+6. Lav audit-ankeret (journald FSS og fleet-vidne).
+
+**Executor-status:** Den eneste executor er conversation-outboxen for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
+
+
+---
+
+## Bilag B — Gate 1.1: to handlingsfamilier (ADR-0002)
+
+**Version:** `gate` i audit-loggen er `"1.1"`. Det er en minor-ændring (§10), fordi valideringsrækkefølgen og beslutningsmodellen er uændrede.
+
+| Familie | Genkendes på | Lag 1–2 | Omfang |
+|---|---|---|---|
+| EDP | `"edp": "1.0"` | EDP 1.0-schemaet (§3.1–3.2) | `conversation_id` |
+| EiraSystemAPI | `"eira_system": "1"` | `app/gate/system.py`: felterne `id`, `operation`, `input` og `created_at`. Listen over operationer er lukket, input har et typet skema, og ekstra felter afvises | `device:local` |
+
+**Afvisninger i lag 1–2:** En handling med begge nøgler afvises med `E_SYNTAX`, og det samme gør en handling med ingen af dem. En ukendt operation eller et felt som `rights` eller `reversibility` i forslaget afvises med `E_SCHEMA`.
+
+**Fra lag 3 er koden den samme for begge familier.** Systemforespørgslen omsættes til gatens fælles form: den handlende er sessionens bruger og aldrig et felt i forespørgslen. Indholdshashet binder derfor handlingen til den bruger, der foreslog den. Samme policy-registry, med nøgler som `system:power.request_action`. Samme samtykke, renderer, autorisation, atomare claim, recovery og audit-kæde.
+
+**Operationer i 1.1:**
+
+| Operation | Input | Reversibilitet | Assurance | Executor |
+|---|---|---|---|---|
+| `power.request_action` | `{"action": "poweroff" \| "reboot" \| "suspend"}` | irreversible | `eid_low` | `PowerExecutor` |
+
+`PowerExecutor` kalder systemd-logind over system-D-Bus med et fast argv til `busctl` (ingen shell) og `interactive=false`. Før handlingen spørger den `Can<Action>`, og svarer logind ikke `"yes"`, afvises handlingen med `E_EXECUTOR_UNAVAILABLE` og står igen som `pending`. Lykkes kaldet, er den ærlige tilstand `requested`. Ved et crash bliver tilstanden `unknown`, og handlingen prøves aldrig automatisk igen.
+
+**Mindst mulige rettigheder:**
+- `packaging/polkit/50-eira-power.rules` giver servicebrugeren `eira` netop de seks login1-power-handlinger og ikke `*-ignore-inhibit`. Programmer, der blokerer nedlukning, vinder altså stadig.
+- AppArmor-profilen for `intentd` tillader kun `busctl` og D-Bus-kald til `login1.Manager`-metoderne `Can*`, `PowerOff`, `Reboot` og `Suspend`.
+- Retten `system:power.request_action` på `device:local` tildeles kun via Fleet's rettigheds-API (ADR-0003). Et forslag kan ikke bære rettigheder.
+
+**Tauri `eira_system`:** `power.request_action` fejler lukket med `UNSUPPORTED`. Det bevises af Rust-testen `power_actions_never_execute_from_a_direct_call`. Tauri beholder kun læseoperationer.
+
+**`gate.capabilities`** er en læseoperation. Den viser familierne, systemoperationerne og logind's svar på `Can*`. VM-acceptancetesten kræver `poweroff` og `reboot` = `"yes"` på den installerede maskine, hvilket beviser, at AppArmor, polkit og logind spiller sammen. Selve nedlukningen køres ikke i CI.
+
+**Åbent:**
+1. Ingen tildeler i dag retten til `device:local` på en installeret maskine. Gaten fejler lukket, indtil `eira-governance-agent` anvender et signeret rettighedssæt fra Fleet (ADR-0003, `specs/EIRA-RIGHTS-SET-1.0.md`).
+2. CEL-constraints fra den tidligere `intent.execute` er endnu ikke foldet ind i lag 4.

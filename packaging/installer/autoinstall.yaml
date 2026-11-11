@@ -1,0 +1,29 @@
+# EiraOS installer — Ubuntu Desktop 26.04 LTS autoinstall.
+#
+# Ligger i roden af installations-ISO'et som /autoinstall.yaml.
+# Sprog, tastatur, netværk, disk og bruger vælges interaktivt, så installeren
+# aldrig sletter en disk uden at brugeren selv har valgt den.
+# EiraOS-filer ligger på mediet under /cdrom/eira (se scripts/build_iso.sh).
+autoinstall:
+  version: 1
+  interactive-sections:
+    - locale
+    - keyboard
+    - network
+    - storage
+    - identity
+  locale: da_DK.UTF-8
+  keyboard:
+    layout: dk
+  timezone: Europe/Copenhagen
+  source:
+    id: ubuntu-desktop-minimal
+  updates: security
+  packages:
+    - xwayland
+  late-commands:
+    - mkdir -p /target/var/lib/eira-install
+    - cp -r /cdrom/eira/. /target/var/lib/eira-install/
+    - curtin in-target --target=/target -- sh /var/lib/eira-install/eira-postinstall.sh
+  error-commands:
+    - tar -czf /var/log/installer/eira-error-logs.tgz /var/log/installer /var/log/curtin 2>/dev/null || true

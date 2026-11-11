@@ -72,7 +72,7 @@ export function VeritasHUD({ result, subject, loading = false, error }: VeritasH
   if (!result) {
     return (
       <aside className="veritas-hud hud-placeholder">
-        V\u00e6lg et objekt p\u00e5 canvas for at se Veritas-certifikatet.
+        Vælg et objekt på canvas for at se Veritas-certifikatet.
       </aside>
     );
   }

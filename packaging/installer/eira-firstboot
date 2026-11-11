@@ -1,0 +1,48 @@
+#!/bin/sh
+# EiraOS first boot — gør EiraOS til standard-session for brugeren fra installeren.
+#
+# Kører én gang, før login-skærmen (GDM) starter: finder den første
+# menneskelige bruger, sætter EiraOS som brugerens session i AccountsService
+# og giver brugeren adgang til daemon-sockets (gruppen eira-clients — aldrig
+# eira, som ejer daemons' data). Andre sessioner
+# skjules af eira-session-policy (fra pakken), medmindre IT tillader dem.
+set -eu
+
+STAMP=${EIRA_FIRSTBOOT_STAMP:-/var/lib/eira/firstboot.done}
+PASSWD=${EIRA_PASSWD_FILE:-/etc/passwd}
+ACCOUNTS_DIR=${EIRA_ACCOUNTS_DIR:-/var/lib/AccountsService/users}
+SESSION=eira-session
+
+[ -e "$STAMP" ] && exit 0
+
+user=$(awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ { print $1; exit }' "$PASSWD")
+if [ -z "$user" ]; then
+    echo "eira-firstboot: ingen bruger fundet (uid 1000-59999)" >&2
+    exit 1
+fi
+case "$user" in
+    *[!a-z0-9_-]*)
+        echo "eira-firstboot: uventet brugernavn: $user" >&2
+        exit 1
+        ;;
+esac
+
+install -d -m 0755 "$ACCOUNTS_DIR"
+account="$ACCOUNTS_DIR/$user"
+if [ -f "$account" ] && grep -q '^Session=' "$account"; then
+    sed -i "s/^Session=.*/Session=$SESSION/" "$account"
+elif [ -f "$account" ] && grep -q '^\[User\]' "$account"; then
+    sed -i "/^\[User\]/a Session=$SESSION" "$account"
+else
+    printf '[User]\nSession=%s\nSystemAccount=false\n' "$SESSION" >> "$account"
+fi
+chmod 0600 "$account"
+
+if [ -z "${EIRA_FIRSTBOOT_DRY_RUN:-}" ]; then
+    usermod -aG eira-clients "$user"
+    systemctl try-restart accounts-daemon.service >/dev/null 2>&1 || true
+    install -d -m 0755 "$(dirname "$STAMP")"
+    touch "$STAMP"
+    systemctl disable eira-firstboot.service >/dev/null 2>&1 || true
+fi
+echo "eira-firstboot: EiraOS er standard-session for $user"

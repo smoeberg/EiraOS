@@ -2,11 +2,29 @@
 
 This directory contains protocol and interface specifications for EiraOS. The integrated architecture map is [EiraOS Architecture Baseline 1.0](../docs/architecture/eiraos-architecture-baseline-1.0.md).
 
+## Contexts, storage and sync
+
+- [EIRA Context 1.0](EIRA-CONTEXT-1.0.md) — the context as data, one Linux user per context, lifecycle on a device, key hierarchy, the open storage format (exit guarantee), sync over S3/WebDAV, ID home contents, glimt (ADR-0005, ADR-0006 L5).
+
+**Status:** v0.3, accepted by the owner 11 November 2026; binding. [Test plan](EIRA-CONTEXT-1.0-TESTPLAN.md) accepted 11 November 2026. Nothing is implemented yet.
+
 ## Gate Kernel
 
 - [Gate Kernel 1.0](GATE-KERNEL-1.0.md) — authoritative protected-action boundary: validation, semantic/policy checks, consent, authorization, state safety, execution and result verification.
 
 **Status:** Draft, binding as an implementation target; not proof that all Gate checks are implemented or tested. Reconcile its decision/error semantics with the actual intent pipeline and regression tests before enabling new protected actions.
+
+## Consent Agent
+
+- [EIRA Consent Agent 0.1](EIRA-CONSENT-AGENT-0.1.md) (rev. 0.2) — trusted path to consent against programs running as the user (closes the "Rest" in GATE-KERNEL bilag A pkt. 1): setgid agent holding the consent key, gate accepts consent only from it, compositor requirements.
+
+**Status:** Draft for owner acceptance; not binding. The test plan follows as a separate step after acceptance.
+
+## Conversation layer
+
+- [EIRA-CONVERSATION-1.0](EIRA-CONVERSATION-1.0.md) — membership (who may act and see in a conversation) and the read-only event stream for Explorer.
+
+**Status:** Draft, implemented in `app/conversation/`. Membership is derived only from events the gate records; there is no write method.
 
 ## Model-independent AI interface
 

@@ -1,0 +1,16 @@
+{
+  "name": "default-on-enrolled",
+  "description": "Default-sæt på en enrolled enhed.",
+  "raw": "{\"denies\":[],\"device_id\":\"*\",\"eira_rights\":\"1\",\"expires_at\":\"2026-11-21T11:00:00Z\",\"grants\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"authenticated\":true}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"release-1.0.0\",\"fleet\":\"release.eira.example\"},\"kind\":\"default\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-release-1\",\"value\":\"1S4XNLlie4rnH7XnTblQ9-G6nhhSgzNxF9TllyYDd-cAj2MK6wchGI1oOE-HHrXF3JkBBhU9iKjYZQXs1AV9Aw\"},\"template\":{\"id\":\"personal\",\"version\":\"1\"},\"tenant_id\":\"unmanaged\",\"version\":1}",
+  "device": {
+    "enrolled": true,
+    "tenant_id": "kk",
+    "device_id": "dev-0001"
+  },
+  "active": null,
+  "now": "2026-11-07T12:00:00Z",
+  "expect": {
+    "ok": false,
+    "reason": "default_on_enrolled"
+  }
+}

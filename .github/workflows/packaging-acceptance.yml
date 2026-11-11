@@ -1,4 +1,4 @@
-name: Ubuntu 24.04 Packaging Acceptance
+name: Ubuntu 26.04 Packaging Acceptance
 
 on:
   workflow_dispatch:
@@ -7,7 +7,9 @@ on:
     paths:
       - "scripts/build_deb.sh"
       - "scripts/build_iso.sh"
+      - "scripts/fetch_ubuntu_iso.sh"
       - "packaging/**"
+      - "tests/test_eira_labwc_packaging.py"
       - "systemd/**"
       - "ui/**"
       - ".github/workflows/packaging-acceptance.yml"
@@ -16,55 +18,66 @@ permissions:
   contents: read
 
 jobs:
+  # The package is built on the target release so it links against
+  # Ubuntu 26.04's libraries (WebKitGTK, glibc) and Python.
   build-deb:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
     timeout-minutes: 90
     steps:
+      - name: Install package build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+          apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends \
+            ca-certificates curl git build-essential pkg-config file \
+            debhelper dh-python python3-all python3-dev python3-pytest python3-venv python3-pip \
+            nodejs npm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev patchelf apparmor apparmor-utils xorriso \
+            python3-cryptography python3-jsonschema python3-httpx python3-pydantic python3-websockets
+
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install package build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            debhelper debhelper-compat dh-python python3-all python3-pytest python3-venv \
-            nodejs npm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            build-essential python3-dev cargo rustc \
-            librsvg2-dev patchelf apparmor-utils python3-cryptography \
-            python3-httpx python3-pydantic python3-websockets
 
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Verify build toolchain and AppArmor profiles
         run: |
+          . /etc/os-release && echo "$PRETTY_NAME"
           rustc --version
-          cargo --version
+          node --version
           apparmor_parser --version
-          sudo apparmor_parser -Q -K packaging/apparmor/usr.bin.eira-*
+          apparmor_parser -Q -K packaging/apparmor/usr.bin.eira-*
 
       - name: Build Debian package
         env:
           EIRA_DPKG_SKIP_BUILD_DEPS_CHECK: "1"
-        run: scripts/build_deb.sh --output-dir dist
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/build_deb.sh --output-dir dist
 
       - name: Inspect package metadata and payload
         run: |
           dpkg-deb --info dist/eira-os-core.deb
           dpkg-deb --contents dist/eira-os-core.deb | tee dist/eira-os-core.contents.txt
           dpkg-deb --field dist/eira-os-core.deb Package Version Architecture Depends
-          dpkg-deb --contents dist/eira-os-core.deb | grep -E 'eira-(stated|identityd|fleetd|veritasd|intentd|graphd|spatial-desktop|session)'
+          for f in eira-stated eira-identityd eira-fleetd eira-veritasd eira-intentd eira-graphd \
+                   eira-spatial-desktop eira-session wayland-sessions/eira-session.desktop \
+                   share/eira-os/labwc/autostart; do
+            grep -q "$f" dist/eira-os-core.contents.txt || { echo "missing $f"; exit 1; }
+          done
           python3 - <<'PY' > dist/eira-os-core.deb.sha3-256
           import hashlib, pathlib
           p = pathlib.Path("dist/eira-os-core.deb")
-          h = hashlib.sha3_256(p.read_bytes()).hexdigest()
-          print(f"{h}  {p.name}")
+          print(f"{hashlib.sha3_256(p.read_bytes()).hexdigest()}  {p.name}")
           PY
 
       - name: Upload Debian package and inspection evidence
         uses: actions/upload-artifact@v4
         with:
-          name: eira-deb-ubuntu-24.04
+          name: eira-deb-ubuntu-26.04
           path: |
             dist/eira-os-core.deb
             dist/eira-os-core.contents.txt
@@ -72,10 +85,58 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build-live-iso:
-    needs: build-deb
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
+  # EiraOS' own labwc (>= 0.20.3, wlroots 0.20 static), built on the target
+  # release. verify-globals.sh runs it headless and proves R-6.1 of
+  # EIRA-CONSENT-AGENT: with EiraOS' rc.xml no client is offered a privileged
+  # protocol (virtual pointer/keyboard, layer-shell, screencopy, ...).
+  build-eira-labwc:
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            $(cat packaging/eira-labwc/build-deps) wayland-utils
+
+      - name: Build eira-labwc
+        run: packaging/eira-labwc/build.sh --output-dir dist
+
+      - name: Verify no client is offered a privileged protocol (R-6.1)
+        run: |
+          mkdir -p /tmp/x && dpkg-deb -x dist/eira-labwc.deb /tmp/x
+          useradd -m tester
+          chmod -R a+rX "$GITHUB_WORKSPACE" /tmp/x
+          runuser -u tester -- packaging/eira-labwc/verify-globals.sh \
+            /tmp/x/usr/bin/labwc packaging/session/config/labwc
+          # Mutation: one <allow> must make the check fail.
+          mkdir -p /tmp/mut
+          sed 's|<privilegedInterfaces></privilegedInterfaces>|<privilegedInterfaces><allow>zwlr_virtual_pointer_manager_v1</allow></privilegedInterfaces>|' \
+            packaging/session/config/labwc/rc.xml > /tmp/mut/rc.xml
+          chmod -R a+rX /tmp/mut
+          if runuser -u tester -- packaging/eira-labwc/verify-globals.sh /tmp/x/usr/bin/labwc /tmp/mut; then
+            echo "verify-globals passed a config that allows virtual pointer"; exit 1
+          fi
+          dpkg-deb --field dist/eira-labwc.deb Package Version Depends Conflicts Replaces
+
+      - name: Upload eira-labwc package
+        uses: actions/upload-artifact@v4
+        with:
+          name: eira-labwc-ubuntu-26.04
+          path: dist/eira-labwc.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  build-installer-iso:
+    needs: [build-deb, build-eira-labwc]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,35 +144,161 @@ jobs:
       - name: Download Debian package
         uses: actions/download-artifact@v4
         with:
-          name: eira-deb-ubuntu-24.04
+          name: eira-deb-ubuntu-26.04
           path: dist
 
-      - name: Install live-build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y live-build xorriso squashfs-tools isolinux syslinux-common
+      - name: Download eira-labwc package
+        uses: actions/download-artifact@v4
+        with:
+          name: eira-labwc-ubuntu-26.04
+          path: dist
 
-      - name: Build amd64 Ubuntu 24.04 live ISO
+      - name: Install ISO tools
         run: |
-          sudo --preserve-env=EIRA_ISO_OUTPUT_DIR scripts/build_iso.sh \
-            --deb dist/eira-os-core.deb \
-            --output-dir "$GITHUB_WORKSPACE/dist" \
-            --keep-work
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y xorriso gnupg curl
 
-      - name: Verify ISO and record SHA3-256
+      - name: Restore Ubuntu base ISO cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/ubuntu-iso
+          key: ubuntu-26.04-desktop-${{ github.run_id }}
+          restore-keys: ubuntu-26.04-desktop-
+
+      - name: Fetch and verify Ubuntu Desktop 26.04 ISO
+        id: base
+        run: echo "iso=$(scripts/fetch_ubuntu_iso.sh .cache/ubuntu-iso)" >> "$GITHUB_OUTPUT"
+
+      - name: Build installer ISO and unattended CI ISO
         run: |
-          test -s dist/EiraOS-1.0-RC1-amd64.iso
-          test -s dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
-          cat dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
-          file dist/EiraOS-1.0-RC1-amd64.iso
-          xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -toc
+          scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
+            --deb dist/eira-os-core.deb --labwc-deb dist/eira-labwc.deb --output-dir dist
+          # The CI image carries its packages: the VM installs without network.
+          EIRA_APT_MIRROR=http://azure.archive.ubuntu.com/ubuntu/ \
+            scripts/build_offline_repo.sh --deb dist/eira-os-core.deb --deb dist/eira-labwc.deb \
+              --output offline-repo
+          scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
+            --deb dist/eira-os-core.deb --labwc-deb dist/eira-labwc.deb --output-dir dist \
+            --ci-unattended --offline-repo offline-repo
 
-      - name: Upload ISO and checksum
+      - name: Verify ISO layout and boot records
+        run: |
+          for ISO in dist/EiraOS-1.0-RC1-amd64.iso dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso; do
+            echo "== $ISO"
+            cat "$ISO.sha3-256"
+            xorriso -indev "$ISO" -report_el_torito plain 2>/dev/null | tee el-torito.txt
+            grep -qi "El Torito boot img" el-torito.txt
+            xorriso -indev "$ISO" -report_system_area plain 2>/dev/null | grep -q GPT
+            xorriso -indev "$ISO" -find / -type f 2>/dev/null > files.txt
+            for f in /autoinstall.yaml /eira/eira-os-core.deb /eira/eira-labwc.deb /eira/eira-postinstall.sh \
+                     /eira/eira-firstboot /casper/vmlinuz; do
+              grep -q "'$f'" files.txt || { echo "missing $f"; exit 1; }
+            done
+          done
+          ! xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -find /eira/ci 2>/dev/null | grep -q "'/eira/ci"
+          ! xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -find /eira/repo 2>/dev/null | grep -q "'/eira/repo"
+          xorriso -indev dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso -find /eira/repo/Packages.gz 2>/dev/null \
+            | grep -q "'/eira/repo/Packages.gz'"
+
+      - name: Upload installer ISO
         uses: actions/upload-artifact@v4
         with:
-          name: eira-live-iso-ubuntu-24.04-amd64
+          name: eira-installer-iso-ubuntu-26.04-amd64
           path: |
             dist/EiraOS-1.0-RC1-amd64.iso
             dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
+            dist/EiraOS-1.0-RC1-amd64.iso.build-info.json
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload unattended CI ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: eira-ci-iso
+          path: dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso
+          if-no-files-found: error
+          retention-days: 1
+
+  # Installs the unattended CI image in a KVM virtual machine, boots the
+  # installed disk and reads the acceptance results (eira-ci-report) from the
+  # serial console: daemons, IPC, first boot, GDM login into the EiraOS
+  # session, labwc and the EiraOS shell.
+  vm-install-acceptance:
+    needs: build-installer-iso
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Download CI ISO
+        uses: actions/download-artifact@v4
+        with:
+          name: eira-ci-iso
+          path: dist
+
+      - name: Install QEMU and enable KVM
+        run: |
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y qemu-system-x86 qemu-utils ovmf socat netpbm
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Install EiraOS into a blank disk (UEFI)
+        run: |
+          cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+          qemu-img create -f qcow2 disk.qcow2 40G
+          mkdir -p screens
+          # No network (-nic none): the install must not depend on the Ubuntu
+          # archive; the CI image carries what EiraOS needs (/eira/repo).
+          # A screenshot every 5 minutes shows where an install stalls.
+          ( for n in $(seq -w 1 15); do sleep 300; [ -S qemu-mon.sock ] || break
+              echo "screendump screens/install-$n.ppm" | socat - UNIX-CONNECT:qemu-mon.sock >/dev/null 2>&1
+              echo "::group::serial console after $((10#$n * 5)) min"
+              tr -d '\r' < install-serial.log | strings | tail -n 25
+              echo "::endgroup::"
+            done ) &
+          timeout 75m qemu-system-x86_64 -enable-kvm -monitor unix:qemu-mon.sock,server,nowait -machine q35 -cpu host -smp 4 -m 8192 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -drive file=disk.qcow2,if=virtio,format=qcow2 \
+            -cdrom dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso -boot order=d \
+            -device virtio-vga -display none -nic none \
+            -serial file:install-serial.log -no-reboot || status=$?
+          echo "installer VM exited with ${status:-0} (124 = timeout)"
+          tail -c 20000 install-serial.log | tr -d '\r' || true
+          for f in screens/*.ppm; do [ -f "$f" ] && pnmtopng "$f" > "${f%.ppm}.png" && rm "$f"; done
+          if grep -aq "EIRA-CI INSTALL FAILED" install-serial.log; then
+            echo "::group::eira-postinstall.log"
+            tr -d '\r' < install-serial.log | sed -n '/---- eira-postinstall.log/,/---- end eira-postinstall.log/p'
+            echo "::endgroup::"
+            echo "::group::apt errors and target sources"
+            tr -d '\r' < install-serial.log | sed -n '/---- apt errors/,/---- end apt/p'
+            echo "::endgroup::"
+            exit 1
+          fi
+          [ "${status:-0}" -eq 0 ]
+
+      - name: Boot installed system and run acceptance report
+        run: |
+          timeout 30m qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4096 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -drive file=disk.qcow2,if=virtio,format=qcow2 \
+            -device virtio-vga -display none -nic user,model=virtio-net-pci \
+            -serial file:boot-serial.log -no-reboot || true
+          tr -d '\r' < boot-serial.log | grep -a "EIRA-CI" | tee acceptance.txt
+          grep -q "EIRA-CI RESULT PASS" acceptance.txt || { tr -d '\r' < boot-serial.log | tail -n 400; exit 1; }
+
+      - name: Upload serial logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-acceptance-logs
+          path: |
+            install-serial.log
+            boot-serial.log
+            acceptance.txt
+            screens/*.png
+          if-no-files-found: ignore
           retention-days: 14

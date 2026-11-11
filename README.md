@@ -1,8 +1,4 @@
-
-
----
-
-# 🐧 EiraOS — The Cognitive Overlay for Ubuntu 24.04 LTS
+# 🐧 EiraOS — The Cognitive Overlay for Ubuntu 26.04 LTS
 
 EiraOS er udviklet specifikt som det **kognitive og intent-drevne lag oven på Ubuntu Linux**:
 
@@ -11,61 +7,72 @@ EiraOS er udviklet specifikt som det **kognitive og intent-drevne lag oven på U
 │                        EiraOS UX / Intent Shell                         │
 │     (Spatial Canvas, Conversational UI, 100-Level Veritas Indicator)    │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                     EiraOS 7 Core System Daemons                        │
-│   (identityd, walletd, veritasd, graphd, presenced, contextd, intentd)  │
+│                      EiraOS Core System Daemons                         │
+│  (stated, identityd, fleetd, veritasd, intentd, graphd + 3 prototyper)  │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                   Ubuntu 24.04 LTS Substrate / Kernel                   │
-│   (Linux Kernel, Systemd, AppArmor, Hardware Drivers, APT / Snap)     │
+│                   Ubuntu 26.04 LTS Substrate / Kernel                   │
+│   (Linux Kernel, Systemd, AppArmor, Hardware Drivers, APT / Snap)       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Hvorfor Ubuntu som fundament?
 1. **Ubuntu leverer infrastrukturen:** Hardware-drivere, GPU/NPU-acceleration, sikkerhed (AppArmor) og Canonical LTS-stabilitet.
 2. **EiraOS leverer værdien:** Slut med det forældede 2000'er skrivebords-paradigme (filer/mapper/menuer). EiraOS forvandler Ubuntu til et **objekt-, tillids- og intent-drevet operativsystem**.
-3. **Native Systemd Integration:** Alle 7 dæmoner kører som indfødte Ubuntu `systemd` servicetjenester under `/etc/systemd/system/eira-*.service`.
+3. **Native Systemd Integration:** De seks produktionsdaemons pakkes i `eira-os-core.deb` som hærdede `systemd`-units (`systemd/eira-*.service`, samlet under `eira.target`). Se statustabellen nedenfor.
 
 # EIRA Cognitive Runtime — Phase 1–3 Prototype
 
 Python IPC daemons + HTTP dev bridge + React Cognitive Dashboard (Tauri IPC-ready).
 
-**UI:** Calm Command v2 — se [UX Visual Language](../../docs/specs/EIRA_UX_Visual_Language_v0.1.md).  
-**Situation UI (fase 0):** tom tilstand, Hvorfor-fold, relationstræ — se [Situation UI Vision](../../docs/specs/EIRA_Situation_UI_Vision_v0.1.md).
+**UI:** Calm Command v2 — se [UX Visual Language](docs/specs/EIRA_UX_Visual_Language_v0.1.md).  
+**Situation UI (fase 0):** tom tilstand, Hvorfor-fold, relationstræ — se [Situation UI Vision](docs/specs/EIRA_Situation_UI_Vision_v0.1.md).
 
 ## Arkitektur (P1 IPC)
 
 ```
-React UI  ──HTTP (dev)──►  http_bridge.py  ──IPC──►  intent.sock
-Tauri UI  ──IPC (prod)──►                    identity.sock
-                                              graph.sock
+Tauri UI  ──Tauri IPC──►  send_ipc_request (Rust)  ──JSON-RPC──►  /run/eira/<daemon>.sock
+curl/dev  ──HTTP──────►  app.http_bridge (kun dev) ──JSON-RPC──►
 ```
 
-| Socket | Daemon (prototype) | Produktion |
-|--------|-------------------|------------|
-| `intent.sock` | eira-intent-engine | Rust `eira-intent-engine` |
-| `identity.sock` | eira-identityd | Rust `eira-identityd` |
-| `graph.sock` | eira-object-graphd | Rust `eira-object-graphd` |
-| `fleet.sock` | eira-fleetd | `eira-governance-agent` (P1) |
+Alle daemons taler newline-framet JSON-RPC 2.0 over Unix domain sockets. Adgang styres med
+`SO_PEERCRED` (UID/GID-allowlist) og en valgfri `EIRA_IPC_TOKEN`.
 
-**Prototype sockets:** `data/run/*.sock`  
-**Produktion:** `/run/eira/*.sock` (sæt `EIRA_RUN_DIR`)
+| Daemon | Socket | Status | Pakket i `.deb` |
+|--------|--------|--------|-----------------|
+| `stated` | `stated.sock` | Implementeret (append-only state, Rust-backend via FFI valgfri) | Ja |
+| `identityd` | `identityd.sock` | Implementeret (session, certifikatverifikation); step-up returnerer `step_up_provider_unavailable` | Ja |
+| `fleetd` | `fleetd.sock` | Implementeret (pairing, heartbeat, E2EE Merkle-sync, WebSocket) | Ja |
+| `veritasd` | `veritasd.sock` | Implementeret (lag 1–3, C2PA via ekstern `c2patool`) | Ja |
+| `intentd` | `intentd.sock` | Implementeret (parser, CEL-constraints, bekræftelsesgate) | Ja |
+| `graphd` | `graphd.sock` | Implementeret (temporal object graph) | Ja |
+| `walletd` | `walletd.sock` | Prototype — afviser altid (`NOT_CONFIGURED`) | Nej |
+| `presenced` | `presenced.sock` | Prototype — kun in-memory | Nej |
+| `contextd` | `contextd.sock` | Prototype — kun in-memory | Nej |
+
+**Socket-mappe:** `data/run/` under udvikling, `/run/eira/` i produktion (styres med `EIRA_RUN_DIR`;
+Tauri-shellen læser også `EIRA_SOCKET_DIR`).
 
 ## Krav
 
-- Python 3.11+ (AF_UNIX — Windows 10+ understøttet)
-- Node.js 20+ (til UI, valgfrit)
+- Linux med Unix domain sockets (målplatform: Ubuntu Desktop 26.04 LTS; installationen er verificeret i en VM, ikke endnu på reference-hardware). Daemon-IPC'en kræver `SO_PEERCRED`
+  og virker derfor ikke på Windows i øjeblikket.
+- Python 3.11+
+- Node.js 20+ og Rust (stable) til Tauri-shellen
 - Valgfrit: Ollama + `mistral` til LLM-parse
 
-## Kør (anbefalet — én kommando)
+## Kør (udvikling)
 
-```powershell
-cd eira-os/prototype/phase1
+Fra repoets rod:
+
+```bash
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+alembic upgrade head
 uvicorn app.http_bridge:app --reload --port 8765
 ```
 
-HTTP bridge **starter daemons automatisk** ved opstart.
+HTTP-broen **starter daemons automatisk** ved opstart (slå fra med `EIRA_DISABLE_DAEMONS=1`).
 
 ### Scope closure P0 (juli 2026)
 
@@ -77,31 +84,32 @@ HTTP bridge **starter daemons automatisk** ved opstart.
 
 Slet `data/eira.db` én gang efter opgradering for nye tabeller, eller kør app (auto-migration).
 
-```powershell
-$env:EIRA_IPC_TOKEN = "dev-secret"
+```bash
+export EIRA_IPC_TOKEN=dev-secret
 ```
 
 ## Kør daemons separat (som produktion)
 
 **Terminal 1:**
-```powershell
-python -m app.daemons.runner
+```bash
+python -m app.daemons.runner --socket-dir data/run
 ```
 
 **Terminal 2:**
-```powershell
-uvicorn app.http_bridge:app --reload --port 8765
+```bash
+EIRA_DISABLE_DAEMONS=1 EIRA_RUN_DIR=data/run uvicorn app.http_bridge:app --reload --port 8765
 ```
 
 ## IPC smoke test
 
-```powershell
+```bash
 python scripts/ipc_smoke_test.py
 ```
 
 Tester: `dashboard.get` → `intent.plan` → step-up block → `identity.step_up` → `intent.confirm`.
+Bemærk: `identity.step_up` er fail-closed, indtil en step-up-provider er konfigureret.
 
-## JSON-RPC eksempel (intent.sock)
+## JSON-RPC eksempel (intentd.sock)
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"intent.plan","params":{"raw_input":"Godkend budget","focus":"Kommunepilot"}}
@@ -120,31 +128,26 @@ Tester: `dashboard.get` → `intent.plan` → step-up block → `identity.step_u
 | `POST /v1/graph/temporal` | `graph.temporal_query` |
 | `GET /health` | alle daemon `health` |
 
-## Cognitive Dashboard
+## Desktop-shell (Tauri + direkte IPC)
 
-```powershell
+Start daemons først (se ovenfor), derefter:
+
+```bash
 cd ui
-npm install
-npm run dev
+npm ci
+EIRA_RUN_DIR="$(cd .. && pwd)/data/run" npm run tauri dev
 ```
 
-http://127.0.0.1:5173 → proxy til :8765
+React-grænsefladen kalder daemons gennem én Tauri-kommando, `send_ipc_request`
+(`ui/src-tauri/src/ipc.rs`). `npm run dev` alene starter kun Vite på http://127.0.0.1:5173;
+uden Tauri er der ingen IPC, og Vite har ingen proxy til HTTP-broen.
 
-## Tauri + direkte IPC
-
-Start daemons først, derefter:
-
-```powershell
-cd ui
-npm run tauri dev
-```
-
-Rust commands: `dashboard_get`, `intent_plan` (kalder sockets direkte).
+Frontend-test: `cd ui && npm ci && npx tsc --noEmit && npm test`.
 
 ## Relaterede specs
 
-- [EIRA_Desktop_Architecture_v1.0.md](../../docs/specs/EIRA_Desktop_Architecture_v1.0.md) §6 IPC
-- [EIRA_Cognitive_Runtime_v1.0.md](../../docs/specs/EIRA_Cognitive_Runtime_v1.0.md)
+- [EIRA_Desktop_Architecture_v1.0.md](docs/specs/EIRA_Desktop_Architecture_v1.0.md) §6 IPC
+- [EIRA_Cognitive_Runtime_v1.0.md](docs/specs/EIRA_Cognitive_Runtime_v1.0.md)
 
 
 ---
@@ -162,7 +165,9 @@ EiraOS indeholder en integreret, kryptografisk og narrativt intelligent modul fo
 
 ---
 
-# 🚀 EiraOS 2.0 Architecture — The Six Core Daemons
+# 🚀 EiraOS 2.0 — målarkitektur
+
+> Dette afsnit beskriver målbilledet. Den aktuelle implementeringsstatus for hver daemon står i tabellen under *Arkitektur (P1 IPC)*.
 
 EiraOS 2.0 introducerer en revolutionerende operativsystem-model, hvor **Økonomi (Wallet)**, **Troværdighed (Veritas)** og **Samarbejde (Presence)** er dybe, integrerede system-daemons på linje med netværk og filsystem:
 

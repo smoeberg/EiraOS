@@ -2,8 +2,15 @@
 <labwc_config>
   <core>
     <decoration>no</decoration>
-    <shell>layer-shell</shell>
   </core>
+  <!--
+    EIRA-CONSENT-AGENT R-6.1: ingen klient får privilegerede protokoller
+    (virtual pointer/keyboard, input-method, layer-shell, screencopy,
+    data-control, foreign-toplevel, ...). Den tomme blok slår dem alle fra;
+    der må ikke tilføjes <allow> her. Kræver labwc >= 0.20.3 (eira-labwc).
+    Builder Mode (P4) får layer-shell gennem en mekanisme pr. klient, ikke her.
+  -->
+  <privilegedInterfaces></privilegedInterfaces>
   <keyboard>
     <!-- Builder Mode-toggle (P4): Super+B. Indtil P4: ingen genveje -->
     <keybind key="W-b">

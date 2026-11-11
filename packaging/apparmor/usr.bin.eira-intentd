@@ -2,22 +2,55 @@
 
 /usr/bin/eira-intentd flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
+  #include <abstractions/nameservice>
   #include <abstractions/python>
 
   /usr/bin/eira-intentd rix,
+  # ExecStartPre: applies the bundle's default rights set (separate process).
+  /usr/bin/eira-rights-apply rix,
   /bin/dash ix,
   /usr/bin/dash ix,
   /usr/bin/python3{,.[0-9]*} mrix,
   /usr/lib/eira-os/ r,
   /usr/lib/eira-os/** r,
   /etc/eira/eira.conf r,
+  # Rights are weighed against enrollment at every decision (FLEET-RIGHTS-API §5).
+  /etc/eira/enrollment.json r,
 
   /run/eira/ rw,
   /run/eira/*.sock rwk,
   /var/log/eira/ rw,
   /var/log/eira/** rw,
+  # SQLite fsyncs the directory after removing a journal.
+  /data/ r,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
+  # Rights cache: the gate advances the effective time (§4.1) on each read.
+  # Audit anchor for the rights agent's heartbeat (bilag A pkt. 2).
+  /data/audit/ rw,
+  /data/audit/** rw,
+  /data/rights/ rw,
+  /data/rights/** rwk,
+  # Seal status only (gate.capabilities); never the key.
+  /var/lib/eira-audit-seal/state.json r,
+
+  # Gate 1.1 power executor: fixed busctl call to systemd-logind only.
+  /usr/bin/busctl ix,
+  /run/dbus/system_bus_socket rw,
+  /etc/machine-id r,
+  /var/lib/dbus/machine-id r,
+  @{PROC}/@{pid}/{cmdline,comm,stat,status,cgroup,sessionid,loginuid} r,
+  # Gate consent validity: CLOCK_BOOTTIME within this boot (bilag A pkt. 6).
+  @{PROC}/sys/kernel/random/boot_id r,
+  dbus send bus=system path=/org/freedesktop/DBus interface=org.freedesktop.DBus
+       member={Hello,AddMatch,RemoveMatch,GetNameOwner,NameHasOwner,StartServiceByName}
+       peer=(name=org.freedesktop.DBus),
+  dbus send bus=system path=/org/freedesktop/login1
+       interface=org.freedesktop.login1.Manager
+       member={CanPowerOff,CanReboot,CanSuspend,PowerOff,Reboot,Suspend}
+       peer=(name=org.freedesktop.login1),
+  # Replies come from unique bus names; dbus-daemon and logind are unconfined.
+  dbus receive bus=system peer=(label=unconfined),
 
   network unix stream,
   deny network inet,

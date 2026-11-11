@@ -1,0 +1,40 @@
+[Unit]
+Description=EIRA rights sync with Fleet (FLEET-RIGHTS-API §4)
+# Only a managed device talks to Fleet; an unmanaged one has nothing to sync.
+ConditionPathExists=/etc/eira/enrollment.json
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=eira
+Group=eira
+UMask=0117
+# python -m puts the working directory on sys.path: keep it the code dir,
+# never "/" (and no bytecode writes into it).
+WorkingDirectory=/usr/lib/eira-os
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=-/etc/eira/eira.conf
+Environment=EIRA_RIGHTS_DIR=/data/rights
+Environment=EIRA_APP_DB=/data/eira-app.db
+ExecStart=/usr/bin/eira-rights-apply sync
+# 1 = a set was rejected (reported to Fleet), 3 = offline: both are normal
+# outcomes, not unit failures.
+SuccessExitStatus=1 3
+TimeoutStartSec=120
+
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+# Hands the journal's FSS verification key to Fleet once, then deletes it.
+ReadWritePaths=/data/rights -/var/lib/eira-audit-seal
+AppArmorProfile=/usr/bin/eira-rights-apply

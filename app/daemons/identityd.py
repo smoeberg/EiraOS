@@ -211,6 +211,14 @@ def register_identity_handlers(
 ) -> IdentityDaemon:
     service = daemon or IdentityDaemon()
     server.register("identity.session", identity_session)
+    # Desktop login (bilag A pkt. 1): the only way to a session the gate accepts.
+    from app import database
+    from app.auth import login
+
+    database.init_db()  # creates/migrates oidc_auth_states on an installed system
+
+    server.register("identity.login_start", login.wants_peer(login.login_start))
+    server.register("identity.login_complete", login.wants_peer(login.login_complete))
     server.register("identity.step_up", identity_step_up)
     server.register("identity.providers", service.providers)
     server.register(

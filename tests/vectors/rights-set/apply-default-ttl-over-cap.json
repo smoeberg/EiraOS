@@ -1,0 +1,14 @@
+{
+  "name": "default-ttl-over-cap",
+  "description": "Default-sæt med 401 dages levetid (loft: 400).",
+  "raw": "{\"denies\":[],\"device_id\":\"*\",\"eira_rights\":\"1\",\"expires_at\":\"2027-12-13T11:00:00Z\",\"grants\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"authenticated\":true}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"release-1.0.0\",\"fleet\":\"release.eira.example\"},\"kind\":\"default\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-release-1\",\"value\":\"gbu03uHKySzJdKdcLh2M7XRXe-PKpcUONI5qcfeHo5N5x4yb_5tU78-6I1Knd8UunZreWdGXFyJtSg6AETn8DA\"},\"template\":{\"id\":\"personal\",\"version\":\"1\"},\"tenant_id\":\"unmanaged\",\"version\":1}",
+  "device": {
+    "enrolled": false
+  },
+  "active": null,
+  "now": "2026-11-07T12:00:00Z",
+  "expect": {
+    "ok": false,
+    "reason": "ttl_over_cap"
+  }
+}

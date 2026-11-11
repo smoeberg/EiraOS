@@ -33,7 +33,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest ruff alembic
+        pip install pytest ruff alembic pyyaml
 
     - name: Run Ruff linter
       run: |
@@ -41,8 +41,8 @@ jobs:
 
     - name: Install AppArmor parser for packaging validation
       run: |
-        sudo apt-get update
-        sudo apt-get install -y apparmor-utils
+        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y apparmor-utils xorriso
 
     - name: Run database migrations (Alembic)
       run: |
@@ -65,6 +65,12 @@ jobs:
         run: cargo check --workspace
       - name: Cargo test workspace
         run: cargo test --workspace -- --nocapture
+      # Phase 0 IPC & Event Bus contract (docs/specs/PHASE-0-IPC-EVENT-BUS.md).
+      # Behind a feature so the Android/WASM state core stays syscall-free.
+      - name: Phase 0 contract tests (eira-core --features ipc-tokio)
+        run: |
+          cargo clippy -p eira-core --features ipc-tokio --all-targets -- -D warnings
+          cargo test -p eira-core --features ipc-tokio -- --nocapture
 
   # ui/src-tauri is `exclude`d from the root Cargo workspace, so
   # `cargo test --workspace` above never builds or tests it. This job
@@ -88,10 +94,33 @@ jobs:
           restore-keys: tauri-${{ runner.os }}-cargo-
       - name: Install Tauri system dependencies (Linux)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
           # NB: no --locked here: ui/src-tauri/Cargo.lock is gitignored, so
           # --locked would fail with "cannot create the lock file". The root
           # workspace lock does not apply (src-tauri is excluded from it).
       - name: Cargo test ui/src-tauri
         run: cargo test --manifest-path ui/src-tauri/Cargo.toml -- --nocapture
+
+  # Frontend: type check + vitest (incl. tests/e2e_canvas.test.ts). These
+  # tests were not run in CI before, so UI regressions went unnoticed.
+  ui-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Vitest
+        run: npm test

@@ -1,0 +1,178 @@
+{
+  "rights_set": {
+    "eira_rights": "1",
+    "rights_set_id": "0190f5a0-0000-7000-8000-00000000abcd",
+    "kind": "managed",
+    "tenant_id": "kk",
+    "device_id": "dev-0001",
+    "version": 42,
+    "issued_at": "2026-11-07T11:00:00Z",
+    "expires_at": "2026-11-21T11:00:00Z",
+    "template": {
+      "id": "skoleforvaltning-laerer",
+      "version": "3"
+    },
+    "issued_by": {
+      "api_call_id": "req-7f3a",
+      "fleet": "fleet.kk.example"
+    },
+    "grants": [
+      {
+        "subject": {
+          "group": "laerere"
+        },
+        "scope": "obj:sag:*",
+        "actions": [
+          "edp:utterance",
+          "edp:commitment_proposed",
+          "edp:commitment_accepted"
+        ]
+      },
+      {
+        "subject": {
+          "group": "laerere"
+        },
+        "scope": "device:local",
+        "actions": [
+          "system:power.request_action"
+        ]
+      },
+      {
+        "subject": {
+          "principal": "did:eira:entra.9f3"
+        },
+        "scope": "obj:sag:42",
+        "actions": [
+          "edp:value_transfer_requested"
+        ],
+        "expires_at": "2026-11-07T15:00:00Z",
+        "required_assurance": "eid_high"
+      }
+    ],
+    "denies": [
+      {
+        "subject": {
+          "group": "vikarer"
+        },
+        "scope": "device:local",
+        "actions": [
+          "system:power.request_action"
+        ]
+      }
+    ]
+  },
+  "queries": [
+    {
+      "name": "group-grant",
+      "principal": "did:eira:entra.a1",
+      "groups": [
+        "laerere"
+      ],
+      "scope": "obj:sag:7",
+      "action": "edp:commitment_proposed",
+      "now": "2026-11-07T12:00:00Z",
+      "expect": {
+        "allowed": true,
+        "reason": "granted",
+        "grant_index": 0
+      }
+    },
+    {
+      "name": "group-without-grant",
+      "principal": "did:eira:entra.a2",
+      "groups": [
+        "elever"
+      ],
+      "scope": "obj:sag:7",
+      "action": "edp:commitment_proposed",
+      "now": "2026-11-07T12:00:00Z",
+      "expect": {
+        "allowed": false,
+        "reason": "no_grant"
+      }
+    },
+    {
+      "name": "deny-wins",
+      "principal": "did:eira:entra.a3",
+      "groups": [
+        "laerere",
+        "vikarer"
+      ],
+      "scope": "device:local",
+      "action": "system:power.request_action",
+      "now": "2026-11-07T12:00:00Z",
+      "expect": {
+        "allowed": false,
+        "reason": "denied"
+      }
+    },
+    {
+      "name": "wildcard-does-not-match-type-root",
+      "principal": "did:eira:entra.a1",
+      "groups": [
+        "laerere"
+      ],
+      "scope": "obj:sag:",
+      "action": "edp:utterance",
+      "now": "2026-11-07T12:00:00Z",
+      "expect": {
+        "allowed": false,
+        "reason": "no_grant"
+      }
+    },
+    {
+      "name": "scope-type-mismatch",
+      "principal": "did:eira:entra.a1",
+      "groups": [
+        "laerere"
+      ],
+      "scope": "obj:budget:7",
+      "action": "edp:utterance",
+      "now": "2026-11-07T12:00:00Z",
+      "expect": {
+        "allowed": false,
+        "reason": "no_grant"
+      }
+    },
+    {
+      "name": "principal-grant-raises-assurance",
+      "principal": "did:eira:entra.9f3",
+      "groups": [],
+      "scope": "obj:sag:42",
+      "action": "edp:value_transfer_requested",
+      "now": "2026-11-07T12:00:00Z",
+      "expect": {
+        "allowed": true,
+        "reason": "granted",
+        "grant_index": 2,
+        "required_assurance": "eid_high"
+      }
+    },
+    {
+      "name": "temporary-grant-expired",
+      "principal": "did:eira:entra.9f3",
+      "groups": [],
+      "scope": "obj:sag:42",
+      "action": "edp:value_transfer_requested",
+      "now": "2026-11-07T15:00:00Z",
+      "expect": {
+        "allowed": false,
+        "reason": "no_grant"
+      }
+    },
+    {
+      "name": "set-expired",
+      "principal": "did:eira:entra.a1",
+      "groups": [
+        "laerere"
+      ],
+      "scope": "obj:sag:7",
+      "action": "edp:utterance",
+      "now": "2026-11-21T11:00:00Z",
+      "expect": {
+        "allowed": false,
+        "reason": "expired"
+      }
+    }
+  ]
+}

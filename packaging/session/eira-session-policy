@@ -1,0 +1,54 @@
+#!/bin/sh
+# EiraOS session policy — Explorer har ingen flugtvej (Desktop Architecture
+# v1.0, ADR-0001). Kun EiraOS-sessionen kan vælges ved login; Ubuntus egne
+# sessioner (GNOME m.fl.) skjules med dpkg-divert, så pakkeopdateringer ikke
+# bringer dem tilbage.
+#
+# IT kan tillade Ubuntu-skrivebordet på en maskine (fx en udvikler- eller
+# IT-arbejdsstation) med EIRA_ALLOW_UBUNTU_SESSION=1 i /etc/eira/eira.conf.
+# Så gendannes de skjulte sessioner. Login-skærmen (GDM) er kun
+# infrastruktur; den er ikke brugerfladen.
+#
+# Idempotent; køres ved installation og ved hver opstart før login-skærmen.
+set -eu
+
+CONF=${EIRA_CONF:-/etc/eira/eira.conf}
+HIDDEN=${EIRA_HIDDEN_SESSIONS:-/var/lib/eira/hidden-sessions}
+DIRS=${EIRA_SESSION_DIRS:-"/usr/share/wayland-sessions /usr/share/xsessions"}
+DIVERT=${EIRA_DPKG_DIVERT:-dpkg-divert}
+KEEP=eira-session.desktop
+
+allow=0
+if [ -r "$CONF" ] && grep -Eq '^EIRA_ALLOW_UBUNTU_SESSION=(1|true|yes)$' "$CONF"; then
+    allow=1
+fi
+
+install -d -m 0755 "$HIDDEN"
+
+if [ "$allow" -eq 1 ]; then
+    for hidden in "$HIDDEN"/*; do
+        [ -e "$hidden" ] || continue
+        # Stored as <dir-basename>--<file>; restore to its original place.
+        stored=$(basename "$hidden")
+        dirname=${stored%%--*}
+        name=${stored#*--}
+        for dir in $DIRS; do
+            if [ "$(basename "$dir")" = "$dirname" ]; then
+                $DIVERT --local --rename --divert "$hidden" --remove "$dir/$name"
+            fi
+        done
+    done
+    echo "eira-session-policy: Ubuntu-sessioner tilladt af IT-policy"
+    exit 0
+fi
+
+for dir in $DIRS; do
+    [ -d "$dir" ] || continue
+    for path in "$dir"/*.desktop; do
+        [ -e "$path" ] || continue
+        name=$(basename "$path")
+        [ "$name" = "$KEEP" ] && continue
+        $DIVERT --local --rename --divert "$HIDDEN/$(basename "$dir")--$name" --add "$path"
+    done
+done
+echo "eira-session-policy: kun EiraOS-sessionen kan vælges"

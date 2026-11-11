@@ -51,7 +51,7 @@ def _wait_for(path: Path, *, exists: bool, timeout: float = 10.0) -> None:
 
 def _eira_group_available() -> bool:
     try:
-        resolve_group_gid("eira")
+        resolve_group_gid("eira-clients")
     except RuntimeError:
         return False
     return True
@@ -135,7 +135,7 @@ def test_root_is_explicitly_allowed() -> None:
 
 def test_socket_cleanup_on_shutdown(tmp_path: Path) -> None:
     if not _eira_group_available():
-        pytest.skip("EiraOS integration sockets require the configured 'eira' Unix group")
+        pytest.skip("EiraOS integration sockets require the configured 'eira-clients' Unix group")
 
     socket_path = tmp_path / "stated.sock"
     environment = os.environ.copy()
@@ -171,15 +171,15 @@ def test_socket_cleanup_on_shutdown(tmp_path: Path) -> None:
 
 
 def test_unauthorized_user_access_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
-    eira_gid = resolve_group_gid("eira")
+    eira_gid = resolve_group_gid("eira-clients")
     if eira_gid is None:
-        pytest.skip("Socket authorization integration requires the configured 'eira' Unix group")
+        pytest.skip("Socket authorization integration requires the configured 'eira-clients' Unix group")
 
     monkeypatch.setattr(socket_security.os, "chown", lambda *_args: None)
     socket_dir = Path(tempfile.mkdtemp(prefix="eira-socket-test-", dir="/tmp"))
     socket_dir.chmod(0o755)
     socket_path = socket_dir / "stated.sock"
-    server = setup_unix_socket(str(socket_path), group="eira")
+    server = setup_unix_socket(str(socket_path), group="eira-clients")
     server.listen(1)
     try:
         metadata = socket_path.stat()
@@ -227,3 +227,55 @@ def test_unauthorized_user_access_blocked(monkeypatch: pytest.MonkeyPatch) -> No
         server.close()
         remove_unix_socket(str(socket_path))
         socket_dir.rmdir()
+
+
+def test_peer_groups_come_from_kernel_snapshot(tmp_path):
+    """SO_PEERGROUPS gives the connecting process's supplementary groups
+    without reading /proc (which AppArmor confines to the daemon's own pid)."""
+    import os
+    import socket as _socket
+
+    a, b = _socket.socketpair(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    try:
+        groups = socket_security.peer_groups(a)
+        assert groups is not None
+        assert groups == frozenset(os.getgroups()) or set(os.getgroups()) <= groups
+        creds = socket_security.validate_peer_credentials(
+            a, allowed_uids=set(), allowed_gids={os.getgid()}
+        )
+        assert creds.groups == groups
+    finally:
+        a.close()
+        b.close()
+
+
+def test_supplementary_group_admits_peer_without_proc(monkeypatch):
+    monkeypatch.setattr(
+        socket_security, "_supplementary_gids", lambda _pid: (_ for _ in ()).throw(AssertionError)
+    )
+    peer = socket_security.PeerCredentials(pid=1, uid=1000, gid=1000, groups=frozenset({4242}))
+    assert socket_security.socket_access_allowed(peer, allowed_uids=set(), allowed_gids={4242})
+
+
+def test_installed_socket_refuses_silent_gid_fallback(monkeypatch):
+    monkeypatch.setattr(socket_security, "resolve_group_gid", lambda _name: None)
+    monkeypatch.delenv("EIRA_STRICT_SOCKET_GROUP", raising=False)
+    with pytest.raises(PermissionError, match="cannot be resolved"):
+        socket_security.setup_unix_socket("/run/eira/test-strict.sock")
+
+
+def test_dev_socket_keeps_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(socket_security, "resolve_group_gid", lambda _name: None)
+    monkeypatch.delenv("EIRA_STRICT_SOCKET_GROUP", raising=False)
+    sock = socket_security.setup_unix_socket(str(tmp_path / "dev.sock"))
+    sock.close()
+
+
+def test_all_daemon_apparmor_profiles_can_resolve_groups():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "packaging" / "apparmor"
+    profiles = sorted(root.glob("usr.bin.eira-*"))
+    assert profiles
+    for profile in profiles:
+        assert "abstractions/nameservice" in profile.read_text(), profile.name

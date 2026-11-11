@@ -7,6 +7,8 @@ from app.ipc.jsonrpc import JsonRpcError
 
 AUTH_FAILED = -32010
 EIRA_META_KEY = "_eira"
+# Set by the daemon server from SO_PEERCRED; any client value is discarded.
+PEER_KEY = "_peer"
 
 
 def expected_ipc_token() -> str | None:

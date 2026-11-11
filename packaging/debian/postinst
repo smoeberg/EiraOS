@@ -10,30 +10,72 @@ case "${1:-configure}" in
             adduser --system --ingroup eira --home /var/lib/eira \
                 --no-create-home --disabled-login --disabled-password eira
         fi
+        # Socket access is a separate group from the daemons' own: desktop
+        # users join eira-clients and are never members of eira, which owns
+        # /data (ADR-0003: the substrate protects the Eira layer).
+        if ! getent group eira-clients >/dev/null; then
+            addgroup --system eira-clients
+        fi
+        adduser --quiet eira eira-clients
+        # The model runs as its own user (GATE-KERNEL bilag A pkt. 1): the gate
+        # knows it by uid, records its proposals as origin "model" and never
+        # lets it consent or confirm. It reaches the sockets (eira-clients) but
+        # is never in eira, so it cannot touch /data.
+        if ! getent passwd eira-model >/dev/null; then
+            adduser --system --no-create-home --home /nonexistent --disabled-login \
+                --disabled-password --shell /usr/sbin/nologin eira-model
+        fi
+        adduser --quiet eira-model eira-clients
+        # Upgrade from earlier versions, where desktop users were put in
+        # eira: move them to eira-clients.
+        for member in $(getent group eira | cut -d: -f4 | tr ',' ' '); do
+            [ "$member" = eira ] && continue
+            uid=$(id -u "$member" 2>/dev/null || echo 0)
+            if [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ]; then
+                adduser --quiet "$member" eira-clients
+                gpasswd -d "$member" eira >/dev/null
+            fi
+        done
 
-        install -d -o root -g eira -m 0750 /etc/eira
+        install -d -o root -g eira-clients -m 0750 /etc/eira
         install -d -o root -g root -m 0755 /etc/eira/trust
+        # FSS verification key until handover: root writes it, the rights
+        # sync (eira) hands it to Fleet and deletes it. setgid: files are eira's group.
+        install -d -o root -g eira -m 2770 /var/lib/eira-audit-seal
         install -d -o eira -g eira -m 0770 \
             /data /data/eira-fleet /var/lib/eira /var/log/eira
         if [ ! -e /etc/eira/eira.conf ]; then
             umask 0027
             token=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
             printf 'EIRA_IPC_TOKEN=%s\n' "$token" > /etc/eira/eira.conf
-            chown root:eira /etc/eira/eira.conf
-            chmod 0640 /etc/eira/eira.conf
         fi
+        # The session reads the IPC token; the daemons get it from systemd.
+        chown root:eira-clients /etc/eira/eira.conf
+        chmod 0640 /etc/eira/eira.conf
 
-        if command -v apparmor_parser >/dev/null 2>&1; then
+        # Load the profiles now when the kernel has AppArmor. During an OS
+        # install (chroot) this can fail; apparmor.service loads them at boot,
+        # so a failure here must not abort package installation.
+        if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
             for profile in /etc/apparmor.d/usr.bin.eira-*; do
                 [ -f "$profile" ] || continue
-                apparmor_parser -r "$profile"
+                apparmor_parser -r "$profile" || echo "eira-os-core: kunne ikke indlæse $profile nu; indlæses ved boot" >&2
             done
         fi
 
         if command -v systemctl >/dev/null 2>&1; then
             systemctl daemon-reload || true
             systemctl enable eira.target >/dev/null 2>&1 || true
+            systemctl enable eira-session-policy.service >/dev/null 2>&1 || true
+            # Does nothing until the device is enrolled (ConditionPathExists).
+            systemctl enable eira-rights-sync.timer >/dev/null 2>&1 || true
+            systemctl enable eira-modeld.service >/dev/null 2>&1 || true
+            systemctl enable eira-audit-seal.service >/dev/null 2>&1 || true
         fi
+
+        # Explorer has no escape hatch: hide the other login sessions now,
+        # not only from the next boot (see eira-session-policy).
+        /usr/lib/eira/eira-session-policy || echo "eira-os-core: session-policy fejlede; køres igen ved boot" >&2
         ;;
 esac
 

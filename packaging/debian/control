@@ -6,6 +6,8 @@ Build-Depends:
  debhelper-compat (= 13),
  dh-python,
  python3-all (>= 3.12),
+ python3-cryptography (>= 41),
+ python3-jsonschema (>= 4.10),
  python3-pytest,
  python3-venv,
  nodejs,
@@ -30,10 +32,13 @@ Depends:
  ca-certificates,
  python3-cryptography (>= 41),
  python3-httpx,
+ python3-jsonschema (>= 4.10),
  python3-pydantic (>= 2.10),
  python3-websockets (>= 13),
- labwc
-Recommends: gdm3 | lightdm
+ eira-labwc (>= 0.20.3),
+ systemd,
+ xwayland
+Recommends: gdm3, polkitd
 Description: EiraOS local-first desktop core and Calm Command session
  EiraOS is a local-first Ubuntu desktop overlay. This package installs the
  Unix-socket daemons, AppArmor confinement, hardened systemd units and the
