@@ -29,7 +29,12 @@ for deb in "${DEBS[@]}"; do [[ -f $deb ]] || { echo "not found: $deb" >&2; exit 
 # Archive packages the installer adds on top of Ubuntu Desktop besides the
 # local ones (eira-postinstall.sh).
 SESSION_PACKAGES=${EIRA_OFFLINE_PACKAGES:-"xwayland"}
-MIRROR=${EIRA_APT_MIRROR:-}
+# Mirrors tried in order, each for the whole fetch. The image's own sources
+# come first unless EIRA_APT_MIRROR names one; full mirrors outside
+# ubuntu.com follow, for when *.ubuntu.com is unreachable (GitHub's runners,
+# 11 Nov 2026). apt verifies every index with Ubuntu's archive key, so the
+# host does not change what is trusted.
+MIRRORS=${EIRA_APT_MIRRORS:-"${EIRA_APT_MIRROR:-default} http://mirrors.mit.edu/ubuntu/ http://mirrors.edge.kernel.org/ubuntu/"}
 IMAGE=${EIRA_OFFLINE_IMAGE:-ubuntu:26.04}
 
 mkdir -p -- "$OUT"
@@ -38,36 +43,51 @@ MOUNTS=()
 for deb in "${DEBS[@]}"; do MOUNTS+=(-v "$deb:/in/$(basename -- "$deb"):ro"); done
 
 docker run --rm \
-    -e SESSION_PACKAGES="$SESSION_PACKAGES" -e MIRROR="$MIRROR" -e HOST_UID="$(id -u)" \
+    -e SESSION_PACKAGES="$SESSION_PACKAGES" -e MIRRORS="$MIRRORS" -e HOST_UID="$(id -u)" \
     "${MOUNTS[@]}" -v "$OUT:/out" \
     "$IMAGE" bash -euo pipefail -c '
 export DEBIAN_FRONTEND=noninteractive
-APT="apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60"
-if [ -n "$MIRROR" ]; then
-    sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#$MIRROR#g" /etc/apt/sources.list.d/ubuntu.sources
-fi
-$APT update
-$APT install -y --no-install-recommends dpkg-dev
+APT="apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+cp /etc/apt/sources.list.d/ubuntu.sources /tmp/ubuntu.sources.orig
 
-# Names from the local packages'"'"' Depends (every alternative, no versions).
-# Names that are themselves local packages are not in the archive; they are
-# skipped below and added from /in.
-deps=$(for deb in /in/*.deb; do dpkg-deb -f "$deb" Depends; echo; done \
-    | tr "," "\n" | tr "|" "\n" | sed -E "s/\(.*\)//; s/:any//; s/^ +//; s/ +$//" | grep -v "^$" | sort -u)
-deps=$(for d in $deps; do apt-cache show "$d" >/dev/null 2>&1 && echo "$d"; done)
+fetch() {
+    $APT update --error-on=any || return 1
+    $APT install -y --no-install-recommends dpkg-dev || return 1
 
-# Full closure, not just what this container lacks: the target starts from
-# the Ubuntu Desktop ISO, whose versions may be older than the archive.
-closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
-    --no-breaks --no-replaces --no-enhances $deps $SESSION_PACKAGES \
-    | grep "^[a-zA-Z0-9]" | sort -u)
+    # Names from the local packages'"'"' Depends (every alternative, no versions).
+    # Names that are themselves local packages are not in the archive; they are
+    # skipped below and added from /in.
+    deps=$(for deb in /in/*.deb; do dpkg-deb -f "$deb" Depends; echo; done \
+        | tr "," "\n" | tr "|" "\n" | sed -E "s/\(.*\)//; s/:any//; s/^ +//; s/ +$//" | grep -v "^$" | sort -u)
+    deps=$(for d in $deps; do apt-cache show "$d" >/dev/null 2>&1 && echo "$d"; done)
 
-mkdir -p /out/pool
-cd /out/pool
-# Virtual or unavailable names are skipped; apt-get download fails on them.
-for pkg in $closure; do
-    apt-cache show "$pkg" >/dev/null 2>&1 && echo "$pkg"
-done | xargs -r $APT download >/dev/null
+    # Full closure, not just what this container lacks: the target starts from
+    # the Ubuntu Desktop ISO, whose versions may be older than the archive.
+    closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
+        --no-breaks --no-replaces --no-enhances $deps $SESSION_PACKAGES \
+        | grep "^[a-zA-Z0-9]" | sort -u)
+
+    rm -rf /out/pool
+    mkdir -p /out/pool
+    cd /out/pool
+    # Virtual or unavailable names are skipped; apt-get download fails on them.
+    for pkg in $closure; do
+        apt-cache show "$pkg" >/dev/null 2>&1 && echo "$pkg"
+    done | xargs -r $APT download >/dev/null || return 1
+    cd /
+}
+
+ok=
+for mirror in $MIRRORS; do
+    cp /tmp/ubuntu.sources.orig /etc/apt/sources.list.d/ubuntu.sources
+    if [ "$mirror" != default ]; then
+        sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#$mirror#g" /etc/apt/sources.list.d/ubuntu.sources
+    fi
+    echo "offline repo: fetching from $mirror" >&2
+    if fetch; then ok=1; break; fi
+    echo "offline repo: $mirror failed" >&2
+done
+[ -n "$ok" ] || { echo "offline repo: no mirror worked" >&2; exit 1; }
 
 cp /in/*.deb /out/pool/
 cd /out
