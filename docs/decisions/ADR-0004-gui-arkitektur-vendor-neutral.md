@@ -1,6 +1,6 @@
 # ADR-0004 — GUI-arkitektur: vendor-neutral, webapps som isolerede Eira-apps, 3D-universet som model
 
-**Status:** Foreslået, til ejerens accept (11. november 2026). Ejerens retning er givet (D1–D4). Rækkefølgen af spor A og B (D5) og de åbne spørgsmål afventer beslutning.
+**Status:** Foreslået, til ejerens accept (11. november 2026). D1–D4 er ejerens retning, og D5 (spor A i 1.0) er besluttet. ADR'en forbliver "Foreslået", indtil identityd-migreringen ([EIRA-IDENTITY 1.0](../../specs/EIRA-IDENTITY-1.0.md)) og Chromium-undersøgelsen (O-1) har afdækket eventuelle konflikter.
 **Gælder for:** Eira UI (`ui/`), en ny Eira Web App Manager, compositoren (`eira-labwc`, senere egen), `identityd`, Eira Core (graphd), ADR-0003, GATE-KERNEL, RIGHTS-SET
 **Relateret:** [GUI-plan 1.0](../architecture/eiraos-gui-product-and-implementation-plan-1.0.md) §13 (åbne UX-beslutninger), [EIRA-CONSENT-AGENT](../../specs/EIRA-CONSENT-AGENT-0.1.md) R-6.1/R-6.2, [ADR-0003](ADR-0003-rettigheder-fra-fleet.md)
 
@@ -86,7 +86,7 @@ En flad 2D-tilstand, der er fuldt betjenbar med tastatur, er obligatorisk (GUI-p
 
 Et WebGL-univers i Eira UI kan ikke vise andre programmers vinduer, fordi ét program ikke må læse et andets vindue (R-6.1). Levende app-vinduer i 3D kræver derfor spor B.
 
-**Forslag:** 1.0 leveres på spor A, med D4 på plads fra start, så spor B senere kun erstatter tegningen. *Afventer ejerens beslutning (O-3).*
+**Besluttet af ejer (11. november 2026):** 1.0 leveres på spor A. Universet bruges til navigation og præsentation, apps er almindelige Wayland-vinduer, `graphd` ejer den autoritative model, og compositoren ejer vinduerne. Arkitekturen skal være klar til, at en senere egen compositor gør universet til sin egen scene.
 
 ### D6 — Compositoren ejer vinduer; Eira styrer dem gennem et snævert, betroet grænsesnit
 
@@ -96,26 +96,21 @@ Vinduesidentitet bygger på, hvilken proces der ejer vinduet (compositoren kende
 
 ## Konsekvenser
 
-### Identitet: `identityd` skal gøres udbyder-neutral (brud på D1 i dag)
+### Identitet: `identityd` gøres udbyder-neutral (første skridt)
 
-Den nuværende kode er bundet til Microsoft Entra:
+Koden var bundet til Microsoft Entra (`login.microsoftonline.com` skrevet direkte, `did:eira:entra.<oid>`, "Log ind med Entra"). Det rettes i [EIRA-IDENTITY 1.0](../../specs/EIRA-IDENTITY-1.0.md):
 
-| Sted | I dag |
-|---|---|
-| `app/auth/oidc.py` | `login.microsoftonline.com` skrevet direkte i autorisations-, token-, issuer- og JWKS-URL'er |
-| `app/auth/oidc.py` | Gatens identitet er `did:eira:entra.<oid>`, `idp: "entra"` |
-| `app/gate/kernel.py` | Kommentarer og binding for `did:eira:entra.*` |
-| `ui/src/AuthButton.tsx`, `ui/src/lib/login.ts` | "Log ind med Entra", fejltekster om Entra |
-| ADR-0003, GATE-KERNEL, RIGHTS-SET, EIRA-CONVERSATION | "Entra/identityd" som kilde til identitet |
+- udbyderen er konfiguration (`OIDC_PROVIDER_ID`, issuer, client id, endpoints via OIDC Discovery); der er ingen indbygget udbyder;
+- identiteten er `did:eira:<provider-id>.<subjekt>`, og provider-id'et er et frit valgt konfigurationsnavn uden særlig betydning i koden. `entra` er ikke en kategori i modellen;
+- et provider-id bindes til sin issuer ved første login, så en omkonfiguration ikke kan overtage identiteter;
+- eksisterende `did:eira:entra.<oid>` bevares præcis af Entra-konfigurationen.
 
-Det skal ændres til:
+### Rækkefølge (besluttet af ejer)
 
-- **generisk OpenID Connect:** udbyderen konfigureres via issuer-URL og OIDC Discovery (`/.well-known/openid-configuration`), ikke via skrevne URL'er. Entra bliver én konfiguration blandt flere (fx Keycloak, Authentik, et kommunalt IdP);
-- **identitetsformat uden leverandørnavn i grammatikken:** `did:eira:<idp-id>.<subject>`, hvor `<idp-id>` er installationens navn for udbyderen. Eksisterende `did:eira:entra.*` fortsætter med at virke som en sådan udbyder, så sessioner og rettighedssæt ikke brydes;
-- **brugerfladen** viser udbyderens navn fra konfigurationen;
-- **ADR-0003 og specs** retter "Entra/identityd" til "identitetsudbyderen via identityd".
-
-Det er en selvstændig PR med migreringstest. Den ændrer ikke ADR-0003's regel om, at rettigheder kommer fra Fleet.
+1. `identityd`: vendor-neutral identitetsmodel
+2. Web App Manager: kontrakt og abstraktion af browser-runtime
+3. Chromium-distribution: konkret valg (O-1)
+4. Spor B: egen compositor
 
 ### Øvrige
 
@@ -126,9 +121,9 @@ Det er en selvstændig PR med migreringstest. Den ændrer ikke ADR-0003's regel 
 
 ## Åbne spørgsmål
 
-- **O-1 Chromium-distribution.** Ubuntu leverer Chromium som snap. Mulighederne er (a) snap med eksplicitte interfaces, (b) EiraOS' egen Chromium-build som deb eller indlejret via CEF, (c) upstream-binærer. Det afgør opdateringskadence, sandbox og hvor tæt Web App Manager kan styre profiler og rettigheder. Skal undersøges, før motoren bygges.
+- **O-1 Chromium-distribution.** *Udskudt af ejer:* vælges først, når Web App Manager-kontrakten og sikkerhedskravene til en browser-runtime er defineret. Ubuntu leverer Chromium som snap. Mulighederne er (a) snap med eksplicitte interfaces, (b) EiraOS' egen Chromium-build som deb eller indlejret via CEF, (c) upstream-binærer. Det afgør opdateringskadence, sandbox og hvor tæt Web App Manager kan styre profiler og rettigheder. Skal undersøges, før motoren bygges.
 - **O-2 Firefox.** Firefox har ikke en app-tilstand som Chromiums app-vinduer, så en Firefox-motor vil i praksis vise et browservindue. Er den nødvendig i 1.0?
-- **O-3 Spor A/B.** Leveres 1.0 på spor A med modellen klar til B (forslag), eller skal B med i 1.0?
+- ~~**O-3 Spor A/B.**~~ Besluttet: spor A i 1.0 (se D5).
 - **O-4 Profiler.** Lager pr. app giver bedst isolation, men brugeren skal logge ind i hver app. Lager pr. identitetsudbyder giver single sign-on på tværs af apps fra samme udbyder. Forslag: pr. identitetsudbyder, med pr. app som tilvalg.
 - **O-5 Links mellem apps.** Hvad sker der, når et link i app A peger på en oprindelse, som app B ejer, eller som ingen app ejer? Forslag: Web App Manager slår URL'en op i app-manifesterne. Ukendte oprindelser åbnes i en midlertidig, isoleret "ukendt side"-app, der aldrig får rettigheder.
 - **O-6 Filer fra webapps.** Downloads og uploads skal ind i Eiras objektmodel og ikke i en skjult downloadmappe. Det kræver en kontrakt mellem Web App Manager og graphd.
