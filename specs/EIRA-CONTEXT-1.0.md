@@ -1,7 +1,7 @@
 # EIRA Context 1.0 — kontekster, lagring og synkronisering
 
 **Status:** Accepteret af ejer 11. november 2026. Normativ. Testplan: [EIRA-CONTEXT-1.0-TESTPLAN](EIRA-CONTEXT-1.0-TESTPLAN.md).
-**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1)
+**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`)
 **Grundlag:** [ADR-0005](../docs/decisions/ADR-0005-kontekster-og-datas-hjem.md) (K1–K11), [ADR-0004](../docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [ADR-0006](../docs/decisions/ADR-0006-livets-indbakke.md) L5 (glimt)
 **Berører:** ny `eira-contextd` (rod-formidler), `identityd`, gaten, graphd, samtalelaget, den neutrale skal, compositoren, `eira-governance-agent`/Fleet, RIGHTS-SET (revision, §10)
 
@@ -94,6 +94,8 @@ Personer ser aldrig Linux-brugere. `eira-c-<kort-id>` afledes af `context_id`, m
 ### 3.3 Grænser, der testes
 
 En kontekst-bruger kan ikke læse en anden konteksts filer, sende signaler til dens processer, ptrace dem, forbinde til dens D-Bus eller Wayland-socket eller læse dens udklipsholder. Skal-brugeren kan ingen af delene over for nogen kontekst.
+
+**Processer er usynlige på tværs af brugere** (besluttet af ejer). `/proc` monteres for hele systemet med `hidepid=invisible`, så hver bruger kun ser sine egne processer. Uden det kan enhver bruger læse alle processers kommandolinje og dermed se, hvilke webapps og URL'er en anden kontekst kører. Systemtjenester, der skal se alle processer (fx polkit), undtages via gruppen `eira-procview` (`gid=`). Gruppen har ingen personlige brugere, kontekst-brugere eller `eira-shell` som medlemmer. Kontekst-tjenesterne (`user@<uid>.service`) får desuden `ProtectProc=invisible` som ekstra lag.
 
 ## 4. Livscyklus på en enhed
 
@@ -362,7 +364,7 @@ Testplanen (separat dokument) skal have mindst én test pr. invariant, og hver t
 | M-1 | Et manifest fra en enhed uden for den signerede enhedsliste, eller med Merkle-afvigelse, ignoreres og auditeres | §6.3, §8 |
 | S-1 | Samtidige ændringer af samme fil giver to versioner og et konfliktobjekt; intet overskrives | §7 |
 | U-1 | Linux-UID forekommer aldrig i data, manifester, protokolbeskeder, audit uden for enheden eller rettighedssæt | §1 |
-| I-1 | En kontekst-bruger kan hverken læse filer, signalere processer, ptrace, forbinde til D-Bus eller Wayland-socket for en anden kontekst; skal-brugeren kan intet af det over for nogen kontekst | §3.3 |
+| I-1 | En kontekst-bruger kan hverken se processer, læse filer, signalere processer, ptrace, forbinde til D-Bus eller Wayland-socket for en anden kontekst; skal-brugeren kan intet af det over for nogen kontekst | §3.3 |
 | O-1 | En udløbet offline-periode kan ikke forlænges ved at stille uret tilbage | §4.2 |
 | G-1 | Skallen afviser glimt med andre felter end de tilladte, og kalender-glimt fra kontekster med `glimt_level` = `activity` | §11 |
 | E-1 | Brug af en escrow-nøgle kræver to forskellige nøgleforvaltere og giver en audithændelse og besked til medarbejderen | §5.4 |
