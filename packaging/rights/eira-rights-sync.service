@@ -35,5 +35,6 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictSUIDSGID=true
-ReadWritePaths=/data/rights
+# Hands the journal's FSS verification key to Fleet once, then deletes it.
+ReadWritePaths=/data/rights -/var/lib/eira-audit-seal
 AppArmorProfile=/usr/bin/eira-rights-apply

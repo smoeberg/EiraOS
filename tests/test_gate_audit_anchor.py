@@ -171,7 +171,11 @@ def test_capabilities_show_the_witness(tmp_path, monkeypatch):
         store = GateStore(str(tmp_path / "g.db"))
 
     monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", tmp_path / "none.json")
-    assert _audit_status(G()) == {"seq": 0, "head": GENESIS, "witness": "journal_only"}
+    from app.gate import audit_seal
+
+    monkeypatch.setattr(audit_seal, "SEAL_DIR", tmp_path / "seal")
+    assert _audit_status(G()) == {"seq": 0, "head": GENESIS, "witness": "journal_only",
+                                  "seal": "journal_unsealed"}
 
 
 def test_every_entry_is_anchored(store, monkeypatch):
