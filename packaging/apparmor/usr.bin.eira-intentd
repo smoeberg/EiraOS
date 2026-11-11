@@ -31,6 +31,8 @@
   /data/audit/** rw,
   /data/rights/ rw,
   /data/rights/** rwk,
+  # Seal status only (gate.capabilities); never the key.
+  /var/lib/eira-audit-seal/state.json r,
 
   # Gate 1.1 power executor: fixed busctl call to systemd-logind only.
   /usr/bin/busctl ix,

@@ -224,6 +224,36 @@ PY
     [ "$status" -eq 1 ]
 }
 check audit-rewrite-caught audit_rewrite_is_caught
+# GATE-KERNEL bilag A pkt. 2, drift: the journal is sealed (FSS) at first
+# boot; on a private machine the owner takes the verification key once, it
+# is gone from the machine, and the journal verifies against it.
+gate_seal() {
+    python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(30)
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.capabilities",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+print(json.loads(s.makefile().readline())["result"]["audit"]["seal"])
+PY
+}
+seal_owner_handover() {
+    key=$(/usr/bin/eira-audit-seal show | grep -E '^[0-9a-f]+(-[0-9a-f]+)*/[0-9a-f]+-[0-9a-f]+$') || return 1
+    [ -n "$key" ] && [ ! -e /var/lib/eira-audit-seal/verify-key ] || return 1
+    journalctl --rotate >/dev/null 2>&1 || true
+    /usr/bin/eira-audit-verify --journal --verify-key "$key"
+}
+check audit-seal-set-up wait_for 120 test -f /var/lib/eira-audit-seal/state.json
+check audit-seal-journal-keys sh -c 'ls /var/log/journal/*/fss >/dev/null 2>&1'
+gate_seal_is() { [ "$(gate_seal)" = "$1" ]; }
+check audit-seal-key-pending gate_seal_is sealed_key_on_device
+check audit-seal-owner-handover seal_owner_handover
+check audit-seal-status-sealed gate_seal_is sealed
 # FLEET-RIGHTS-API §7: the sync timer is armed, its AppArmor profile is
 # loaded, and on a private machine a round ends as "not enrolled" (exit 2).
 check rights-sync-timer-enabled systemctl is-enabled --quiet eira-rights-sync.timer

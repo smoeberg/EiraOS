@@ -101,7 +101,7 @@ class FleetStandIn(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         self.seen.append(("POST", self.path, json.loads(self.rfile.read(length))))
-        self._send(204)
+        self._send(self.behaviour.get("post_status", 204))
 
 
 @pytest.fixture
@@ -248,3 +248,40 @@ def test_sync_cli_exit_codes(pki, fleet, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(agent, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: clock())}))
     assert agent.sync(client, cache) == 0
     assert agent.sync(client_for(pki, 9, signer), cache) == 3
+
+
+def test_the_journal_seal_key_goes_to_fleet_once_and_leaves_the_device(pki, fleet, tmp_path, monkeypatch):
+    """GATE-KERNEL bilag A pkt. 2: the FSS verification key can regenerate the
+    sealing keys, so after Fleet has it (2xx) it is deleted here."""
+    from app.gate import audit_seal
+
+    signer, clock, start = fleet
+    httpd, handler = start()
+    monkeypatch.setattr(audit_seal, "SEAL_DIR", tmp_path / "seal")
+    key = "aabbcc-ddeeff-001122/1a2b3c-35a4e900"
+    assert audit_seal.setup(run=lambda *a, **k: type("R", (), {"returncode": 0, "stdout": key + "\n",
+                                                                "stderr": ""})()) == 0
+    monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", signer.enrollment_path)
+    monkeypatch.setattr(agent, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: clock())}))
+    cache = RightsCache(tmp_path / "rights", enrollment_path=signer.enrollment_path)
+    assert agent.sync(client_for(pki, httpd.server_address[1], signer), cache) == 0
+    beats = [body for method, path, body in handler.seen if path.endswith("/v1/heartbeat")]
+    assert beats[-1]["audit_seal"]["verify_key"] == key
+    assert audit_seal.status() == "sealed" and audit_seal.state()["state"] == "fleet"
+    assert not (tmp_path / "seal" / "verify-key").exists()
+    assert audit_seal.for_fleet() is None  # never sent again
+
+
+def test_an_undelivered_seal_key_stays_until_fleet_has_it(pki, fleet, tmp_path, monkeypatch):
+    from app.gate import audit_seal
+
+    signer, clock, start = fleet
+    httpd, handler = start()
+    handler.behaviour["post_status"] = 503
+    monkeypatch.setattr(audit_seal, "SEAL_DIR", tmp_path / "seal")
+    audit_seal.setup(run=lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "aa-bb/1-2\n", "stderr": ""})())
+    monkeypatch.setattr(fleet_api, "ENROLLMENT_PATH", signer.enrollment_path)
+    monkeypatch.setattr(agent, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: clock())}))
+    cache = RightsCache(tmp_path / "rights", enrollment_path=signer.enrollment_path)
+    agent.sync(client_for(pki, httpd.server_address[1], signer), cache)
+    assert audit_seal.status() == "sealed_key_on_device" and audit_seal.pending_key() == "aa-bb/1-2"
