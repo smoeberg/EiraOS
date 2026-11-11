@@ -59,7 +59,7 @@ Det er Ushahidis skema → indberetning → trin, bare for én person og hendes 
 | Kanaltype | Eksempler | Vej |
 |---|---|---|
 | Åbne protokoller | Mail (IMAP/SMTP, JMAP), kalender (CalDAV), kontakter (CardDAV), Matrix, XMPP, ActivityPub, RSS | Fuld adapter |
-| Officielle API'er med organisationens samtykke | Teams og Outlook (Microsoft Graph), Slack, Google Workspace | Adapter i organisationens kontekst og på dens app-registrering. Leverandøren er gæst (ADR-0004 D1) |
+| Leverandørspecifikke API'er | Microsoft Graph (Teams, Outlook), Slack, Google Workspace | **Ingen adapter** (besluttet af ejer). Tjenesterne er gæster: de kører som webapps, og kun det, de udstiller via åbne protokoller (fx mail via IMAP, kalender via CalDAV), kommer helt ind |
 | Lukkede forbrugertjenester | WhatsApp, Messenger | Ingen adapter; kun som almindelig webapp (se nedenfor) |
 | Mobiltelefonen | SMS, opkald, notifikationer | Adapter via parring med telefonen (kandidat: KDE Connect-protokollen) |
 | Myndigheder | Digital Post | Adapter, når der findes en tilgængelig adgangsvej (O-3) |
@@ -67,6 +67,20 @@ Det er Ushahidis skema → indberetning → trin, bare for én person og hendes 
 **WhatsApp og Messenger: ingen særlig indsats (besluttet af ejer).** EiraOS ser frem, ikke tilbage. Lukkede forbrugertjenester uden åben API får ingen adapter, ingen bro og ingen Eira-beskedtjeneste for at nå dem. Vil en person bruge dem, kører de som almindelige webapps via Web App Manager (ADR-0004 D3) uden særbehandling. EiraOS' egen kommunikation bygges på åbne protokoller (Matrix, mail, XMPP, ActivityPub).
 
 Uofficielle broer bygget på reverse engineering bruges heller ikke. De bryder tjenesternes vilkår, kan få personens konto lukket og flytter beskedindhold gennem kode uden for vores kontrol.
+
+### L4a — Den åbne stak er førsteklasses (besluttet af ejer)
+
+EiraOS giver det fulde udbytte med åbne standarder og har fulde adaptere til dem fra 1.0:
+
+| Område | Standard | Eksempel på tjeneste |
+|---|---|---|
+| Filer | WebDAV | Nextcloud |
+| Kalender og kontakter | CalDAV, CardDAV | Nextcloud |
+| Mail | IMAP/SMTP, JMAP | enhver mailserver |
+| Chat | Matrix | Element, Nextcloud Talk via bro |
+| Dokumenter | ODF | LibreOffice (som rigtigt program) |
+
+Office 365 og lignende virker på EiraOS som gæster: Outlook, Teams, Word og Excel på nettet kører i egne vinduer via Web App Manager (ADR-0004 D3), uden adressefelt eller faner. Livets indbakke ser kun deres notifikationer, medmindre organisationen tillader en åben protokol (fx IMAP til mail). Budskabet er: *EiraOS kører jeres nuværende systemer i dag, men med åbne standarder får I hele systemet.*
 
 ### L5 — Skarpe grænser mellem identiteter; "glimt" viser kun aktivitet
 
