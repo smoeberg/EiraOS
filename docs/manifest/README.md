@@ -8,6 +8,6 @@ Originale vision- og manifestdokumenter (juni 2025). **�ndres ikke** uden bevi
 | **Pr�sentation** | [../presentations/EIRA_OS_Presentation_v2.pdf](../presentations/EIRA_OS_Presentation_v2.pdf) | Pitch, 6 UX-regler, GTM |
 | **Whitepaper** | [../whitepaper/EIRA OS v2.0 Whitepaper Edition.pdf](../whitepaper/EIRA%20OS%20v2.0%20Whitepaper%20Edition.pdf) | Fuld teknisk vision |
 
-**Sporbarhed:** [../EIRA_v2_0_Lineage.md](../EIRA_v2_0_Lineage.md) � hver 2025-p�stand ? 2026-spec.
+**Sporbarhed:** [../archive/sprints/EIRA_v2_0_Lineage.md](../archive/sprints/EIRA_v2_0_Lineage.md) � hver 2025-p�stand ? 2026-spec.
 
-**Operationalisering:** [../specs/README.md](../specs/README.md)
+**Operationalisering:** [../archive/specs-v0/README.md](../archive/specs-v0/README.md)

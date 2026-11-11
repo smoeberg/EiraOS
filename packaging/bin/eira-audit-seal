@@ -1,0 +1,9 @@
+#!/bin/sh
+# Forward Secure Sealing of the journal (GATE-KERNEL bilag A pkt. 2).
+#   setup  (root, first boot)  create the sealing key; keep the verification
+#                              key only until it is handed over
+#   show   (root, private pc)  show the verification key once, then delete it
+#   status                     journal_unsealed | sealed_key_on_device | sealed
+set -eu
+export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -m app.gate.audit_seal "$@"

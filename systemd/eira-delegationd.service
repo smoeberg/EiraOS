@@ -13,6 +13,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/usr/lib/eira-os
 Environment=EIRA_APP_DB=/data/eira-app.db
+Environment=EIRA_CONSENT_KEY_DB=/run/eira/consent-keys.db
 EnvironmentFile=-/etc/eira/eira.conf
 ExecStart=/usr/bin/eira-delegationd
 Restart=always

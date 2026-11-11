@@ -146,6 +146,6 @@ Denne audit dokumenterer ikke, at tests er bestået. Næste trin er:
 - `manifests/public360.capability.json`
 - `tests/test_intentd_enforcement.py`
 - `docs/audit/B_IPC.md`
-- `docs/EIRA_Sprint8_Audit_IPC.md`
+- `docs/archive/sprints/EIRA_Sprint8_Audit_IPC.md`
 
 Repository-træet indeholder mange filer; denne audit er et målrettet scope og ikke en påstand om, at hver eneste fil i repository’et er manuelt gennemgået.

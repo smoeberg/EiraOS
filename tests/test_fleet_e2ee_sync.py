@@ -24,7 +24,7 @@ from app.daemons.fleetd import (
     FleetWebSocketServer,
     generate_device_keypair,
 )
-from app.fleet.device_registry import DeviceRegistry
+from app.fleet.device_registry import DeviceRegistry, PairedDevice, device_fingerprint
 from app.fleet.e2ee import PayloadIntegrityError, StatePayloadEncryptor
 
 # =============================================================================
@@ -511,19 +511,25 @@ def test_different_key_context_produces_different_keys():
 
 
 
+DEVICE_B_KEY = base64.b64encode(bytes(range(32))).decode("ascii")
+DEVICE_B = device_fingerprint(DEVICE_B_KEY)
+
+
 def _services():
-    device_a = generate_device_keypair("device-a", "Laptop")
-    device_b = generate_device_keypair("device-b", "Phone")
+    device_a = generate_device_keypair("Laptop")
+    device_b = PairedDevice(
+        device_id=DEVICE_B, name="Phone", public_key=DEVICE_B_KEY, os_type="Ubuntu",
+        status="paired", paired_at="", last_heartbeat=None,
+    )
     registry = DeviceRegistry()
     code = registry.create_pairing_token(ttl_seconds=300)
     enrollment = registry.enroll(
         pairing_code=code["code"],
-        device_id=device_b.device_id,
         name=device_b.name,
         os_type=device_b.os_type,
         public_key=device_b.public_key,
     )
-    tokens = {"device-b": enrollment.auth_token}
+    tokens = {DEVICE_B: enrollment.auth_token}
     return device_a, device_b, registry, tokens
 
 def get_free_port():
@@ -536,7 +542,7 @@ def get_free_port():
 def test_websocket_handshake_uses_the_same_authorization_boundary() -> None:
     async def scenario() -> None:
         device_a, _, registry, tokens = _services()
-        public_key = registry.get("device-b").public_key
+        public_key = registry.get(DEVICE_B).public_key
         port = get_free_port()
         websocket_server = FleetWebSocketServer(
             FleetSyncService(
@@ -555,9 +561,9 @@ def test_websocket_handshake_uses_the_same_authorization_boundary() -> None:
                             "id": "handshake-1",
                             "method": "sync.handshake",
                             "params": {
-                                "device_id": "device-b",
+                                "device_id": DEVICE_B,
                                 "public_key": public_key,
-                                "auth_token": tokens["device-b"],
+                                "auth_token": tokens[DEVICE_B],
                                 "headers": [],
                             },
                         }
@@ -566,7 +572,7 @@ def test_websocket_handshake_uses_the_same_authorization_boundary() -> None:
                 response = json.loads(await websocket.recv())
                 assert response["id"] == "handshake-1"
                 assert response["result"]["accepted"] is True
-                assert response["result"]["device_id"] == "device-b"
+                assert response["result"]["device_id"] == DEVICE_B
         finally:
             await websocket_server.stop()
 
@@ -636,15 +642,15 @@ def test_full_sync_round_trip_between_two_devices() -> None:
 
             async with connect(f"ws://127.0.0.1:{server.port}") as a:
                 hs = await _call(a, "sync.handshake", {
-                    "device_id": "device-b",
-                    "public_key": registry.get("device-b").public_key,
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "public_key": registry.get(DEVICE_B).public_key,
+                    "auth_token": tokens[DEVICE_B],
                     "headers": [],
                 })
                 assert hs["result"]["accepted"] is True
                 resp = await _call(a, "sync.push_blocks", {
-                    "device_id": "device-b",
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "auth_token": tokens[DEVICE_B],
                     "blocks": blocks,
                 })
                 assert resp["result"]["accepted"] == 3
@@ -652,9 +658,9 @@ def test_full_sync_round_trip_between_two_devices() -> None:
 
             async with connect(f"ws://127.0.0.1:{server.port}") as b:
                 handshake = await _call(b, "sync.handshake", {
-                    "device_id": "device-b",
-                    "public_key": registry.get("device-b").public_key,
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "public_key": registry.get(DEVICE_B).public_key,
+                    "auth_token": tokens[DEVICE_B],
                     "headers": [],
                 })
                 # pull what device B does not already have: the server's
@@ -665,8 +671,8 @@ def test_full_sync_round_trip_between_two_devices() -> None:
                 assert len(missing) == 3
 
                 pulled = await _call(b, "sync.request_blocks", {
-                    "device_id": "device-b",
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "auth_token": tokens[DEVICE_B],
                     "hashes": missing,
                 })
                 assert pulled["result"]["count"] == 3
@@ -704,15 +710,15 @@ def test_wrong_key_is_rejected_fail_closed() -> None:
             blocks = [encryptor.encrypt_state(state) for state in chain]
             async with connect(f"ws://127.0.0.1:{server.port}") as ws:
                 hs = await _call(ws, "sync.handshake", {
-                    "device_id": "device-b",
-                    "public_key": registry.get("device-b").public_key,
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "public_key": registry.get(DEVICE_B).public_key,
+                    "auth_token": tokens[DEVICE_B],
                     "headers": [],
                 })
                 assert hs["result"]["accepted"] is True
                 resp = await _call(ws, "sync.push_blocks", {
-                    "device_id": "device-b",
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "auth_token": tokens[DEVICE_B],
                     "blocks": blocks,
                 })
                 # wrong-key blocks are rejected fail-closed: nothing stored
@@ -753,21 +759,21 @@ def test_forked_state_is_rejected_over_websocket() -> None:
             )
             async with connect(f"ws://127.0.0.1:{server.port}") as ws:
                 hs = await _call(ws, "sync.handshake", {
-                    "device_id": "device-b",
-                    "public_key": registry.get("device-b").public_key,
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "public_key": registry.get(DEVICE_B).public_key,
+                    "auth_token": tokens[DEVICE_B],
                     "headers": [],
                 })
                 assert hs["result"]["accepted"] is True
                 original_resp = await _call(ws, "sync.push_blocks", {
-                    "device_id": "device-b",
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "auth_token": tokens[DEVICE_B],
                     "blocks": [encryptor.encrypt_state(original)],
                 })
                 assert original_resp["result"]["accepted"] == 1
                 fork_resp = await _call(ws, "sync.push_blocks", {
-                    "device_id": "device-b",
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "auth_token": tokens[DEVICE_B],
                     "blocks": [encryptor.encrypt_state(fork)],
                 })
                 # the fork is rejected: same id, different hash -> invalid
@@ -795,17 +801,17 @@ def test_revoked_device_is_kicked_with_unauthorized_frame() -> None:
         try:
             async with connect(f"ws://127.0.0.1:{server.port}") as ws:
                 handshake = await _call(ws, "sync.handshake", {
-                    "device_id": "device-b",
-                    "public_key": registry.get("device-b").public_key,
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "public_key": registry.get(DEVICE_B).public_key,
+                    "auth_token": tokens[DEVICE_B],
                     "headers": [],
                 })
                 assert handshake["result"]["accepted"] is True
 
-                registry.revoke("device-b")
+                registry.revoke(DEVICE_B)
                 resp = await _call(ws, "sync.request_blocks", {
-                    "device_id": "device-b",
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "auth_token": tokens[DEVICE_B],
                     "hashes": [],
                 })
                 assert resp["error"]["code"] == -32030
@@ -825,15 +831,15 @@ def test_heartbeat_updates_registry_on_handshake() -> None:
         server = FleetWebSocketServer(service, port=port)
         await server.start()
         try:
-            before = registry.get("device-b").last_heartbeat
+            before = registry.get(DEVICE_B).last_heartbeat
             async with connect(f"ws://127.0.0.1:{server.port}") as ws:
                 await _call(ws, "sync.handshake", {
-                    "device_id": "device-b",
-                    "public_key": registry.get("device-b").public_key,
-                    "auth_token": tokens["device-b"],
+                    "device_id": DEVICE_B,
+                    "public_key": registry.get(DEVICE_B).public_key,
+                    "auth_token": tokens[DEVICE_B],
                     "headers": [],
                 })
-            after = registry.get("device-b").last_heartbeat
+            after = registry.get(DEVICE_B).last_heartbeat
             assert after is not None
             if before is not None:
                 assert after >= before

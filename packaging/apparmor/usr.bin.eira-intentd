@@ -19,6 +19,9 @@
 
   /run/eira/ rw,
   /run/eira/*.sock rwk,
+  /run/eira/consent-keys.db rwk,
+  # app/consent_keys.py: the store must be on tmpfs and keys are tied to the boot.
+  @{PROC}/@{pid}/mounts r,
   /var/log/eira/ rw,
   /var/log/eira/** rw,
   # SQLite fsyncs the directory after removing a journal.
@@ -31,6 +34,8 @@
   /data/audit/** rw,
   /data/rights/ rw,
   /data/rights/** rwk,
+  # Seal status only (gate.capabilities); never the key.
+  /var/lib/eira-audit-seal/state.json r,
 
   # Gate 1.1 power executor: fixed busctl call to systemd-logind only.
   /usr/bin/busctl ix,

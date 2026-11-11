@@ -86,7 +86,10 @@ def _audit_status(gate: Gate) -> dict[str, Any]:
         witness = "fleet" if read_enrollment() is not None else "journal_only"
     except ValueError:
         witness = "journal_only"
-    return {"seq": seq, "head": head, "witness": witness}
+    from app.gate import audit_seal
+
+    # seal: journal_unsealed | sealed_key_on_device | sealed (audit_seal.py)
+    return {"seq": seq, "head": head, "witness": witness, "seal": audit_seal.status()}
 
 
 def _with_caller(handler):

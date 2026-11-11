@@ -1,0 +1,22 @@
+[Unit]
+Description=EiraOS: seal the journal (Forward Secure Sealing, once)
+Documentation=https://github.com/smoeberg/EiraOS
+After=systemd-journald.service local-fs.target
+# Only once: afterwards the state file exists.
+ConditionPathExists=!/var/lib/eira-audit-seal/state.json
+# FSS needs the persistent journal.
+ConditionPathIsDirectory=/var/log/journal
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+ExecStart=/usr/bin/eira-audit-seal setup
+UMask=0027
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

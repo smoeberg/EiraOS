@@ -1,6 +1,6 @@
 //! Phase 0 — IPC & Event Bus contract.
 //!
-//! Normative text: `docs/specs/PHASE-0-IPC-EVENT-BUS.md`. The tests in these
+//! Normative text: `specs/PHASE-0-IPC-EVENT-BUS.md`. The tests in these
 //! modules are the executable form of that contract; a change that breaks a
 //! test is a contract change and needs a spec amendment.
 //!

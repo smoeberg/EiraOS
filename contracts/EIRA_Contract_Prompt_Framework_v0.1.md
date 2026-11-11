@@ -153,4 +153,4 @@ Versions bump: **MINOR** = nyt felt (bagudkompatibelt), **MAJOR** = breaking IPC
 
 ---
 
-*Companion: [prompts/README.md](prompts/README.md) · [Scope Closure](../docs/specs/EIRA_Scope_Closure_Engineering_v0.1.md)*
+*Companion: [prompts/README.md](prompts/README.md) · [Scope Closure](../docs/archive/specs-v0/EIRA_Scope_Closure_Engineering_v0.1.md)*

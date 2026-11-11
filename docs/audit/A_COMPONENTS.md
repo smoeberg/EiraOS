@@ -2,7 +2,7 @@
 
 **Audit-base:** `main` / `audit/a-components-ipc` ved commit `5b750114523e0d5f02a471d9feaccd35712c1c76`  
 **Metode:** Gennemgang af kildefiler via GitHub-indhold. Ingen daemon er startet i et Ubuntu-runtime-miljø i denne audit; derfor er *socket oprettet* ikke markeret som runtime-verificeret.  
-**Scope:** Afsnit A i `docs/EIRA_GUI_Audit_Checklist.md`. Ingen kodeændringer.
+**Scope:** Afsnit A i `docs/archive/sprints/EIRA_GUI_Audit_Checklist.md`. Ingen kodeændringer.
 
 ## Komponentkort
 

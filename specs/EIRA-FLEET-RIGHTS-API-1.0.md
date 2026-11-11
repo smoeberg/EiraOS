@@ -1,7 +1,7 @@
 # EIRA Fleet Rights API 1.0
 
 **Status:** Godkendt af ejer 8. november 2026. Normativ.
-**Version:** 1.2 (8. november 2026: 1.1 rod- og driftsnøgler og enrollment version 2; 1.2 enroll, §8, og sync-planlægning, §7)
+**Version:** 1.3 (8. november 2026: 1.1 rod- og driftsnøgler og enrollment version 2; 1.2 enroll, §8, og sync-planlægning, §7. 11. november 2026: 1.3 enhedsnøglen dannes i TPM'en og kan ikke eksporteres; managed kræver TPM 2.0, §8 og §6 pkt. 1a)
 **Defineret af:** `eira-os`. Fleet implementerer serversiden; eira-os afhænger ikke af, hvordan Fleet er bygget.
 **Grundlag:** [EIRA-RIGHTS-SET-1.3](EIRA-RIGHTS-SET-1.0.md) (sættet), [ADR-0003](../docs/decisions/ADR-0003-rettigheder-fra-fleet.md), Fleet Agent Protocol v0.1 (transport og enroll).
 
@@ -75,6 +75,7 @@ Sendes efter hvert sæt, Fleet har leveret:
 
   `missing` skal sættes op; `misconfigured` er en fejl.
 - `audit` (valgfri, OpenAPI 1.3): gatens seneste audit-anker `{seq, head, at}` (GATE-KERNEL bilag A pkt. 2). Fleet gemmer hvert par pr. enhed, alarmerer, hvis `seq` falder eller et kendt head ændres, og kan eksportere dem til `eira-audit-verify --anchors`.
+- `audit_seal` (valgfri, OpenAPI 1.4): journalens FSS-verifikationsnøgle `{verify_key, interval, machine_id}` (GATE-KERNEL bilag A pkt. 2). Sendes kun, mens nøglen venter på overdragelse, og slettes på enheden efter et 2xx-svar. Nøglen kan genskabe forseglingsnøglerne: Fleet skal opbevare den som en hemmelighed og kun bruge den til at verificere enhedens journal.
 - `clock_rollback`: enheden har set sit ur gå tilbage forbi sit højvandsmærke. Fleet Console bør vise det.
 
 ## 4. Agentens runde (`sync_once`)
@@ -118,7 +119,7 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 |---|---|
 | Kun den enrollede Fleet | Adressen kommer fra `fleet_url` i enrollment. Værtsnavnet skal passe til serverens certifikat. Omdirigeringer følges aldrig. |
 | Kun Fleets CA | Systemets tillidslager indlæses ikke, så en offentlig CA kan ikke gå i god for en falsk Fleet. |
-| mTLS | Enhedscertifikatet fra enroll; TLS 1.2 eller nyere. |
+| mTLS | Enhedscertifikatet fra enroll; TLS 1.2 eller nyere. Signaturen i håndtrykket laves af TPM'en via OpenSSL-provideren `tpm2-openssl` (§8). |
 | Tenant-token | `Authorization: Bearer`, når enroll har efterladt et token. Et token med linjeskift afvises. |
 | Afgrænset | 15 s timeout og højst 4 MiB svar. Uden for API'et → `ProtocolViolation`; utilgængelig → `FleetError` (offline). |
 
@@ -128,7 +129,7 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 |---|---|---|
 | `ca.pem` | root, 0644 | Fleets server-CA, den eneste betroede rod |
 | `device.crt` | root, 0644 | enhedscertifikatet |
-| `device.key` | root:eira, 0640 | enhedens private nøgle |
+| `device.key` | root:eira, 0640 | TPM'ens indpakkede nøgleblob (TSS2) for enhedens P-256-nøgle. Kan kun bruges med denne enheds TPM; den private nøgle findes ikke i filen (§8) |
 | `tenant.token` | root:eira, 0640 | tenant-token (valgfri) |
 
 **Kommando:** `eira-rights-apply sync` kører én runde (§4) og derefter et heartbeat. Exit: 0 i orden, 1 sæt afvist, 2 ikke enrolled eller fejlkonfigureret, 3 offline.
@@ -146,7 +147,7 @@ Enroll (Fleet Agent Protocol v0.1 §2) skal efterlade `/etc/eira/enrollment.json
 
 **Forløbet** (`eira-enroll INVITATION.json`, som root):
 
-1. Enheden danner sit nøglepar lokalt. Den private nøgle forlader aldrig enheden; kun en CSR sendes.
+1. Enheden danner sit nøglepar **i TPM'en**: ECDSA P-256 med `fixedTPM` og `fixedParent`, så nøglen ikke kan eksporteres eller dubleres. Kun TPM'ens indpakkede blob skrives til disk (`device.key`), og kun en CSR sendes. Har enheden ingen TPM 2.0, afbrydes enroll med exit 2 og beskeden, at managed kræver TPM 2.0 (§6 pkt. 1a); intet skrives.
 2. `POST /v1/enroll` over TLS, der kun stoler på invitationens CA (endnu ingen klientcertifikat). Med sendes token, CSR, `machine_hash` (sha256 af `/etc/machine-id` med præfiks, ikke det rå id) og værtsnavn.
 3. Svaret kontrolleres, før noget skrives: samme `fleet_url` som invitationen; et enhedscertifikat udstedt af invitationens CA til *denne* nøgle, gyldigt nu og til klientgodkendelse; gyldige `rights_roots`; et token uden linjeskift.
 4. Filerne i `/etc/eira/fleet/` skrives først, hver atomart og med rettighederne fra §7; `/etc/eira/enrollment.json` skrives **til sidst**. Det er den fil, der gør enheden managed, så et nedbrud undervejs efterlader en privat enhed, aldrig en halvt managed.
@@ -157,5 +158,6 @@ En enhed, der allerede er enrolled, afvises: gen-enroll er en bevidst handling (
 ## 6. Besluttet (8. november 2026)
 
 1. **Tillidsrod mod root — besluttet: transporten bygges nu med §2's grænse; attestation bliver et senere krav.** At signere enrollment-filen med en TPM-forseglet nøgle eller lægge ankeret i TPM NVRAM gør ikke root til en grænse: root kan stadig ændre koden, der kontrollerer TPM-signaturen, eller rette i cachen efter verifikationen. Det giver først mening med en målt og uforanderlig kæde (Secure Boot, `dm-verity` på `/usr`, PCR-målinger) **og** remote attestation, hvor Fleet verificerer et TPM-quote ved enroll og heartbeat, før det udsteder sæt. Så flyttes kontrollen til Fleet, som kan opdage en ændret enhed. Beslutning: transporten bygges nu med §2's ærlige grænse; attestation lægges ind i enroll og heartbeat som et senere krav, sammen med en uforanderlig `/usr`.
+1a. **Klonbeskyttelse — besluttet 11. november 2026, i 1.0.** Pkt. 1 handler om root på den kørende enhed. Kloning er et andet angreb: disken kopieres og startes på anden hardware. Det kræver hverken målt opstart eller attestation at lukke: enhedsnøglen dannes i TPM'en og kan ikke eksporteres (§8 trin 1), så en kopi af disken kan ikke gennemføre mTLS-håndtrykket og får intet nyt fra Fleet. Managed kræver derfor TPM 2.0. Det gør **ikke** root til en grænse; root kan bruge nøglen gennem TPM'en, så længe enheden kører, og pkt. 1 gælder uændret. Følge for `eira-fleetd`: dets egen enhedsgodkendelse (token og nøgle sammenlignet som tekst) er ikke klonsikker og må kun bruges til det, EIRA-CONTEXT §10 tillader; enhedsgodkendelse over for Fleet sker med mTLS og TPM-nøglen.
 2. **Nøglerotation — besluttet og indført i 1.1: rod- og driftsnøgler (RIGHTS-SET §3.1).** Reviewet foreslår et nyt ankersæt signeret af det forrige anker. Det løser planlagt rotation, men ikke kompromittering: den, der har lækket det gamle anker, kan selv signere sig et nyt. Beslutning: to niveauer. Enrollment fastgør tenantens **rod-nøgle** (offline, langlivet, i HSM), og roden udsteder kortlivede **driftsnøgler** med `not_after` som nøglecertifikater, leveret via desired state. En lækket driftsnøgle tilbagekaldes af roden uden re-enroll; kun en lækket rod kræver re-enroll.
 3. **Åbent:** `eira-fleet-control` tager OpenAPI-filen og rettighedsvektorerne som en pinnet afhængighed og kører dem i sin CI (som RIGHTS-SET-kontrakten).
