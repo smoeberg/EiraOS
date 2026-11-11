@@ -61,7 +61,7 @@ Det er Ushahidis skema → indberetning → trin, bare for én person og hendes 
 | Åbne protokoller | Mail (IMAP/SMTP, JMAP), kalender (CalDAV), kontakter (CardDAV), Matrix, XMPP, ActivityPub, RSS | Fuld adapter |
 | Leverandørspecifikke API'er | Microsoft Graph (Teams, Outlook), Slack, Google Workspace | **Ingen adapter** (besluttet af ejer). Tjenesterne er gæster: de kører som webapps, og kun det, de udstiller via åbne protokoller (fx mail via IMAP, kalender via CalDAV), kommer helt ind |
 | Lukkede forbrugertjenester | WhatsApp, Messenger | Ingen adapter; kun som almindelig webapp (se nedenfor) |
-| Mobiltelefonen | SMS, opkald, notifikationer | Adapter via parring med telefonen (kandidat: KDE Connect-protokollen) |
+| Telefoni | Opkald, SMS, mistede opkald, voicemail | Se L4b |
 | Myndigheder | Digital Post | Adapter, når der findes en tilgængelig adgangsvej (O-3) |
 
 **WhatsApp og Messenger: ingen særlig indsats (besluttet af ejer).** EiraOS ser frem, ikke tilbage. Lukkede forbrugertjenester uden åben API får ingen adapter, ingen bro og ingen Eira-beskedtjeneste for at nå dem. Vil en person bruge dem, kører de som almindelige webapps via Web App Manager (ADR-0004 D3) uden særbehandling. EiraOS' egen kommunikation bygges på åbne protokoller (Matrix, mail, XMPP, ActivityPub).
@@ -81,6 +81,17 @@ EiraOS giver det fulde udbytte med åbne standarder og har fulde adaptere til de
 | Dokumenter | ODF | LibreOffice (som rigtigt program) |
 
 Office 365 og lignende virker på EiraOS som gæster: Outlook, Teams, Word og Excel på nettet kører i egne vinduer via Web App Manager (ADR-0004 D3), uden adressefelt eller faner. Livets indbakke ser kun deres notifikationer, medmindre organisationen tillader en åben protokol (fx IMAP til mail). Budskabet er: *EiraOS kører jeres nuværende systemer i dag, men med åbne standarder får I hele systemet.*
+
+### L4b — Telefoni: nummeret tilhører konteksten, ikke en telefon (besluttet af ejer)
+
+- **Arbejdsnummer:** tildeles medarbejderens arbejdsidentitet via Fleet ved ansættelse og bor hos organisationens telefoniudbyder (fx operatørens mobilomstilling), som er telefoniens hjem (ADR-0005 K3). Det følger konteksten: det ringer, hvor personen er logget ind i arbejdskonteksten. Når konteksten lukkes ved fratrædelse, forsvinder nummeret fra personens enheder, og organisationen kan give det videre.
+- **Opkald:** SIP-adapter pr. kontekst (åben standard, L4a).
+- **SMS:** der findes ingen åben standard for slutbrugere. I 1.0 kræver SMS en adapter pr. operatør (accepteret af ejer), indtil en åben vej findes.
+- **I livets indbakke:** mistede opkald, voicemail og SMS er signaler og kan blive til objekter (fx en opgave). Glimt fra konteksten viser kun aktivitet (L5).
+- **Privat nummer:** et privat SIM i personens egen telefon kan parres med den private kontekst (kandidat: KDE Connect-protokollen) og blandes aldrig med arbejdet.
+- **Nødopkald (112)** forbliver på telefonen. EiraOS lover ikke at være vejen til 112.
+- **Gaten:** når personen selv trykker "ring op" eller "send", er det samtykke. AI'en ringer og sender aldrig selv (L6).
+- **EiraOS på telefonen** (telefonen som endnu en skærm for konteksterne) er ønsket, men ikke en del af 1.0. I 1.0 er telefonen kun parret.
 
 ### L5 — Skarpe grænser mellem identiteter; "glimt" viser kun aktivitet
 
