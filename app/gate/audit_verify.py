@@ -39,7 +39,10 @@ def file_anchors(path: Path) -> list[audit_anchor.Anchor]:
 
 
 def journal_seal_ok(key: str) -> bool:
-    result = subprocess.run(["journalctl", "--verify", f"--verify-key={key}"],
+    # The system journal: that is where intentd writes its anchors. User
+    # journals hold none, and journald's FSS tags in them fail verification
+    # on Ubuntu 26.04 (seen in VM, see GATE-KERNEL bilag A pkt. 2).
+    result = subprocess.run(["journalctl", "--system", "--verify", f"--verify-key={key}"],
                             capture_output=True, text=True, check=False)
     return result.returncode == 0
 

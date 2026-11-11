@@ -100,3 +100,13 @@ def test_what_fleet_gets_matches_the_published_schema():
 
     audit_seal.setup(Ran())
     jsonschema.validate(audit_seal.for_fleet(), schema("AuditSeal"))
+
+
+def test_the_seal_is_verified_on_the_system_journal_where_the_anchors_are(monkeypatch):
+    from app.gate import audit_verify
+
+    seen = []
+    monkeypatch.setattr(audit_verify.subprocess, "run",
+                        lambda argv, **_: seen.append(argv) or type("R", (), {"returncode": 0})())
+    assert audit_verify.journal_seal_ok(KEY)
+    assert seen == [["journalctl", "--system", "--verify", f"--verify-key={KEY}"]]

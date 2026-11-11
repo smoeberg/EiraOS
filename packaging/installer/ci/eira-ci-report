@@ -248,7 +248,7 @@ seal_owner_handover() {
     # No forced rotation here: rotating twice within one sealing interval
     # makes journald write two tags with the same epoch, which
     # journalctl --verify reports as corruption (seen in this VM).
-    if ! journalctl --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+    if ! journalctl --system --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
         say "diag seal-verify: $(tr '\n' ' ' </tmp/seal-verify.txt | cut -c1-1500)"
         return 1
     fi
