@@ -98,6 +98,8 @@ EIRA skal give familien ét overblik over hverdagen på tværs af fællesskabern
 - **Aktivitets-glimt:** at der er nyt i et fællesskab (antal og tidspunkt), aldrig hvad.
 - **Indhold** (beskeder, opgaver, dokumenter) læses kun i fællesskabets egen kontekst. Et klik på et glimt tilbyder at skifte dertil.
 - **Arbejdskontekster** viser som standard kun aktivitets-glimt.
+- **Familien er selv et fællesskab** med fælles kalender og begivenheder. En begivenhed kan oprettes i familiekalenderen ud fra et kalender-glimt ("overfør glimt": kun tid og sted, titlen skriver man selv). Se ADR-0005 K12.
+- **Forældrestyring** af barnets egen brug sker med værgesignerede regler og faste alderstrin (under 13, 13–17, ophører ved 18). Værgen ser regler og brugsoverblik, aldrig indhold (ADR-0005 K12).
 
 En lærer må ikke automatisk få adgang til klubbens oplysninger. En træner må ikke automatisk få adgang til skolens oplysninger. En forælder/værge får kun adgang i kraft af en verificeret relation og de rettigheder, der gælder i den konkrete kontekst.
 
