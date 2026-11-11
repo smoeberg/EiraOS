@@ -121,8 +121,8 @@ STAGE=${RELEASE_WORK}/EiraOS-${VERSION}
 mkdir -p -- "$STAGE"
 install -m 0644 -- "$DEB" "$ISO" "$STAGE/"
 install -m 0644 -- \
-    "${REPO_ROOT}/docs/EIRA_Sprint9_Execution_Prompts.md" \
-    "${REPO_ROOT}/docs/EIRA_Sprint10_Execution_Prompts.md" \
+    "${REPO_ROOT}/docs/archive/sprints/EIRA_Sprint9_Execution_Prompts.md" \
+    "${REPO_ROOT}/docs/archive/sprints/EIRA_Sprint10_Execution_Prompts.md" \
     "$STAGE/"
 
 python3 - "$STAGE" <<'PY'

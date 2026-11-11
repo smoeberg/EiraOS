@@ -24,8 +24,8 @@ EiraOS er udviklet specifikt som det **kognitive og intent-drevne lag oven på U
 
 Python IPC daemons + HTTP dev bridge + React Cognitive Dashboard (Tauri IPC-ready).
 
-**UI:** Calm Command v2 — se [UX Visual Language](docs/specs/EIRA_UX_Visual_Language_v0.1.md).  
-**Situation UI (fase 0):** tom tilstand, Hvorfor-fold, relationstræ — se [Situation UI Vision](docs/specs/EIRA_Situation_UI_Vision_v0.1.md).
+**UI:** Calm Command v2 — se [UX Visual Language](docs/archive/specs-v0/EIRA_UX_Visual_Language_v0.1.md).  
+**Situation UI (fase 0):** tom tilstand, Hvorfor-fold, relationstræ — se [Situation UI Vision](docs/archive/specs-v0/EIRA_Situation_UI_Vision_v0.1.md).
 
 ## Arkitektur (P1 IPC)
 
@@ -146,8 +146,8 @@ Frontend-test: `cd ui && npm ci && npx tsc --noEmit && npm test`.
 
 ## Relaterede specs
 
-- [EIRA_Desktop_Architecture_v1.0.md](docs/specs/EIRA_Desktop_Architecture_v1.0.md) §6 IPC
-- [EIRA_Cognitive_Runtime_v1.0.md](docs/specs/EIRA_Cognitive_Runtime_v1.0.md)
+- [EIRA_Desktop_Architecture_v1.0.md](docs/archive/specs-v0/EIRA_Desktop_Architecture_v1.0.md) §6 IPC
+- [EIRA_Cognitive_Runtime_v1.0.md](docs/archive/specs-v0/EIRA_Cognitive_Runtime_v1.0.md)
 
 
 ---

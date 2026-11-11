@@ -4,7 +4,7 @@
 **Branch:** `audit/c-ui-tauri`  
 **Dato:** 2026-10-19  
 **Miljø:** Ubuntu 24.04.4 LTS (Noble), kernel 6.12.8+, x86_64  
-**Scope:** Afsnit C i `docs/EIRA_GUI_Audit_Checklist.md` — dokumentation only, ingen kodeændringer.
+**Scope:** Afsnit C i `docs/archive/sprints/EIRA_GUI_Audit_Checklist.md` — dokumentation only, ingen kodeændringer.
 
 ---
 

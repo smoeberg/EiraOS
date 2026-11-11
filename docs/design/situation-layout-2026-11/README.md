@@ -1,6 +1,6 @@
 # Situation-layout, november 2026 — designreference
 
-**Status:** Reference, ikke spec. Normativ er [Situation UI Vision v0.1](../../specs/EIRA_Situation_UI_Vision_v0.1.md); hvor dette layout afviger, gælder visionen.
+**Status:** Reference, ikke spec. Normativ er [Situation UI Vision v0.1](../../archive/specs-v0/EIRA_Situation_UI_Vision_v0.1.md); hvor dette layout afviger, gælder visionen.
 **Kilde:** Skærmbilleder fra ejeren, 9. november 2026. Mærket "Made with Emergent". **Ingen kode fra værktøjet må ind i repoet**, før licens og ejerskab til den genererede kode er afklaret; billederne bruges kun som retning.
 **Formål:** (1) bevare retningen, (2) markere hvor den strider mod visionen, (3) udlede hvilke hændelser og datakilder skærmene kræver, så hændelsesstrømmen til Explorer bygges til dem.
 
