@@ -117,6 +117,7 @@ Koden var bundet til Microsoft Entra (`login.microsoftonline.com` skrevet direkt
 - **Ny komponent:** Eira Web App Manager med motor-grænsesnit, app-manifest og en profil-/lagermodel. Kontrakt skrives før kode (`specs/`).
 - **Compositor:** grænsesnittet i D6 kommer oven i R-6.2-patchen i `eira-labwc`, eller i spor B's egen compositor.
 - **graphd:** universets model (D4) får sin egen kontrakt.
+- **Brugeroplevelsen:** hvordan GUI'en opfører sig, når noget går galt (intent misforstået, gaten afviser, langsom tjeneste, fortryd, kontekstskift), står i GUI-planens afsnit 5.1 ([eiraos-gui-product-and-implementation-plan-1.0](../architecture/eiraos-gui-product-and-implementation-plan-1.0.md)). Denne ADR siger, hvordan GUI'en er bygget; 5.1 siger, hvad brugeren skal kunne regne med.
 - **Ikke ændret:** gaten, samtykkeagenten og rettighederne fra Fleet. Webapps' handlinger, der rører systemet (filer, kamera, notifikationer), går gennem gaten som alle andre handlinger.
 
 ## Åbne spørgsmål

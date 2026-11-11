@@ -7,7 +7,7 @@
 
 Dokumenterne er uenige om, hvordan Explorer skal se ud:
 
-- **Juli 2026:** [Desktop Architecture v1.0](../specs/EIRA_Desktop_Architecture_v1.0.md), [UX Logic](../specs/EIRA_User_Experience_Logic_v0.1.md), [Situation UI Vision](../specs/EIRA_Situation_UI_Vision_v0.1.md) og [Visual Language](../specs/EIRA_UX_Visual_Language_v0.1.md). Her har Explorer ingen filer, stier, programnavne, vinduer, panel eller terminal.
+- **Juli 2026:** [Desktop Architecture v1.0](../archive/specs-v0/EIRA_Desktop_Architecture_v1.0.md), [UX Logic](../archive/specs-v0/EIRA_User_Experience_Logic_v0.1.md), [Situation UI Vision](../archive/specs-v0/EIRA_Situation_UI_Vision_v0.1.md) og [Visual Language](../archive/specs-v0/EIRA_UX_Visual_Language_v0.1.md). Her har Explorer ingen filer, stier, programnavne, vinduer, panel eller terminal.
 - **Oktober 2026:** [Architecture Baseline 1.0](../architecture/eiraos-architecture-baseline-1.0.md), [GUI-planen](../architecture/eiraos-gui-product-and-implementation-plan-1.0.md), [Design Principles](../architecture/eiraos-design-principles.md) og [Cross-device](../architecture/eira-cross-device-principles.md). Her beskrives vinduer, multitasking, filer og en launcher, "inspireret af iPadOS".
 
 [Master Plan 1.0](../MASTER-PLAN-1.0.md) kræver, at sådanne konflikter afgøres eksplicit.
@@ -34,5 +34,5 @@ Dokumenterne er uenige om, hvordan Explorer skal se ud:
 1. **Gate Kernel 1.0** (master plan fase 1): otte lag, et reversibilitets-registry, bekræftelse bundet til `action.id` og et hash af indholdet samt regressionstests mod omgåelse.
 2. **Samtale-laget:** EDP-validering og en hændelseslog med samtaler forankret på objekter (`presenced`/`contextd` erstatter de nuværende stubs). En adapter med ærlig leveringsstatus.
 3. **Explorer-hændelsesstrømmen:** én hero og højst fire klynger, Hvorfor-fold, *foreslået* indtil accept og en tom tilstand.
-4. **Installationen (PR #130):** Explorer-session uden GNOME som brugerflade og uden flugtvej, medmindre Builder er tilladt ([Contributor Prompt](../EIRA_Contributor_Prompt.md): ingen GNOME-afhængighed).
-5. Ret [Prioritization Heuristics](../specs/EIRA_Prioritization_Heuristics_v0.1.md), så kanal-typen "mail" bliver til semantiske typer.
+4. **Installationen (PR #130):** Explorer-session uden GNOME som brugerflade og uden flugtvej, medmindre Builder er tilladt ([Contributor Prompt](../archive/sprints/EIRA_Contributor_Prompt.md): ingen GNOME-afhængighed).
+5. Ret [Prioritization Heuristics](../archive/specs-v0/EIRA_Prioritization_Heuristics_v0.1.md), så kanal-typen "mail" bliver til semantiske typer.

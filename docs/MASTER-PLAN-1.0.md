@@ -48,6 +48,9 @@ Ubuntu provides the supported operating-system substrate. EiraOS owns its UX, st
 10. External communication transports remain distinct. No silent rerouting that changes recipient, cost, privacy, or delivery semantics.
 11. A proposal is not acceptance; a UI success message is not proof of persistence or delivery.
 12. Specs, mocks, UI controls, and daemon names are not implementation evidence.
+13. No user dead ends: misunderstanding, denial, delay, or unsupported integration must have a truthful explanation and a safe next step wherever one exists.
+14. Intent is not the only route: important capabilities must remain discoverable and manually accessible.
+15. Spatial 3D is the primary visual identity, not a mandate; dense and conventional workflows must retain efficient 2D and accessibility paths.
 
 ## 3. Status vocabulary and evidence
 
@@ -206,6 +209,7 @@ A feature is not done until all applicable criteria are met:
 - This master plan: scope, dependencies, phases, and exit gates.
 - Architecture baseline: component boundaries and invariants.\n- [GUI Product and Implementation Plan 1.0](architecture/eiraos-gui-product-and-implementation-plan-1.0.md): shell, screens, settings, interaction states, design system, frontend boundaries, accessibility, and GUI acceptance criteria.
 - [Intuitive 3D Desktop prototype](architecture/prototypes/eiraos-intuitive-3d-desktop.html): agreed visual baseline for the spatial workspace and application-object experience; a concept prototype, not production functionality.
+- GUI plan section 5.1 defines UX resilience, intent repair, discoverability, Gate denial explanations, hybrid desktop integration, latency targets, undo/recovery, identity context, and priority failure-path tests.
 - Gate Kernel, AI Interface, EDP specification and schema: normative contracts.
 - Ubuntu PC API catalog and coverage matrix: capability-level research and verification.
 - Code-review checklist: each requirement mapped to files, functions, tests, and evidence.
@@ -222,6 +226,8 @@ A feature is not done until all applicable criteria are met:
 4. Run existing focused tests and record actual results; add missing security regression tests.
 5. Verify the pinned Ubuntu 26.04.x environment and perform a read-only NetworkManager integration smoke test.
 6. Choose and implement the first bounded end-to-end vertical only after the Gate and contract prerequisites pass.
+7. Before broad GUI expansion, prototype and test the priority UX failure paths: ambiguous intent repair, understandable Gate denial with no bypass, and a normal file/browser/app workflow crossing the spatial workspace.
+8. Measure interaction and intent latency by stage; treat initial UX budgets as targets to validate, not assumed performance.
 7. Keep the PR open and unmerged until review and required checks are complete.
 
 ## 9. Open decisions — must be resolved with evidence

@@ -19,6 +19,7 @@ Environment=PYTHONPATH=/usr/lib/eira-os
 EnvironmentFile=-/etc/eira/eira.conf
 # Sessions live in the app database shared with the gate (intentd).
 Environment=EIRA_APP_DB=/data/eira-app.db
+Environment=EIRA_CONSENT_KEY_DB=/run/eira/consent-keys.db
 ExecStart=/usr/bin/eira-identityd
 Restart=always
 RestartSec=2s

@@ -27,7 +27,7 @@ Udviklingen er **AI-first**: I to hovedprogrammører ejer domæner, styrer AI-ag
 1. [`contracts/EIRA_Contract_Prompt_Framework_v0.1.md`](EIRA_Contract_Prompt_Framework_v0.1.md) — metoden
 2. [`contracts/prompts/README.md`](prompts/README.md) — hvilke kontrakter findes
 3. [`prototype/phase1/README.md`](../prototype/phase1/README.md) — kør reference runtime
-4. [`docs/specs/EIRA_Scope_Closure_Engineering_v0.1.md`](../docs/specs/EIRA_Scope_Closure_Engineering_v0.1.md) — hvad der er lukket vs. åbent
+4. [`docs/archive/specs-v0/EIRA_Scope_Closure_Engineering_v0.1.md`](../docs/archive/specs-v0/EIRA_Scope_Closure_Engineering_v0.1.md) — hvad der er lukket vs. åbent
 
 **Læs ikke** Situation UI Vision, Cognitive Runtime m.m. medmindre en kontrakt-prompt henviser eksplicit.
 
@@ -117,6 +117,6 @@ Vi ses i koden. Start med jeres første CP-* fra indeks — spørg hvis `depends
 | [`prompts/CP-INTENT-001.prompt.md`](prompts/CP-INTENT-001.prompt.md) | Intent engine |
 | [`prompts/CP-FLEET-001.prompt.md`](prompts/CP-FLEET-001.prompt.md) | Fleet daemon (B) |
 | [`errors-v1.md`](errors-v1.md) | Fejlkoder |
-| [`../docs/EIRA_Document_Map_v0.1.md`](../docs/EIRA_Document_Map_v0.1.md) | Navigation |
+| [`../docs/archive/sprints/EIRA_Document_Map_v0.1.md`](../docs/archive/sprints/EIRA_Document_Map_v0.1.md) | Navigation |
 
 *EIRA Engineering — Contract-as-Prompt v0.1*

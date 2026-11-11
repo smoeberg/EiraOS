@@ -6,7 +6,6 @@ import json
 import os
 import secrets
 import threading
-import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -15,11 +14,17 @@ from websockets.asyncio.server import Server, ServerConnection, serve
 
 from app.core.remote_store import RpcStateStore
 from app.core.store import StateStore
-from app.database import get_connection, utc_now_iso
-from app.fleet.device_registry import DeviceAuthorizationError, DeviceRegistry
+from app.database import utc_now_iso
+from app.fleet.device_registry import (
+    DeviceAuthorizationError,
+    DeviceRegistry,
+    device_fingerprint,
+)
 from app.fleet.e2ee import PayloadIntegrityError, StatePayloadEncryptor
 from app.fleet.merkle_sync import MerkleSyncEngine, StateHeader
+from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
+from app.ipc.socket_security import resolve_group_gid
 
 FLEET_UNAUTHORIZED = -32030
 FLEET_PROTOCOL_ERROR = -32031
@@ -439,75 +444,38 @@ def default_sync_service() -> FleetSyncService:
     return _DEFAULT_SERVICE
 
 
-def fleet_enroll(params: dict[str, Any]) -> dict[str, Any]:
-    """Backwards-compatible administrative inventory enrollment."""
-    device_id = params.get("device_id") or str(uuid.uuid4())
-    hostname = params.get("hostname", "unknown")
-    tenant_id = params.get("tenant_id", "default")
-    now = utc_now_iso()
-    with get_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO devices
-            (device_id, hostname, tenant_id, bundle_applied, bundle_pending,
-             compliance_pct, last_heartbeat, enrolled_at, status)
-            VALUES (?, ?, ?, NULL, NULL, 100, ?, ?, 'active')
-            ON CONFLICT(device_id) DO UPDATE SET
-              hostname = excluded.hostname,
-              last_heartbeat = excluded.last_heartbeat,
-              status = 'active'
-            """,
-            (device_id, hostname, tenant_id, now, now),
-        )
-    return {"device_id": device_id, "status": "enrolled", "enrolled_at": now}
+FLEET_ADMIN_GROUP = "eira-fleet-admin"
 
 
-def fleet_heartbeat(params: dict[str, Any]) -> dict[str, Any]:
-    device_id = params.get("device_id")
-    if not device_id:
-        raise JsonRpcError(-32602, "device_id required")
-    now = utc_now_iso()
-    with get_connection() as connection:
-        row = connection.execute(
-            "SELECT device_id FROM devices WHERE device_id = ?", (device_id,)
-        ).fetchone()
-        if not row:
-            raise JsonRpcError(-32602, "device not enrolled", {"device_id": device_id})
-        connection.execute(
-            """
-            UPDATE devices SET last_heartbeat = ?, bundle_applied = ?,
-            compliance_pct = ?, status = 'active' WHERE device_id = ?
-            """,
-            (
-                now,
-                params.get("bundle_applied"),
-                int(params.get("compliance_pct", 100)),
-                device_id,
-            ),
-        )
-    return {"device_id": device_id, "ack": True, "server_time": now, "commands": []}
+def _require_fleet_admin(function: Any) -> Any:
+    """Allow only root and members of ``eira-fleet-admin`` (from SO_PEERCRED).
+
+    Creating pairing codes and revoking devices decides which devices are in
+    the fleet. Membership of eira-clients (every desktop user and the model)
+    is not enough. Fails closed if the group does not exist or the caller is
+    unknown.
+    """
+
+    def guarded(params: dict[str, Any]) -> Any:
+        peer = params.pop(PEER_KEY, None)
+        if not _is_fleet_admin(peer):
+            raise JsonRpcError(FLEET_UNAUTHORIZED, "fleet administrator required")
+        return function(params)
+
+    guarded.wants_peer = True  # type: ignore[attr-defined]
+    return guarded
 
 
-def fleet_device_get(params: dict[str, Any]) -> dict[str, Any]:
-    device_id = params.get("device_id")
-    if not device_id:
-        raise JsonRpcError(-32602, "device_id required")
-    with get_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM devices WHERE device_id = ?", (device_id,)
-        ).fetchone()
-    if not row:
-        raise JsonRpcError(-32602, "device not found")
-    return dict(row)
-
-
-def fleet_list(params: dict[str, Any]) -> list[dict[str, Any]]:
-    with get_connection() as connection:
-        rows = connection.execute(
-            "SELECT * FROM devices ORDER BY last_heartbeat DESC LIMIT ?",
-            (min(int(params.get("limit", 50)), 500),),
-        ).fetchall()
-    return [dict(row) for row in rows]
+def _is_fleet_admin(peer: Any) -> bool:
+    if peer is None or getattr(peer, "uid", None) is None:
+        return False
+    if peer.uid == 0:
+        return True
+    gid = resolve_group_gid(FLEET_ADMIN_GROUP)
+    if gid is None:
+        return False
+    groups = peer.groups if peer.groups is not None else frozenset()
+    return gid == peer.gid or gid in groups
 
 
 def _rpc_guard(function: Any) -> Any:
@@ -524,15 +492,16 @@ def _rpc_guard(function: Any) -> Any:
 
 def register_fleet_handlers(server: Any) -> None:
     service = default_sync_service()
-    server.register("fleet.enroll", fleet_enroll)
-    server.register("fleet.heartbeat", fleet_heartbeat)
-    server.register("fleet.device.get", fleet_device_get)
-    server.register("fleet.list", fleet_list)
+    # The legacy inventory methods (fleet.enroll, fleet.heartbeat,
+    # fleet.device.get, fleet.list) are removed: they wrote an unauthenticated
+    # second device table next to the registry. The registry is the only one.
     server.register(
         "fleet.pairing.create",
-        _rpc_guard(
-            lambda params: service.registry.create_pairing_token(
-                int(params.get("ttl_seconds", 300))
+        _require_fleet_admin(
+            _rpc_guard(
+                lambda params: service.registry.create_pairing_token(
+                    int(params.get("ttl_seconds", 300))
+                )
             )
         ),
     )
@@ -542,8 +511,10 @@ def register_fleet_handlers(server: Any) -> None:
     )
     server.register(
         "fleet.device.revoke",
-        _rpc_guard(
-            lambda params: service.registry.revoke(str(params["device_id"])).as_dict()
+        _require_fleet_admin(
+            _rpc_guard(
+                lambda params: service.registry.revoke(str(params["device_id"])).as_dict()
+            )
         ),
     )
     server.register("sync.handshake", _rpc_guard(service.handshake))
@@ -563,14 +534,15 @@ def register_fleet_handlers(server: Any) -> None:
         server.add_cleanup(runtime.stop)
 
 
-def generate_device_keypair(device_id: str, name: str) -> Any:
+def generate_device_keypair(name: str) -> Any:
+    """A test device with a random key; its id is the key's fingerprint."""
     import base64
     import os
 
     from app.fleet.device_registry import PairedDevice
     pub = base64.b64encode(os.urandom(32)).decode()
     return PairedDevice(
-        device_id=device_id,
+        device_id=device_fingerprint(pub),
         name=name,
         public_key=pub,
         os_type="Ubuntu",

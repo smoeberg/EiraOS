@@ -136,16 +136,13 @@ def test_every_intentd_method_is_classified():
 
 
 def test_former_bypasses_answer_gate_required_and_never_execute(monkeypatch, tmp_path):
-    """Over the real JSON-RPC server: no former write path can reach
-    execute_intent, the stated appender or the journey store."""
-    from app.daemons import intent_engine
+    """Over the real JSON-RPC server: no former write path can reach the
+    stated appender. The old executor and journey writer no longer exist."""
     from app.daemons.base import JsonRpcServer
     from app.daemons.intentd import IntentDaemonService, register_intent_handlers
     from app.gate.ipc import GATE_REQUIRED
 
     touched = []
-    monkeypatch.setattr(intent_engine, "execute_intent", lambda *a, **k: touched.append("execute_intent"))
-    monkeypatch.setattr(intent_engine, "advance_journey", lambda *a, **k: touched.append("advance_journey"))
     service = IntentDaemonService.__new__(IntentDaemonService)
     monkeypatch.setattr(service, "execute", lambda *a, **k: touched.append("stated_append"), raising=False)
     server = JsonRpcServer(name="intent-test", daemon="intentd")

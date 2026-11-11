@@ -185,7 +185,7 @@ Dette dokument fastlægger retningen, ikke en færdig implementering.
 
 - ISOOKO på CORDIS: https://cordis.europa.eu/project/id/779793
 - Ushahidi: https://www.ushahidi.com/
-- EIRA Platform Principles: `docs/specs/EIRA_Platform_Principles_v1.0.md`
-- EIRA Cognitive Runtime: `docs/specs/EIRA_Cognitive_Runtime_v1.0.md`
-- EIRA Object Graph Specification: `docs/specs/EIRA_Object_Graph_Specification_v0.3.md` (findes i tre versioner, v0.1–v0.3; skal afklares ved oprydningen af `docs/specs/`)
+- EIRA Platform Principles: `docs/archive/specs-v0/EIRA_Platform_Principles_v1.0.md`
+- EIRA Cognitive Runtime: `docs/archive/specs-v0/EIRA_Cognitive_Runtime_v1.0.md`
+- EIRA Object Graph Specification: `docs/archive/specs-v0/EIRA_Object_Graph_Specification_v0.3.md` (findes i tre versioner, v0.1–v0.3; skal afklares ved oprydningen af `docs/specs/`)
 - ADR-0005, ADR-0006 og EIRA-CONTEXT 1.0 (se øverst)

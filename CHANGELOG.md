@@ -27,7 +27,7 @@ Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
   evalueringsstatus fra Veritas Shield.
 - End-to-end UI-test i `ui/tests/e2e_canvas.test.ts` (vitest + testing-library): rendering af
   tilstandsgraf, forslagsflow og IPC-interaktion mod mockede daemon-svar.
-- Dokumentation: [EIRA_Sprint7_Summary.md](docs/EIRA_Sprint7_Summary.md).
+- Dokumentation: [EIRA_Sprint7_Summary.md](docs/archive/sprints/EIRA_Sprint7_Summary.md).
 
 ### Sprint 6 — Android bindings + FFI/WASM state export
 - FFI-grænseflade i `crates/eira-core/src/ffi.rs` med fail-closed pointerhåndtering og
@@ -35,7 +35,7 @@ Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
 - Kotlin binding (`android/eira-core-binding/`) og Gradle-scaffolding for Android-klienten.
 - Integrationstest for FFI state-eksport i `tests/test_android_ffi_state.py`.
 - Status: issue #68 (E2EE) og #69 (device pairing) er lukket, og koden ligger på main. Dokumentation:
-  [EIRA_Sprint6_Summary.md](docs/EIRA_Sprint6_Summary.md).
+  [EIRA_Sprint6_Summary.md](docs/archive/sprints/EIRA_Sprint6_Summary.md).
 
 ## [0.5.0] — foreslået release, ikke tagget endnu
 
@@ -52,7 +52,7 @@ Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
   så udløbssammenligninger aldrig fail-open.
 - Integrationssuite `tests/test_fleet_e2ee_sync.py`: to-enheds E2EE-synkronisering med
   identisk SHA3-256-kæde, afvisning af uparrede enheder og rekonciliering efter offline ændringer.
-- Dokumentation: [EIRA_Sprint5_Summary.md](docs/EIRA_Sprint5_Summary.md).
+- Dokumentation: [EIRA_Sprint5_Summary.md](docs/archive/sprints/EIRA_Sprint5_Summary.md).
 
 ## [0.4.0] — foreslået release, ikke tagget endnu
 
