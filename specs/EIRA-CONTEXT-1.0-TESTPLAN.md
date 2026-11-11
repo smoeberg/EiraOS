@@ -25,7 +25,7 @@
 | X-1 | T-X1-a, T-X1-b | Nej | Nej |
 | R-1 | T-R1-a … T-R1-d | Nej | Nej |
 | F-1 | T-F1-a … T-F1-c | Nej | Nej |
-| A-1 | T-A1-a … T-A1-e | Nej | Nej |
+| A-1 | T-A1-a … T-A1-g | Nej | Nej |
 
 En invariant er **verificeret**, når alle dens tests består på det niveau, tabellerne angiver, *og* alle dens mutanter (§2) får mindst én af testene til at fejle.
 
@@ -249,7 +249,7 @@ Kører på N3 med emuleret TPM (`swtpm`). En installeret VM tilmeldes Fleet, få
 |---|---|---|
 | T-A1-a | Åbn hver kontekst på klonen | Forseglingen af CMK kan ikke låses op; konteksterne forbliver låste; LUKS-filerne kan kun læses som chiffertekst |
 | T-A1-b | Synkronisér eller skriv et manifest fra klonen | Enhedens signeringsnøgle findes ikke på den nye TPM; intet manifest kan signeres; hjemmet modtager intet, der godtages (M-1) |
-| T-A1-c | Udfør en beskyttet handling gennem gaten og bed `identityd` om samtykkenøglen | Rettighedssættets anker kan ikke verificeres på den nye TPM, så gaten afviser; samtykkenøglen udleveres ikke |
+| T-A1-c | Forbind til Fleet (mTLS) og hent et nyt rettighedssæt; brug en samtykkenøgle fra en session, der var åben, da disken blev kopieret | mTLS-håndtrykket fejler, fordi nøgleblobben ikke kan bruges på den nye TPM; intet nyt sæt hentes. Ingen samtykkenøgle findes på disken, og sessionen er ugyldig efter genstart (EIRA-CONSENT-AGENT). Et allerede cachet sæt gælder som offline, til det udløber; testen bekræfter, at det udløber på det forventede tidspunkt og ikke kan fornyes |
 | T-A1-d | Tilmeld den nye VM normalt (§4.1) og log ind | Data synkroniseres tilbage fra hjemmet; enheden får sin egen `device_id`, sin egen plads på enhedslisten og sine egne nøgler; intet fra klonens disk genbruges som autoritet |
 
 | T-A1-e | Klonen udgiver sig for den oprindelige enhed over for Fleet og hjemmet i alle kombinationer nedenfor | Se matrixen |
@@ -258,7 +258,7 @@ Kører på N3 med emuleret TPM (`swtpm`). En installeret VM tilmeldes Fleet, få
 
 | `device_id` | Offentlig nøgle | Auth-token | Forventet |
 |---|---|---|---|
-| Gammel | Gammel | Gammelt | Afvist: klonen kan ikke bevise besiddelse af den private nøgle, som kun findes i den gamle TPM |
+| Gammel | Gammel | Gammelt | Afvist: klonen kan ikke bevise besiddelse af den private nøgle (mTLS-håndtrykket kræver en signatur med nøglen), som kun findes i den gamle TPM. **Lykkes i dag**, fordi nøglen og tokenet ligger i filer; lukkes af §5.0 |
 | Gammel | Ny | Gammelt | Afvist: nøglen matcher ikke registret |
 | Gammel | Ny | Intet | Afvist |
 | Ny, selvvalgt | Ny | Intet | Afvist: `device_id` er ikke fingeraftrykket af nøglen |
@@ -267,7 +267,10 @@ Kører på N3 med emuleret TPM (`swtpm`). En installeret VM tilmeldes Fleet, få
 
 Hver afvisning auditeres. Ingen kombination må give adgang til den oprindelige enheds rettighedssæt, kontekster eller tilmeldingsstatus.
 
-**Mutanter:** CTX-A1-4 `device_id` tages fra forespørgslen; CTX-A1-5 gyldigt token accepteres uden bevis for den private nøgle; CTX-A1-1 CMK gemmes ved siden af forseglingen (fx som fallback i en fil); CTX-A1-2 enhedens signeringsnøgle ligger i en fil i stedet for i TPM'en; CTX-A1-3 `device_id` læses fra disken i stedet for at afledes af TPM-nøglen.
+| T-A1-f | Inspicér nøglerne på en installeret enhed med TPM | Signerings- og ECDH-nøglen har attributterne `fixedTPM` og `fixedParent`; `device.key` er en TSS2-nøgleblob og ikke en almindelig PEM-nøgle; `TPM2_Duplicate` afvises |
+| T-A1-g | Installér på en VM uden TPM | Fleet-tilmelding afvises (`E_CONTEXT_POLICY`); en organisationskontekst kan ikke åbnes; en personlig kontekst kan oprettes, skallen viser advarslen, og enhedslisten har `key_protection: "file"`; en organisationskontekst afviser en enhed med `"file"` på listen |
+
+**Mutanter:** CTX-A1-6 nøglen dannes i software og importeres til TPM'en (kan eksporteres); CTX-A1-7 en enhed uden TPM tilmeldes Fleet med filnøgle; CTX-A1-4 `device_id` tages fra forespørgslen; CTX-A1-5 gyldigt token accepteres uden bevis for den private nøgle; CTX-A1-1 CMK gemmes ved siden af forseglingen (fx som fallback i en fil); CTX-A1-2 enhedens signeringsnøgle ligger i en fil i stedet for i TPM'en; CTX-A1-3 `device_id` læses fra disken i stedet for at afledes af TPM-nøglen.
 
 ## 5. Fund under arbejdet med planen
 
