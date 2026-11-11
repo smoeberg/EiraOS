@@ -149,7 +149,11 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 | 18 år | Intet. Værgestyringen ophører automatisk, og konteksten bliver fuldt personlig. Data har hele tiden været barnets |
 
 - **Alderstrin afgøres uden at gemme fødselsdato:** ved barnets login med eID bruges en aldersattest ("over 13", "over 18"), som EU Digital Identity Wallet understøtter. EiraOS gemmer ikke CPR-nummer eller fødselsdato.
-- Hvordan værgerelationen verificeres (hvem er værge for hvem), specificeres, før funktioner med børns persondata implementeres.
+- **Værgerelationen i 1.0** (besluttet af ejer): samme niveau som branchen (Apple Familiedeling, Microsoft Family Safety), men stærkere bevis for voksenstatus. Som hos dem bekræftes, at værgen er voksen, ikke at værgen er barnets forælder:
+  - **Voksenstatus via eID-aldersattest** ("over 18"), ikke via betalingskort.
+  - **Den første værge opretter barnets kontekst** og inviterer den anden. To værger er ligestillede; ingen af dem kan fjerne den anden alene. Uenighed om værgeskab løses uden for EiraOS og afspejles i EiraOS, når begge værger eller en officiel kilde bekræfter det.
+  - **Gennemsigtighed som værn:** fra 13 år kan barnet selv se, hvem dets værger er, og hvilke regler der gælder.
+- **Officiel bekræftelse af forældremyndighed** (fx fra offentlige registre eller som attest i EU Digital Identity Wallet) undersøges parallelt og tilføjes, når der findes en lovlig adgangsvej. Det er ikke et krav for 1.0.
 
 ## Konsekvenser for det eksisterende
 
