@@ -1,6 +1,6 @@
 # ADR-0005 — Kontekster: enheden er neutral, rollen bestemmer, data bor hos konteksten
 
-**Status:** Foreslået, til ejerens accept (11. november 2026). K1–K6 er ejerens retning. De åbne spørgsmål afventer beslutning.
+**Status:** Foreslået, til ejerens accept (11. november 2026). K1–K8 er ejerens retning. De resterende åbne spørgsmål afventer beslutning.
 **Gælder for:** `identityd`, Gate (lag 4 og 6), `fleetd`/`eira-governance-agent`, graphd (universet), Web App Manager (ADR-0004 D3), lagring og synkronisering, installer og første opstart
 **Relateret:** [ADR-0003](ADR-0003-rettigheder-fra-fleet.md) (rettigheder fra Fleet), [ADR-0004](ADR-0004-gui-arkitektur-vendor-neutral.md) (vendor-neutral), [EIRA-IDENTITY 1.0](../../specs/EIRA-IDENTITY-1.0.md)
 
@@ -9,6 +9,8 @@
 > **Enheden ejer intet. Personen har roller. Hver rolle bor, hvor den hører hjemme.**
 >
 > Den fysiske enhed er "dum": det er rollen i EiraOS, der afgør, om man er på arbejde, har fri eller sidder til bestyrelsesmøde i badmintonklubben.
+>
+> **Exit-garanti:** Dine data kan altid læses uden EiraOS. Formatet, de gemmes i, er åbent dokumenteret, og et åbent værktøj kan læse dem med personens (eller organisationens) nøgler.
 
 ## Begreber
 
@@ -68,6 +70,27 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 - Fleet-administratoren bestemmer, om enheden er **lukket** (kun organisationens kontekster) eller **åben** for flere identiteter og kontekster (fx fritid på en arbejds-pc).
 - En enhed uden Fleet styres af personen.
 
+### K7 — Isolation: én Linux-bruger pr. kontekst bag én samlet oplevelse (besluttet)
+
+Hver kontekst kører som sin egen Linux-bruger, så kernen holder filer og processer adskilt (K2). Brugeren ser én EiraOS. Grænserne, der opstår, er netop dem, der alligevel skal kontrolleres:
+
+| Område | Løsning |
+|---|---|
+| Skærm | Compositoren giver hver kontekst sin egen Wayland-socket (`wp_security_context_v1`) og ved dermed, hvilken kontekst hvert vindue tilhører (ADR-0004 D6) |
+| Lyd, D-Bus, notifikationer | Pr. kontekst. Kun samlet output (lyd ud, notifikationer) går gennem en snæver formidler |
+| Udklipsholder og filer | Kun via gaten (K2) |
+| Eira-skallen | Kører som en neutral bruger uden adgang til konteksternes data. Ser kun det, hver kontekst selv udstiller (navn, ikoner, status) |
+
+Én Linux-bruger med kryptering pr. kontekst er fravalgt: et kompromitteret program i én kontekst kunne læse en anden, så snart den er låst op. Containere under samme UID er fravalgt af samme grund.
+
+### K8 — Synkronisering i tre udskiftelige lag (besluttet)
+
+1. **Lagring:** standard og uden logik. S3-kompatibel først, WebDAV som nummer to. Kunden kan altid flytte til en anden udbyder.
+2. **Kryptering og format:** EiraOS' eget, men åbent dokumenteret (exit-garantien). Klienten krypterer i indholdsadresserede blokke, før noget sendes. Et Merkle-træ over blokindekset beviser, at intet er udeladt eller ombyttet.
+3. **Fletning:** strukturerede data (universet, objekter, relationer i graphd) flettes med et modent, åbent CRDT, fx Automerge (Rust), ikke en egen algoritme. Filer flettes ikke: samtidige ændringer bliver to versioner og et synligt konfliktobjekt (K4).
+
+`fleetd`s nuværende Merkle-synkronisering videreudvikles ikke som fundament; teknikken genbruges i lag 2.
+
 ## Konsekvenser for det eksisterende
 
 - **ADR-0003 og RIGHTS-SET** binder i dag rettighedssæt til en enhed (`tenant_id`, `device_id`). Det skal udvides til at binde til en kontekst, så en organisation kan styre sin kontekst på en enhed, den ikke ejer. Revision af RIGHTS-SET kræves.
@@ -75,15 +98,17 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 - **Sessioner** i `identityd` og gaten bliver pr. kontekst. Samtykkeagenten (EIRA-CONSENT-AGENT) viser altid, i hvilken kontekst et samtykke gives.
 - **graphd:** et univers pr. kontekst.
 - **Web App Manager:** profil = kontekst (afløser ADR-0004 O-4).
-- **`fleetd`** har E2EE-synkronisering med Merkle-træer, som kan være udgangspunkt for K3/K4, men skal vurderes mod etablerede protokoller (O-3).
+- **`fleetd`**s E2EE-synkronisering med Merkle-træer afløses af K8. Merkle-teknikken genbruges i lag 2.
+- **Compositor og skal (ADR-0004):** én Wayland-socket pr. kontekst og en neutral skal-bruger (K7) skal ind i compositor-sporet og Eira UI.
+- **Ny kontrakt:** et åbent, dokumenteret lagerformat (K8 lag 2) med et referenceværktøj, der læser det uden EiraOS.
 
 **Rækkefølge (forslag):** ADR-0005 accepteres → kontrakt for kontekster og lagring → EIRA-IDENTITY 1.1 (identitet pr. kontekst) → Web App Manager. Web App Manager bygges ikke før konteksten, fordi dens profiler er konteksterne.
 
 ## Åbne spørgsmål
 
-- **O-1 Isolation i OS'et.** Én Linux-bruger pr. kontekst (kernen holder filer og processer adskilt) eller én Linux-bruger med kryptering pr. kontekst (adskillelsen hviler på EiraOS' kode)? Forslag: én Linux-bruger pr. kontekst, skjult bag én samlet oplevelse.
+- ~~**O-1 Isolation i OS'et.**~~ Besluttet: K7.
 - **O-2 Genoprettelsestjenesten.** Hvem driver den? Den skal kunne udskiftes og må ikke være en Eira-monopol. Kan flere uafhængige tjenester dele en nøgle (fx 2 af 3)?
-- **O-3 Synkroniseringsprotokol.** Videreudvikle `fleetd`s Merkle-synkronisering, eller bygge på en etableret protokol? Afgør konfliktmodellen i K4.
+- ~~**O-3 Synkroniseringsprotokol.**~~ Besluttet: K8.
 - **O-4 Standard for maksimal offline-periode** for personlige kontekster.
 - **O-5 Personen på tværs af kontekster.** Kender enheden sammenhængen mellem personens kontekster (så skift er hurtigt), mens organisationerne ikke gør (K2)? Og hvad sker der, når to personer deler en enhed?
 - **O-6 Deling mellem kontekster.** Hvilke handlinger må flytte data mellem kontekster, og hvem afgør det, når to regelsæt er uenige? Forslag: den strengeste vinder.
