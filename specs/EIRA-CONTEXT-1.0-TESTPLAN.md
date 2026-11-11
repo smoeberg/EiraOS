@@ -23,6 +23,8 @@
 | E-1 | T-E1-a … T-E1-e | Nej | Nej |
 | V-1 | T-V1-a … T-V1-d | Nej | Nej |
 | X-1 | T-X1-a, T-X1-b | Nej | Nej |
+| R-1 | T-R1-a … T-R1-d | Nej | Nej |
+| F-1 | T-F1-a … T-F1-c | Nej | Nej |
 
 En invariant er **verificeret**, når alle dens tests består på det niveau, tabellerne angiver, *og* alle dens mutanter (§2) får mindst én af testene til at fejle.
 
@@ -213,9 +215,32 @@ Testes på N1 med et injiceret ur (samme mønster som `app/clock.py`) og verific
 
 **Mutant:** CTX-X1-1 EiraOS skriver et felt, som kun EiraOS' egen kode forstår (testen fanger det, fordi eksporten afviger).
 
+### R-1 Tilbagekaldelse (§5.5, §8)
+
+| Test | Niveau | Trin | Forventet |
+|---|---|---|---|
+| T-R1-a | N2 | Enhed D tilbagekaldes; CMK roteres; enhed A skriver en ny fil. Forsøg at dekryptere de nye blokke og det nye manifest med D's gamle CMK | Fejler; `keys/devices/<D>` findes ikke længere |
+| T-R1-b | N2/N3 | D kommer online og synkroniserer | D ser, at den ikke er på enhedslisten; konteksten går til tilstanden *fjernet* (§4) på D; `E_CONTEXT_DEVICE_REVOKED`; audithændelse |
+| T-R1-c | N1 | D er offline under tilbagekaldelsen | D låser konteksten senest ved `max_offline_days` (samme ur som O-1) |
+| T-R1-d | N2 | Organisationskontekst: rotationen | `keys/org` er pakket med den nye CMK; den gamle pakning er væk |
+
+**Mutanter:** CTX-R1-1 rotationen springes over; CTX-R1-2 nye blokke krypteres med den gamle CMK; CTX-R1-3 `keys/devices/<D>` slettes ikke; CTX-R1-4 D ignorerer, at den mangler på listen.
+
+### F-1 Glemsel (§4.3)
+
+Kører på N3. Konteksten åbnes og får et kendt `display_name` og en markørtekst, der skrives i en fil, i en webapp (titel og URL) og i en notifikation. Konteksten låses, uret stilles frem forbi `forget_after_days`, og glemslen udløses.
+
+| Test | Trin | Forventet |
+|---|---|---|
+| T-F1-a | Tjek TPM, `/var/lib/eira/contexts/`, `/etc/passwd`, `eira-contextd`s tabel og skallens cache | Ingen forsegling, ingen LUKS-fil, ingen bruger, ingen kobling, intet cache-indhold for konteksten |
+| T-F1-b | Som root: søg efter markørteksten og `display_name` i hele filsystemet (uden `/proc` og `/sys`), i journalen og på den dekrypterede rodenhed (`/dev/mapper/…`) og swap, byte for byte | Ingen forekomster |
+| T-F1-c | Åbn konteksten igen online | Den synkroniseres fra hjemmet som ved første login (§4.1); intet genbruges fra før glemslen |
+
+**Mutanter:** CTX-F1-1 TPM-forseglingen fjernes ikke; CTX-F1-2 skallens cache med `display_name` ligger på disk; CTX-F1-3 `display_name` skrives i journalen; CTX-F1-4 webappens cache ligger uden for kontekstens volumen.
+
 ## 5. Fund under arbejdet med planen
 
 1. **Manglende fejlkoder.** Kontrakten nævnte ikke, hvilken fejl en manifest-kollision, en AEAD-fejl på en blok og et hjem uden opret-hvis-fraværende giver. Rettet i kontrakten v0.3 (§12): `E_CONTEXT_INTEGRITY` dækker nu også blokke og manifest-kollision, og `E_CONTEXT_HOME_UNSUPPORTED` er ny.
 2. **Den eksisterende `app/daemons/contextd.py` modsiger kontrakten.** Den har en fast liste af seks kontekster, én "aktiv" kontekst og en beløbsgrænse for automatisk godkendelse i wallet pr. kontekst. Den skal erstattes af `eira-contextd`, ikke udbygges. Beløbsgrænsen hører under gaten og rettighedssættet, ikke under kontekstlaget.
 3. **`/proc` er ikke nævnt i §3.3.** Som standard kan alle brugere læse `/proc/<pid>/cmdline` for alle processer, så kontekst A kan se, hvilke webapps og URL'er kontekst B kører. Anbefaling: montér `/proc` med `hidepid=invisible` og tilføj det til I-1. Det kræver ejerens beslutning, fordi det også påvirker systemværktøjer.
-4. **Invarianter uden for §12a, som bør overvejes:** tilbagekaldelse (en tilbagekaldt enhed kan intet læse, der er skrevet efter rotation, §5.5/§8) og glemsel (en glemt kontekst efterlader intet læsbart, §4.3). Begge er sikkerhedsrelevante og ikke dækket.
+4. **Tilbagekaldelse og glemsel** manglede i §12a. Tilføjet som R-1 og F-1 (besluttet af ejer).
