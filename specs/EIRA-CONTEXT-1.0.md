@@ -313,13 +313,14 @@ En kontekst med `governance.source = guardian` har et regeldokument signeret af 
 
 **Internetfiltrering: kilde.** Filterkilden er udskiftelig (ADR-0004 D1) og vælges i reglerne:
 
-- **Standard:** DNS4EU Public Service, variant *Protective + Child Protection* (EU-medfinansieret, drevet af et europæisk konsortium, krypteret DoH/DoT). Forudsætning, der skal verificeres: DNS4EU's vilkår beskriver tjenesten som rettet mod den enkelte borger og ikke kommerciel brug; at barnets enhed forespørger direkte på familiens vegne skal afklares med operatøren, før det bliver standard.
-- **Alternativ uden ekstern forespørgsel:** lokal filtrering i enhedens resolver med åbne kategorilister (fx UT1-listerne fra Université Toulouse Capitole, som bruges bredt i skoler). Licens og opdateringsvej skal afklares.
+- **Standard (besluttet af ejer):** DNS4EU Public Service, variant *Protective + Child Protection* (EU-medfinansieret, drevet af et europæisk konsortium), altid over krypteret DoH/DoT. Bruges fra 1.0.
+  - **Afklaring i gang:** DNS4EU's vilkår beskriver den offentlige tjeneste som rettet mod den enkelte borger og ikke kommerciel brug. At barnets enhed forespørger direkte på familiens vegne afklares med operatøren. Viser svaret, at det ikke er tilladt, skiftes standarden til alternativet nedenfor uden ændring af reglernes format.
+- **Alternativ uden ekstern forespørgsel:** lokal filtrering i enhedens resolver med åbne kategorilister (fx UT1-listerne fra Université Toulouse Capitole, som bruges bredt i skoler). Licens og opdateringsvej skal afklares. Kan vælges i reglerne allerede i 1.0.
 - **Begrænsning, der skal stå i brugerfladen:** DNS-filtrering spærrer domæner, ikke indhold inden for et tilladt domæne.
 
 **Brugsoverblik.** Barnets enhed skriver et overblik (tid pr. dag, hvilke webapps, programmer og kontekster) krypteret til værgernes nøgler i familiens hjem. Det indeholder aldrig indhold.
 
-**Værgens webvisning** (besluttet af ejer). Værger kan se overblikket og ændre reglerne fra en browser, også på deres nuværende telefon:
+**Værgens webvisning** (besluttet af ejer). Værger skal kunne bruge deres nuværende telefon: de ser overblikket og ændrer reglerne fra en browser uden at installere noget:
 
 - Webvisningen er en statisk webapp. Den henter de krypterede data direkte fra familiens hjem og dekrypterer dem **i værgens browser**. Den, der leverer webappen (Eira eller familien selv), kan ikke læse reglerne eller overblikket (ID-hjemmet, K11, berøres ikke).
 - Værgens nøgle i browseren afledes af en passkey via WebAuthn PRF-udvidelsen, så ingen adgangskode eller nøglefil skal gemmes på telefonen.
