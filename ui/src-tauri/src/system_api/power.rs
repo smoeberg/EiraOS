@@ -514,11 +514,17 @@ mod dbus_tests {
         None
     }
 
-    fn rand_suffix() -> u64 {
-        std::time::SystemTime::now()
+    /// Unique per bus within this process. The tests run in parallel; a
+    /// clock-only suffix gave two buses the same directory on a coarse clock,
+    /// and the test without logind then reached the other test's fake one.
+    fn rand_suffix() -> String {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!("{n}-{nanos}")
     }
 
     struct FakeLogin1 {
