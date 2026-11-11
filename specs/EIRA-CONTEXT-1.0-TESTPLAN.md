@@ -1,6 +1,6 @@
 # EIRA Context 1.0 — testplan
 
-**Status:** Udkast v0.1 til ejerens accept.
+**Status:** Accepteret af ejer 11. november 2026. Normativ for implementeringen af EIRA-CONTEXT.
 **Grundlag:** [EIRA-CONTEXT-1.0](EIRA-CONTEXT-1.0.md) v0.3 (accepteret 11. november 2026), §12a.
 **Formål:** Planen fastlægger, hvordan hver invariant i §12a bevises, og hvad der skal til, før en invariant må kaldes *verificeret*. Den skriver ingen kode. Implementeringen er næste trin.
 
