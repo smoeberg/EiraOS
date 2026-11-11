@@ -103,6 +103,7 @@ Grænserne mellem kontekster er absolutte (ADR-0005 K2). Den eneste undtagelse e
 - **Kalender-glimt** (besluttet af ejer, 11. november 2026): et fællesskab kan derudover tillade, at dets aktiviteter vises med **tidspunkt og sted** på tværs, fx *"torsdag 17–18, Havnsø Stadion"*. Kun tid og sted: ingen titel, ingen beskrivelse, ingen deltagere, ingen beskeder. Det giver familien ét overblik over hverdagen (skole, sport, musikskole) uden at indhold krydser grænsen.
   - **Arbejdskontekster** viser som standard kun aktivitet (antal og tidspunkt), ikke kalender-glimt.
   - Kontekstens regelsæt sætter niveauet (`aktivitet` eller `kalender`). Personen vælger, hvilke kontekster der vises.
+  - **Overfør glimt** (ADR-0005 K12): personen kan oprette en begivenhed i en anden kontekst ud fra et kalender-glimt. Kun tid og sted følger med; titlen skriver personen selv.
 - Glimt vises af den neutrale skal (ADR-0005 K7) og skrives aldrig ind i en anden konteksts lager eller indbakke.
 - Kontekstens regelsæt bestemmer, om den må vise aktivitet udadtil. En organisation kan via Fleet forbyde glimt fra sin kontekst. Personen bestemmer, hvilke kontekster der viser glimt.
 
