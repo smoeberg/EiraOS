@@ -153,7 +153,9 @@ PY
 # and it reaches the gate, which refuses it without a human's delegation.
 check modeld-active wait_for 60 systemctl is-active --quiet eira-modeld.service
 check modeld-runs-as-model sh -c '[ "$(ps -o uid= -p "$(systemctl show -p MainPID --value eira-modeld.service)" | tr -d " ")" = "$(id -u eira-model)" ]'
-check modeld-confined sh -c 'grep -q "eira-modeld (enforce)" "/proc/$(systemctl show -p MainPID --value eira-modeld.service)/attr/current"'
+check modeld-profile-enforced sh -c "grep -q '^/usr/bin/eira-modeld (enforce)' /sys/kernel/security/apparmor/profiles"
+check modeld-confined sh -c 'ps -o label= -p "$(systemctl show -p MainPID --value eira-modeld.service)" | grep -q "eira-modeld (enforce)"'
+
 check modeld-no-network sh -c '[ "$(systemctl show -p PrivateNetwork --value eira-modeld.service)" = yes ]'
 check modeld-reaches-gate-and-is-refused python3 - <<'PY'
 import json, socket
