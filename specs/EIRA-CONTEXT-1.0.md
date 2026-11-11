@@ -1,7 +1,7 @@
 # EIRA Context 1.0 — kontekster, lagring og synkronisering
 
 **Status:** Accepteret af ejer 11. november 2026. Normativ. Testplan: [EIRA-CONTEXT-1.0-TESTPLAN](EIRA-CONTEXT-1.0-TESTPLAN.md).
-**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`; invariant A-1; Fleet-sync bærer ikke brugerdata)
+**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`; invariant A-1; Fleet-sync bærer ikke brugerdata; enhedens nøgler i TPM'en (§5.0), P-256 i stedet for Ed25519/X25519)
 **Grundlag:** [ADR-0005](../docs/decisions/ADR-0005-kontekster-og-datas-hjem.md) (K1–K11), [ADR-0004](../docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [ADR-0006](../docs/decisions/ADR-0006-livets-indbakke.md) L5 (glimt)
 **Berører:** ny `eira-contextd` (rod-formidler), `identityd`, gaten, graphd, samtalelaget, den neutrale skal, compositoren, `eira-governance-agent`/Fleet, RIGHTS-SET (revision, §10)
 
@@ -27,7 +27,7 @@ Hvor koden har en UID (fx fra `SO_PEERCRED`) og skal bruge en kontekst, slår de
 |---|---|---|
 | Kontekst | `context_id` | `ctx_` + 26 tegn base32 (128 bit tilfældigt). Ændres aldrig. **Kontekstens eneste identifikator** i Fleet, ID-hjemmet og kontekst-hjemmet. Den er ikke hemmelig: sikkerheden ligger i nøglerne (§5), ikke i id'et |
 | Identitet | `identity` | `did:eira:<provider-id>.<subjekt>` (EIRA-IDENTITY) |
-| Enhed | `device_id` | Fingeraftryk (SHA-256) af enhedens Ed25519-signeringsnøgle |
+| Enhed | `device_id` | Fingeraftryk (SHA-256) af enhedens offentlige signeringsnøgle (§5.0) |
 | Person | – | Har **ingen** identifikator i EiraOS ud over sine identiteter og (valgfrit) sit ID-hjem-pseudonym (§9). Organisationer kan ikke koble kontekster til en person (K2) |
 
 ## 2. Kontekst-posten
@@ -142,21 +142,34 @@ En kontekst, der ikke har været åben i `policy.forget_after_days` dage, fjerne
 
 ## 5. Nøgler
 
+### 5.0 Enhedens nøgler (besluttet af ejer)
+
+Hver enhed har to nøglepar på kurven **P-256**: en signeringsnøgle (ECDSA) og en nøgle til nøgleudveksling (ECDH). P-256 er valgt, fordi TPM 2.0 understøtter den overalt; Ed25519 og X25519 understøttes ikke af almindelige TPM'er.
+
+- **Nøglerne dannes i TPM'en og kan ikke eksporteres** (`fixedTPM`, `fixedParent`). På disken ligger kun TPM'ens indpakkede nøgleblob, som er ubrugelig uden netop denne TPM. En klonet disk kan derfor hverken signere, dekryptere eller bevise, at den er enheden (invariant A-1).
+- Samme signeringsnøgle bruges til manifester (§6.3), til mTLS mod Fleet (EIRA-FLEET-RIGHTS-API §8) og som grundlag for `device_id`.
+- **Hvad det beskytter mod:** kloning og tyveri af disken. **Ikke** root på den kørende enhed: den, der har root, kan bruge nøglen via TPM'en, så længe enheden kører. Det kræver målt opstart og remote attestation og er udskudt (EIRA-FLEET-RIGHTS-API §6 pkt. 1).
+
+**Enheder uden TPM 2.0** (besluttet af ejer):
+
+- Kan **ikke** være organisationsenheder. Tilmelding til Fleet afvises (`E_CONTEXT_POLICY`), og organisationskontekster kan ikke åbnes.
+- Kan bruges til **personlige** kontekster. Nøglerne ligger da i en fil, krypteret med en nøgle afledt af personens oplåsning (Argon2id). Skallen viser tydeligt, at enheden ikke er beskyttet mod kloning, og enhedslisten (§8) mærker enheden `key_protection: "file"`, så personens andre enheder kan se det.
+
 ### 5.1 Nøglehierarki pr. kontekst
 
 | Nøgle | Hvad | Hvor |
 |---|---|---|
 | **CMK** (context master key) | 256 bit tilfældigt. Åbner kontekstens data | Aldrig i klartekst uden for en åben kontekst på en enhed |
-| CMK pakket til enhed | CMK krypteret til enhedens X25519-nøgle (HPKE, RFC 9180, `DHKEM(X25519)`/`HKDF-SHA256`/`ChaCha20Poly1305`) | `keys/devices/<device_id>` i kontekstens hjem |
+| CMK pakket til enhed | CMK krypteret til enhedens ECDH-nøgle (HPKE, RFC 9180, `DHKEM(P-256, HKDF-SHA256)`/`HKDF-SHA256`/`ChaCha20Poly1305`). Udpakningen sker i TPM'en (`TPM2_ECDH_ZGen`) | `keys/devices/<device_id>` i kontekstens hjem |
 | CMK pakket til genoprettelse | CMK krypteret til genoprettelsestjenestens frigivelse (K5, §7) | `keys/recovery` i kontekstens hjem (kun `personal`) |
 | CMK pakket til organisationen | CMK krypteret til organisationens escrow-nøgle | `keys/org` i kontekstens hjem (kun `organisation`, K5) |
 | Afledte nøgler | HKDF-SHA256 fra CMK med faste etiketter (§6) | Afledes ved brug, gemmes ikke |
 
-Enhedens X25519-nøgle og Ed25519-signeringsnøgle ligger i TPM'en eller er forseglet med den.
+Enhedens nøgler ligger i TPM'en og kan ikke eksporteres (§5.0).
 
 ### 5.2 Forsegling på enheden
 
-Når en kontekst åbnes første gang på en enhed, forsegles CMK i TPM'en til (a) enhedens målte opstart (PCR-politik, samme kæde som RIGHTS-SET-ankeret) og (b) personens lokale oplåsning. Låses konteksten, fjernes CMK fra hukommelsen; kun forseglingen bliver.
+Når en kontekst åbnes første gang på en enhed, forsegles CMK i TPM'en til (a) netop denne TPM og (b) personens lokale oplåsning (PIN eller biometri via TPM-politik). Låses konteksten, fjernes CMK fra hukommelsen; kun forseglingen bliver. Binding til målt opstart (PCR-politik) kommer med målt opstart og attestation (EIRA-FLEET-RIGHTS-API §6 pkt. 1) og er ikke et krav i 1.0.
 
 ### 5.3 Lokal kopi i hvile: LUKS2 pr. kontekst (besluttet, O-5)
 
@@ -243,7 +256,7 @@ Et manifest beskriver kontekstens tilstand set fra én enhed på ét tidspunkt:
 ```
 
 - `merkle_root` er roden af et Merkle-træ over alle `block_id` i manifestet. Det beviser, at intet er udeladt eller byttet.
-- Manifestet krypteres med samme konstruktion som en blok (§6.2, frisk salt og nonce), med `info`/`aad`-etiketten `eira-ctx-manifest-v2` og manifestets sti (`<device_id>/<seq>`) i stedet for `block_id`. Det signeres med enhedens Ed25519-nøgle over chifferteksten. En læser godtager kun manifester fra enheder på den signerede enhedsliste (§8).
+- Manifestet krypteres med samme konstruktion som en blok (§6.2, frisk salt og nonce), med `info`/`aad`-etiketten `eira-ctx-manifest-v2` og manifestets sti (`<device_id>/<seq>`) i stedet for `block_id`. Det signeres med enhedens signeringsnøgle (ECDSA P-256, §5.0) over chifferteksten. En læser godtager kun manifester fra enheder på den signerede enhedsliste (§8).
 - `parents` peger på de manifester, enheden havde set; det giver en DAG, som sammenfletning bygger på (§7).
 
 ### 6.4 Strukturerede data
@@ -268,7 +281,7 @@ Universet (graphd), samtaler og andre strukturerede data er Automerge-dokumenter
 
 ## 8. Enheder og tilbagekaldelse
 
-- `keys/devices.signed` er listen over enheder, der må læse og skrive konteksten. Den signeres af:
+- `keys/devices.signed` er listen over enheder, der må læse og skrive konteksten. Hver post har enhedens offentlige nøgler og `key_protection` (`"tpm"` eller `"file"`, §5.0); en organisationskontekst godtager kun `"tpm"`. Listen signeres af:
   - for `organisation`: organisationens nøgle via Fleet (samme rod- og driftsnøgler som RIGHTS-SET §3.1);
   - for `personal`: en af personens eksisterende enheder (første enhed signerer sig selv ved oprettelse; genoprettelse (ADR-0005 K5) kan starte en ny liste).
 - **Tilbagekaldelse:** enheden fjernes fra listen, dens `keys/devices/<device_id>` slettes, og CMK roteres (§5.5). Næste gang den tilbagekaldte enhed er online, ser den, at den ikke er på listen, og fjerner konteksten (§4). Er den offline, låses konteksten senest, når `max_offline_days` udløber.
@@ -281,7 +294,7 @@ Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fas
 {
   "eira_id_home": "1",
   "account": "<pseudonym, afledt af eID pr. tjeneste>",
-  "devices": ["<offentlig Ed25519-nøgle>", "…"],
+  "devices": ["<offentlig P-256-signeringsnøgle>", "…"],
   "sealed": "<blok krypteret med personens nøgle: liste over {context_id, home} for personens kontekster>"
 }
 ```
@@ -373,7 +386,7 @@ Testplanen (separat dokument) skal have mindst én test pr. invariant, og hver t
 | V-1 | En værgestyret kontekst låses uden for tidsrummet, og dens DNS kan ikke gå uden om filtret | §11a |
 | X-1 | `eira-context-export` læser et kontekst-hjem med kun CMK og uden EiraOS (exit-garantien) | §6.5 |
 | R-1 | En tilbagekaldt enhed kan ikke læse noget, der er skrevet efter rotationen; dens pakkede nøgle er fjernet; den fjerner konteksten, næste gang den er online, og låser den senest ved `max_offline_days`, hvis den er offline | §5.5, §8 |
-| A-1 | Gendannelse eller kloning af en enheds data giver aldrig autoritet. En klonet disk på anden hardware kan hverken åbne kontekster, signere manifester, bruge rettighedssæt (RIGHTS-SET) eller få samtykkenøglen (EIRA-CONSENT-AGENT), heller ikke hvis angriberen kender diskens gendannelsesnøgle. Autoritet på en ny enhed opstår kun ad den normale vej (§4.1, §8) | §5.2, §8 |
+| A-1 | Gendannelse eller kloning af en enheds data giver aldrig autoritet. En klonet disk på anden hardware kan hverken åbne kontekster, signere manifester, forbinde til Fleet (mTLS), få nye rettighedssæt eller bruge en samtykkenøgle, heller ikke hvis angriberen kender diskens gendannelsesnøgle. Et allerede cachet rettighedssæt gælder på klonen som på en enhed offline, til det udløber (RIGHTS-SET §5.1); det er den tilbageværende risiko og skal stå i trusselsmodellen. Autoritet på en ny enhed opstår kun ad den normale vej (§4.1, §8) | §5.0, §5.2, §8 |
 | F-1 | En glemt kontekst efterlader intet læsbart på enheden: ingen forsegling i TPM'en, ingen LUKS-fil, ingen Linux-bruger, ingen kobling `context_id` → UID og intet `display_name` eller indhold uden for kontekstens volumen (journal, swap, `/tmp`, skallens cache) | §4.3 |
 
 ## 13. Uden for scope
