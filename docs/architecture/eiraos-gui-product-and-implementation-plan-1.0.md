@@ -257,6 +257,8 @@ EiraOS must be understandable and recoverable when intent recognition, policy, a
 
 ### D. The hybrid desktop: spatial objects and ordinary work
 
+**Scope: everything in this section applies within one context.** Content never crosses between contexts: no shared clipboard, drag/drop, file picker, open-with or share path from one context to another ([ADR-0005](../decisions/ADR-0005-kontekster-og-datas-hjem.md) K2, [EIRA-CONTEXT](../../specs/EIRA-CONTEXT-1.0.md) §3.2). The only exception is "transfer glimpse" (K12, EIRA-CONTEXT §11.1), which moves time and place from a calendar glimpse and nothing else.
+
 - Treat files, URLs, browser tabs/pages, messages, and supported app windows as first-class entry/exit points across the spatial workspace and conventional desktop workflows.
 - Support ordinary open-with, save/download, copy/paste, drag/drop where supported, file picker, browser navigation, and export/share paths without requiring users to convert everything into a graph object.
 - Preserve provenance and meaningful metadata when content crosses application boundaries, subject to privacy and platform constraints.
@@ -283,6 +285,8 @@ Use the following as initial product targets to measure in the prototype, not as
 - Never automatically replay a consequential action during crash recovery or workspace restoration.
 
 ### G. Identity and organizational context
+
+Contexts are defined by [ADR-0005](../decisions/ADR-0005-kontekster-og-datas-hjem.md) and [EIRA-CONTEXT](../../specs/EIRA-CONTEXT-1.0.md): one Linux user per context, no sharing between them. The requirements below are how that is made visible to the user.
 
 - Make the active identity, account, organization, role, and acting context visible when relevant to the consequence of an action.
 - Require deliberate context switching and make the target context explicit before material or external actions. Avoid repeated prompts when a valid context remains established, but never silently transfer authority across contexts.
