@@ -25,7 +25,14 @@ DAEMON_ALIASES = {
     "contextd": "contextd",
     "delegation": "delegationd",
     "delegationd": "delegationd",
+    "model": "modeld",
+    "modeld": "modeld",
 }
+
+# The model process runs as eira-model, which may not write /run/eira (owned
+# by eira); its socket lives in its own runtime directory (systemd
+# RuntimeDirectory=eira-model, group eira-clients).
+MODEL_RUN_DIR = Path("/run/eira-model")
 
 DAEMON_SOCKETS = {
     daemon: f"{daemon}.sock" for daemon in sorted(set(DAEMON_ALIASES.values()))
@@ -54,6 +61,12 @@ def run_dir() -> Path:
 
 def socket_path(daemon: str) -> Path:
     canonical = canonical_daemon(daemon)
+    if canonical == "modeld":
+        env = os.getenv("EIRA_MODEL_RUN_DIR")
+        if env:
+            return Path(env) / DAEMON_SOCKETS[canonical]
+        if sys.platform != "win32" and MODEL_RUN_DIR.is_dir():
+            return MODEL_RUN_DIR / DAEMON_SOCKETS[canonical]
     return run_dir() / DAEMON_SOCKETS[canonical]
 
 

@@ -63,6 +63,10 @@ override_dh_auto_install:
 		debian/eira-os-core/etc/apparmor.d/usr.bin.eira-rights-apply
 	install -m 0755 packaging/bin/eira-enroll debian/eira-os-core/usr/bin/eira-enroll
 	install -m 0755 packaging/bin/eira-audit-verify debian/eira-os-core/usr/bin/eira-audit-verify
+	# The model process (GATE-KERNEL bilag A): its own user, no network, no /data.
+	install -m 0755 packaging/bin/eira-modeld debian/eira-os-core/usr/bin/eira-modeld
+	install -m 0644 packaging/model/eira-modeld.service debian/eira-os-core/usr/lib/systemd/system/
+	install -m 0644 packaging/model/usr.bin.eira-modeld debian/eira-os-core/etc/apparmor.d/usr.bin.eira-modeld
 	# The journal's Forward Secure Sealing, set up once at first boot.
 	install -m 0755 packaging/bin/eira-audit-seal debian/eira-os-core/usr/bin/eira-audit-seal
 	install -m 0644 packaging/audit/eira-audit-seal.service debian/eira-os-core/usr/lib/systemd/system/

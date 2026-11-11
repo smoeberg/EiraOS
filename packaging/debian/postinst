@@ -69,6 +69,7 @@ case "${1:-configure}" in
             systemctl enable eira-session-policy.service >/dev/null 2>&1 || true
             # Does nothing until the device is enrolled (ConditionPathExists).
             systemctl enable eira-rights-sync.timer >/dev/null 2>&1 || true
+            systemctl enable eira-modeld.service >/dev/null 2>&1 || true
             systemctl enable eira-audit-seal.service >/dev/null 2>&1 || true
         fi
 
