@@ -1,0 +1,101 @@
+# ADR-0006 — Livets indbakke: Input → API → indbakke
+
+**Status:** Foreslået, til ejerens accept (11. november 2026). L1–L6 er ejerens retning; de åbne spørgsmål afventer beslutning.
+**Gælder for:** EDP, samtalelaget (`app/conversation/`), graphd, intentd og gaten, Web App Manager (ADR-0004 D3), kontekster (ADR-0005)
+**Relateret:** [ADR-0004](ADR-0004-gui-arkitektur-vendor-neutral.md), [ADR-0005](ADR-0005-kontekster-og-datas-hjem.md), [EDP 1.0](../../specs/EDP-1.0.md), [EIRA-CONVERSATION 1.0](../../specs/EIRA-CONVERSATION-1.0.md)
+
+## Normativ regel
+
+> **Styresystemet er en forlængelse af dit liv. Alt, der kommer til dig, kan komme ind. EiraOS kender ikke kanalerne på forhånd, kun kontrakten.**
+
+## Kontekst
+
+Ejeren ønsker, at EiraOS samler alt, hvad der kommer til en person (mail, mobil, WhatsApp, Messenger, Teams og kanaler, der ikke findes endnu), ét sted pr. kontekst.
+
+Inspirationen er [Ushahidi Platform](https://github.com/ushahidi/platform): en open source-platform, der indsamler signaler fra SMS, e-mail, Twitter og RSS, gør dem til strukturerede indberetninger via skemaer, fører dem gennem trin og placerer dem på et kort. EiraOS overtager **strømmen** (ustruktureret signal → struktureret, gennemgået objekt), ikke koden: Ushahidi er AGPL-licenseret og kræver PHP 7.4 og Laravel 8, som begge er udgået.
+
+### Afvist: "EiraOS Social Fabric – Komplet Arkitektur Audit" (Vibe, 11. november 2026)
+
+Dokumentet foreslog ni nye daemons (`contactsd`, `messaged`, `sociald`, `formsd`, `collectiond`, `tagd`, `geod`, `federationd`, `personald`) og afvises i sin helhed, fordi det:
+
+- misforstår Ushahidi som et socialt netværk (opslag, reaktioner, "gør Facebook irrelevant");
+- lægger alle brugeres data i fælles databaser under systembrugeren `eira`, i strid med ADR-0005 K2 og K7;
+- bygger på Entra som login, Redis og samtykke med TTL pr. handlingstype, i strid med ADR-0004, EIRA-IDENTITY og gatens model;
+- indeholder tal uden grundlag (testdækning, sikkerhedsniveau, ROI).
+
+Det er ikke lagt i repoet. Kun denne ADR er gældende.
+
+## Beslutninger
+
+### L1 — Tre lag: Input → API → Livets indbakke
+
+| Lag | Ansvar |
+|---|---|
+| **Input** | Adaptere, én pr. kanal. Taler kanalens sprog (IMAP, Matrix, Graph, notifikationer …) |
+| **API** | Eira Input-kontrakten: stabil, versioneret og åbent dokumenteret. Det eneste, en adapter kender til EiraOS |
+| **Livets indbakke** | Pr. kontekst. Modtager signaler, bevarer dem uændret og lader dem blive til objekter i universet (L3) |
+
+En ny kanal, også en der opstår i morgen, er en ny adapter. Den kræver ingen ændring i kernen.
+
+### L2 — Adapterkontrakten
+
+- En adapter er en selvstændig proces, der kører som den konteksts Linux-bruger, den hører til (ADR-0005 K7), i en sandbox. Den har kun adgang til sin kanal og til Input-API'et.
+- Den har et manifest: id, version, kanaltype og kapabiliteter (modtage, sende, læse status, vedhæftninger, kontakter, kalender).
+- Indgående leveres som **signaler** i EDP-format. En adapter skriver aldrig direkte i graphd eller i andre konteksters indbakker.
+- **Afsendelse går altid gennem gaten** med samtykke (EIRA-CONSENT-AGENT). En adapter kan ikke sende på egen hånd.
+- Organisationer godkender adaptere til deres kontekster via Fleet. Personen godkender adaptere til sine egne.
+
+### L3 — Fra signal til objekt
+
+1. **Modtaget:** signalet ligger uændret i indbakken og bevares, så alt kan spores tilbage til kilden.
+2. **Forstået:** den lokale AI foreslår en struktur (fx mailen om bestyrelsesmødet → objektet "Bestyrelsesmøde 20/11" med tid, sted, deltagere og dagsorden).
+3. **Handlet:** svar, aftale eller opgave går gennem intentd og gaten. *AI'en foreslår. Gaten afgør. Systemet udfører.*
+4. **Arkiveret.**
+
+Det er Ushahidis skema → indberetning → trin, bare for én person og hendes kontekster. Sted og tid fra signalerne bliver akser i universet (ADR-0004 D4), ikke et separat kort.
+
+### L4 — Kanaler: hvad der er muligt, og hvordan
+
+| Kanaltype | Eksempler | Vej |
+|---|---|---|
+| Åbne protokoller | Mail (IMAP/SMTP, JMAP), kalender (CalDAV), kontakter (CardDAV), Matrix, XMPP, ActivityPub, RSS | Fuld adapter |
+| Officielle API'er med organisationens samtykke | Teams og Outlook (Microsoft Graph), Slack, Google Workspace | Adapter i organisationens kontekst og på dens app-registrering. Leverandøren er gæst (ADR-0004 D1) |
+| Lukkede forbrugertjenester | WhatsApp, Messenger | Se nedenfor |
+| Mobiltelefonen | SMS, opkald, notifikationer | Adapter via parring med telefonen (kandidat: KDE Connect-protokollen) |
+| Myndigheder | Digital Post | Adapter, når der findes en tilgængelig adgangsvej (O-3) |
+
+**WhatsApp og Messenger.** Der findes ingen åben API til private konti. EU's Digital Markets Act (art. 7) pålægger Meta interoperabilitet. Beskeder mellem to personer skulle være på plads i 2024, gruppechats i september 2025 og opkald i september 2027. Pligten gælder dog over for **udbydere af beskedtjenester**, ikke over for et styresystem som klient. Derfor:
+
+- **Nu:** som webapp via Web App Manager. Kun appens notifikationer (afsender, kort tekst) bliver signaler; indholdet bliver i appen.
+- **Senere (strategisk, O-4):** en Eira-beskedtjeneste, fx bygget på Matrix, der anmoder om DMA-interoperabilitet og dermed kan føre WhatsApp- og Messenger-samtaler direkte ind i indbakken.
+- **Ikke:** uofficielle broer bygget på reverse engineering. De bryder tjenesternes vilkår, kan få personens konto lukket og flytter beskedindhold gennem kode uden for vores kontrol.
+
+### L5 — Skarpe grænser mellem identiteter; "glimt" som eneste undtagelse
+
+Grænserne mellem kontekster er absolutte (ADR-0005 K2). Den eneste undtagelse er et **glimt**:
+
+- En kontekst kan udsende en minimal, deklareret notits: type, titel og tidspunkt. Eksempel: *"Referat fra bestyrelsesmøde 20/11 er klar"*.
+- Glimtet indeholder ingen tekst fra indholdet, ingen vedhæftninger og ingen deltagere ud over det, notitsen selv angiver. Et klik skifter til den kontekst, det kom fra.
+- Glimt vises af den neutrale skal (ADR-0005 K7) i en visning over de andre kontekster. De skrives aldrig ind i en anden konteksts lager eller indbakke.
+- Kontekstens regelsæt bestemmer, om den må udsende glimt. En organisation kan via Fleet forbyde glimt fra sin kontekst. Personen bestemmer, hvilke kontekster der viser glimt.
+
+### L6 — Intet forlader EiraOS uden gaten
+
+Svar, opslag, accept af en invitation og alt andet, der sendes på personens vegne, går gennem gaten med samtykke, uanset kanal. AI'en kan forberede et svar, men aldrig sende det.
+
+## Konsekvenser
+
+- **EDP** får en signaltype for indgående, der bevarer kilden uændret, og en reference fra objekt til signal.
+- **Ny kontrakt:** Eira Input-API og adaptermanifest (`specs/`).
+- **graphd:** objekttyper for møder, opgaver, aftaler, dokumenter og personer, med henvisning til de signaler, de kom fra.
+- **Web App Manager:** en bro, der gør appens notifikationer til signaler i den rigtige kontekst.
+- **Den neutrale skal:** visningen af glimt.
+- **Rækkefølge (forslag):** kontekst- og lagerkontrakten (ADR-0005) → Input-API og adapterkontrakt → mail- og kalenderadapter som de første → Web App Manager med notifikationsbro.
+
+## Åbne spørgsmål
+
+- **O-1 Sandbox til adaptere.** Bubblewrap/Landlock, systemd-sandboxing eller begge?
+- **O-2 Hvem må udgive adaptere?** Kun Eira, signerede tredjeparter eller alle med personens accept?
+- **O-3 Digital Post.** Hvilken adgangsvej findes for en privat klient, og hvad kræver den?
+- **O-4 Eira-beskedtjeneste.** Skal Eira drive en beskedtjeneste (fx Matrix-baseret) og anmode om DMA-interoperabilitet med WhatsApp og Messenger? Det er en strategisk beslutning med drift og ansvar.
+- **O-5 Glimtets indhold.** Er glimtet kun notitsen *"referatet er klar"*, eller må selve referatet kunne åbnes fra en anden kontekst? Forslag: kun notitsen. Referatet læses i klubkonteksten.
