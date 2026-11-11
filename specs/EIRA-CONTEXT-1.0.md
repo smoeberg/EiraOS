@@ -46,6 +46,7 @@ En kontekst beskrives af en **kontekst-post**. Posten ligger i kontekstens hjem 
   "policy": {
     "max_offline_days": 7,
     "glimt_allowed": true,
+    "glimt_level": "activity",
     "forget_after_days": 30,
     "versions": {"keep_days": 30, "trash_days": 30},
     "devices": "personal_and_managed"
@@ -62,6 +63,7 @@ En kontekst beskrives af en **kontekst-post**. Posten ligger i kontekstens hjem 
 | `home` | Kontekst-hjemmet (K3). `type` er `s3` eller `webdav` (K8 lag 1). `prefix` er et pseudonym, så hjemmet ikke ser kontekstens navn |
 | `policy.max_offline_days` | K4/K10. Standard 7 for `personal`. Sat af Fleet for `organisation` |
 | `policy.glimt_allowed` | ADR-0006 L5. En organisation kan forbyde glimt fra sin kontekst |
+| `policy.glimt_level` | `activity` (antal og tidspunkt) eller `calendar` (derudover tid og sted for aktiviteter). Standard `activity`; fællesskaber kan sætte `calendar` |
 | `policy.forget_after_days` | §4.3. Standard 30, 1–90 |
 | `policy.versions` | §7. Standard `keep_days` 30 og `trash_days` 30. Organisationer sætter egne værdier via Fleet |
 | `policy.devices` | `managed_only` (kun enheder enrolled hos organisationen) eller `personal_and_managed` |
@@ -285,8 +287,11 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 
 ## 11. Glimt (ADR-0006 L5)
 
-- Hver åben kontekst må, hvis `policy.glimt_allowed`, sende til skallen: `{context_id, count, since}`. Skallen slår `display_name` op i sin egen krypterede cache, der kun findes, mens personen er logget ind.
-- Intet andet felt er tilladt. Skallen afviser beskeder med andre felter.
+- Hver åben kontekst må, hvis `policy.glimt_allowed`, sende til skallen:
+  - **aktivitet:** `{context_id, count, since}`;
+  - **kalender** (kun hvis `policy.glimt_level` = `calendar`): `{context_id, start, end, place}`, hvor `place` er en kort stedangivelse uden personoplysninger.
+- Skallen slår `display_name` op i sin egen krypterede cache, der kun findes, mens personen er logget ind.
+- Intet andet felt er tilladt. Skallen afviser beskeder med andre felter, og kalender-glimt fra en kontekst med `glimt_level` = `activity`.
 - En låst kontekst sender ikke glimt (dens processer kører ikke). Glimt fra låste kontekster findes ikke i 1.0 (O-4): det ville kræve, at hjemmet kan tælle nye manifester og dermed ser personens aktivitetsmønstre.
 
 ## 12. Fejlkoder
