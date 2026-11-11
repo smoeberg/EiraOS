@@ -69,7 +69,13 @@ jobs:
       # compositor, and its binary links nothing but libc (R-5.5).
       - name: Consent agent window and linkage
         run: |
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y weston
+          # A stale mirror index 404s on fresh packages: refresh and retry.
+          for i in 1 2 3; do
+            sudo apt-get -o Acquire::Retries=5 update -q &&
+            sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 \
+              install -y --no-install-recommends weston && break
+            [ "$i" = 3 ] && exit 1; sleep 20
+          done
           cargo build -p eira-consent-agent --release
           ! ldd target/release/eira-consent-agent | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
           cargo build -p eira-consent-agent --features smoke --example window_smoke

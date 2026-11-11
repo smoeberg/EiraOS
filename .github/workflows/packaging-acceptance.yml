@@ -167,7 +167,9 @@ jobs:
 
       - name: Fetch and verify Ubuntu Desktop 26.04 ISO
         id: base
-        run: echo "iso=$(scripts/fetch_ubuntu_iso.sh .cache/ubuntu-iso)" >> "$GITHUB_OUTPUT"
+        run: |
+          iso=$(scripts/fetch_ubuntu_iso.sh .cache/ubuntu-iso)
+          echo "iso=$iso" >> "$GITHUB_OUTPUT"
 
       - name: Build installer ISO and unattended CI ISO
         run: |
