@@ -8,7 +8,7 @@ set -u
 
 OUT=${EIRA_CI_OUT:-/dev/ttyS0}
 USER_NAME=tester
-DAEMONS="stated identityd fleetd veritasd intentd graphd"
+DAEMONS="stated identityd fleetd veritasd intentd graphd delegationd"
 failed=0
 
 say() { echo "EIRA-CI $*" > "$OUT" 2>/dev/null || echo "EIRA-CI $*"; }
@@ -127,6 +127,27 @@ for method in ("events.since", "conversation.awaiting", "conversation.list"):
                            "params": {"session_id": "forged", "_eira": {"ipc_token": token}}}) + "\n").encode())
     reply = json.loads(s.makefile().readline())
     assert reply.get("error", {}).get("message") == "E_NO_SESSION", (method, reply)
+PY
+# EIRA Delegation Protocol v1.1: nothing but the app (with the session's
+# consent key) can create a delegation; a forged request is refused.
+check delegation-needs-trusted-path python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+for method, params in (
+    ("delegation.propose", {"session_id": "forged", "delegee_id": "model:x", "scope": {"actions": ["prepare"]}}),
+    ("delegation.create", {"session_id": "forged", "proposal_id": "p", "content_hash": "c",
+                           "rendering_hash": "r", "proof": "0" * 64}),
+):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(5)
+    s.connect("/run/eira/delegationd.sock")
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
+                           "params": {**params, "_eira": {"ipc_token": token}}}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    assert reply.get("error", {}).get("code") == -32003, (method, reply)
 PY
 check model-user-exists getent passwd eira-model
 check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"

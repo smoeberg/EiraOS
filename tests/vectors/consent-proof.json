@@ -21,6 +21,16 @@
       "rendering_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "key": "1111111111111111111111111111111111111111111111111111111111111111",
       "proof": "c03bd784b2fc9ac011517749ed6d3a01b41c5ae7cdfb40cd945c714b3dae92af"
+    },
+    {
+      "verb": "delegate",
+      "uid": 1000,
+      "session_id": "sess-123",
+      "action_id": "dlgp-0001",
+      "content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "rendering_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "key": "1111111111111111111111111111111111111111111111111111111111111111",
+      "proof": "6a3b5b20c6156f2522c4321140d1cd1df6a13b7f0d6e318f4b51739aefa55756"
     }
   ]
 }
