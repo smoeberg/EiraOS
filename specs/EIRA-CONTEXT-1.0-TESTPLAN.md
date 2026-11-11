@@ -25,6 +25,7 @@
 | X-1 | T-X1-a, T-X1-b | Nej | Nej |
 | R-1 | T-R1-a … T-R1-d | Nej | Nej |
 | F-1 | T-F1-a … T-F1-c | Nej | Nej |
+| A-1 | T-A1-a … T-A1-d | Nej | Nej |
 
 En invariant er **verificeret**, når alle dens tests består på det niveau, tabellerne angiver, *og* alle dens mutanter (§2) får mindst én af testene til at fejle.
 
@@ -239,6 +240,19 @@ Kører på N3. Konteksten åbnes og får et kendt `display_name` og en markørte
 | T-F1-c | Åbn konteksten igen online | Den synkroniseres fra hjemmet som ved første login (§4.1); intet genbruges fra før glemslen |
 
 **Mutanter:** CTX-F1-1 TPM-forseglingen fjernes ikke; CTX-F1-2 skallens cache med `display_name` ligger på disk; CTX-F1-3 `display_name` skrives i journalen; CTX-F1-4 webappens cache ligger uden for kontekstens volumen.
+
+### A-1 Gendannelse giver aldrig autoritet (§5.2, §8)
+
+Kører på N3 med emuleret TPM (`swtpm`). En installeret VM tilmeldes Fleet, får en organisationskontekst og en personlig kontekst, et rettighedssæt og en samtykkenøgle. Disken klones (`qemu-img convert`) og startes i en ny VM med en **ny** `swtpm`. For at teste lagene under diskkrypteringen får angriberen diskens gendannelsesnøgle, så rodfilsystemet kan åbnes.
+
+| Test | Trin | Forventet |
+|---|---|---|
+| T-A1-a | Åbn hver kontekst på klonen | Forseglingen af CMK kan ikke låses op; konteksterne forbliver låste; LUKS-filerne kan kun læses som chiffertekst |
+| T-A1-b | Synkronisér eller skriv et manifest fra klonen | Enhedens signeringsnøgle findes ikke på den nye TPM; intet manifest kan signeres; hjemmet modtager intet, der godtages (M-1) |
+| T-A1-c | Udfør en beskyttet handling gennem gaten og bed `identityd` om samtykkenøglen | Rettighedssættets anker kan ikke verificeres på den nye TPM, så gaten afviser; samtykkenøglen udleveres ikke |
+| T-A1-d | Tilmeld den nye VM normalt (§4.1) og log ind | Data synkroniseres tilbage fra hjemmet; enheden får sin egen `device_id`, sin egen plads på enhedslisten og sine egne nøgler; intet fra klonens disk genbruges som autoritet |
+
+**Mutanter:** CTX-A1-1 CMK gemmes ved siden af forseglingen (fx som fallback i en fil); CTX-A1-2 enhedens signeringsnøgle ligger i en fil i stedet for i TPM'en; CTX-A1-3 `device_id` læses fra disken i stedet for at afledes af TPM-nøglen.
 
 ## 5. Fund under arbejdet med planen
 
