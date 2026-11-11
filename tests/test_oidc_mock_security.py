@@ -77,5 +77,5 @@ def test_mock_claims_ignore_untrusted_tenant_and_identity_claims() -> None:
     assert claims["tenant_id"] == "mock-tenant"
     assert claims["org_unit"] == "Mock"
     assert claims["sub"] == "person@example.com"
-    assert claims["idp"] == "entra_mock"
+    assert claims["idp"] == "mock"
     assert claims["assurance_level"] == "mock_authenticated"

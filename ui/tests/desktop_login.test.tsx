@@ -16,14 +16,14 @@ describe("Desktop-login", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ingen HTTP-bro på desktop"); }));
     const login = vi.fn(async () => ({
       session_id: "sess-123",
-      identity: "did:eira:entra.7a9c",
+      identity: "did:eira:keycloak.7a9c",
       expires_at: "2026-11-10T03:00:00Z",
     }));
     window.__EIRA_TEST_DESKTOP_LOGIN__ = login;
     const onAuthChange = vi.fn();
     render(createElement(AuthButton, { onAuthChange }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Log ind med Entra" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Log ind" }));
 
     await waitFor(() => expect(onAuthChange).toHaveBeenCalled());
     expect(login).toHaveBeenCalledOnce();
@@ -37,7 +37,7 @@ describe("Desktop-login", () => {
     });
     render(createElement(AuthButton, { onAuthChange: vi.fn() }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Log ind med Entra" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Log ind" }));
 
     expect(await screen.findByText("Login blev afbrudt i browseren.")).toBeInTheDocument();
     expect(getSessionId()).toBeNull();
@@ -64,5 +64,13 @@ describe("Beslutninger på gate-forslag", () => {
     expect(calls).toEqual([["consent", target], ["confirm", target]]);
     expect(JSON.stringify(calls)).not.toMatch(/key|proof/i);
     delete window.__EIRA_TEST_GATE__;
+  });
+});
+
+describe("loginLabel", () => {
+  it("names no provider unless the installation does (ADR-0004 D1)", async () => {
+    const { loginLabel } = await import("../src/AuthButton");
+    expect(loginLabel(null)).toBe("Log ind");
+    expect(loginLabel({ provider_name: "Kommunens login" } as never)).toBe("Log ind med Kommunens login");
   });
 });

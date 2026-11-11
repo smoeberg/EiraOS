@@ -2,6 +2,12 @@
 
 This directory contains protocol and interface specifications for EiraOS. The integrated architecture map is [EiraOS Architecture Baseline 1.0](../docs/architecture/eiraos-architecture-baseline-1.0.md).
 
+## Identity
+
+- [EIRA Identity 1.0](EIRA-IDENTITY-1.0.md) — vendor-neutral identity from any OpenID Connect provider: provider as configuration, `did:eira:<provider-id>.<subject>`, provider pinned to its issuer.
+
+**Status:** Draft, implemented in `app/auth/`. Existing `did:eira:entra.<oid>` identities are preserved by the Entra configuration (§4).
+
 ## Contexts, storage and sync
 
 - [EIRA Context 1.0](EIRA-CONTEXT-1.0.md) — the context as data, one Linux user per context, lifecycle on a device, key hierarchy, the open storage format (exit guarantee), sync over S3/WebDAV, ID home contents, glimt (ADR-0005, ADR-0006 L5).

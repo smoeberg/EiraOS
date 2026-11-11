@@ -38,7 +38,16 @@ def app_db(tmp_path, monkeypatch):
     monkeypatch.setenv("EIRA_OIDC_MOCK", "0")
     monkeypatch.setenv("EIRA_ENV", "production")
     monkeypatch.setenv("OIDC_CLIENT_ID", "eira-desktop")
-    monkeypatch.setenv("OIDC_TENANT_ID", "kk-tenant")
+    # Entra as configuration (config.example.env); endpoints overridden so
+    # the test makes no discovery request.
+    monkeypatch.setenv("OIDC_PROVIDER_ID", "entra")
+    monkeypatch.setenv("OIDC_ISSUER", "https://login.microsoftonline.com/kk-tenant/v2.0")
+    monkeypatch.setenv(
+        "OIDC_AUTHORIZATION_ENDPOINT", "https://login.microsoftonline.com/kk-tenant/oauth2/v2.0/authorize"
+    )
+    monkeypatch.setenv("OIDC_TOKEN_ENDPOINT", "https://login.microsoftonline.com/kk-tenant/oauth2/v2.0/token")
+    monkeypatch.setenv("OIDC_JWKS_URI", "https://login.microsoftonline.com/kk-tenant/discovery/v2.0/keys")
+    monkeypatch.delenv("OIDC_TENANT_ID", raising=False)
     database.init_db()
     session_store.init_db()
     return path
@@ -256,3 +265,15 @@ def test_only_the_ipv4_loopback_callback_is_accepted(app_db, loginuids, redirect
 def test_redirect_is_required(app_db, loginuids):
     with pytest.raises(JsonRpcError, match="redirect_uri is required"):
         login.login_start({"_peer": Peer(HUMAN)})
+
+
+def test_login_fails_closed_when_the_provider_moves_to_another_issuer(app_db, entra, loginuids, monkeypatch):
+    """EIRA-IDENTITY 1.0 §3: rights sets name did:eira:entra.<oid>. Pointing
+    "entra" at another issuer must not hand that issuer those identities."""
+    start = call(login.login_start, HUMAN)
+    call(login.login_complete, HUMAN, state=start["state"], code="abc")
+    monkeypatch.setenv("OIDC_ISSUER", "https://idp.attacker.example/v2.0")
+    start = call(login.login_start, HUMAN)
+    with pytest.raises(JsonRpcError) as err:
+        call(login.login_complete, HUMAN, state=start["state"], code="def")
+    assert "provider_issuer_changed" in str(err.value.data)

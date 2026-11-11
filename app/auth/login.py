@@ -1,6 +1,6 @@
 """Desktop login → a session the gate accepts (GATE-KERNEL bilag A pkt. 1).
 
-    identity.login_start      → authorize URL (Entra, PKCE + nonce)
+    identity.login_start      → authorize URL (configured OIDC provider, PKCE + nonce)
     identity.login_complete   → verified claims → session bound to the OS user
 
 Who is logging in is taken from two sources that must agree:
@@ -89,6 +89,7 @@ def login_complete(params: dict[str, Any]) -> dict[str, Any]:
         if not id_token:
             raise ValueError("token response missing id_token")
         claims = oidc.claims_from_id_token(id_token, nonce=nonce)
+        oidc.bind_provider(oidc.load_oidc_config())
     except (ValueError, OSError) as exc:
         oidc.fail_oidc_login(str(exc), detail={"mode": "desktop"})
         raise JsonRpcError(LOGIN_FAILED, "login_failed", {"detail": str(exc)}) from None

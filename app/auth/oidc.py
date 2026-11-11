@@ -1,4 +1,15 @@
-"""OIDC / Entra ID login — CP-OIDC-001."""
+"""OpenID Connect login — CP-OIDC-001, vendor-neutral (ADR-0004 D1, EIRA-IDENTITY 1.0).
+
+identityd knows an OIDC provider only through configuration: a provider id
+chosen by the installation, an issuer, a client id, and endpoints taken from
+the issuer's discovery document. No provider is built in. Microsoft Entra is
+one configuration among others (see config.example.env).
+
+The gate's identity is ``did:eira:<provider-id>.<subject>``
+(``eira_identity``). The provider id is bound to its issuer the first time it
+is used, so a reconfiguration cannot silently map one provider's subjects onto
+another's identities (``bind_provider``).
+"""
 
 from __future__ import annotations
 
@@ -26,6 +37,45 @@ validate_mock_login_configuration()
 
 _STATE_TTL = timedelta(minutes=10)
 _JWKS_TTL = timedelta(hours=1)
+_DISCOVERY_TTL = timedelta(hours=1)
+
+# Installation-chosen name of the provider: first segment of every identity
+# it issues. No dot (the dot ends it), lowercase, so it fits EDP's did:eira:.
+PROVIDER_ID = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+# A subject used as-is in an identity; anything else is hashed (eira_identity).
+_RAW_SUBJECT = re.compile(r"^[a-z0-9-]{1,64}$")
+# Only RS256 is verified (_verify_jwt_signature).
+_SUPPORTED_ALG = "RS256"
+
+
+class OidcNotConfigured(PermissionError):
+    """Live login is not configured on this machine (identityd answers
+    live_login_unavailable)."""
+
+
+def eira_identity(provider_id: str, subject: str, *, case_insensitive: bool = False) -> str:
+    """``did:eira:<provider-id>.<subject>`` (EIRA-IDENTITY 1.0 §2).
+
+    OIDC subjects are case-sensitive and may hold any character, while EDP
+    identities are ``[a-z0-9_.-]``. A subject that is already lowercase
+    ``[a-z0-9-]`` (at most 64) is used as-is; any other is replaced by
+    ``_h`` + base32(SHA-256(subject)). Raw subjects never contain ``_``, so the
+    two forms cannot collide. ``case_insensitive`` is for providers whose
+    subject is a GUID (e.g. Entra's ``oid``): it is lowercased first.
+    """
+    if not PROVIDER_ID.fullmatch(provider_id or ""):
+        raise ValueError("invalid provider id")
+    value = (subject or "").strip()
+    if not value or len(value) > 255:
+        raise ValueError("subject is empty or too long")
+    if case_insensitive:
+        value = value.lower()
+    if _RAW_SUBJECT.fullmatch(value):
+        local = value
+    else:
+        digest = hashlib.sha256(value.encode("utf-8")).digest()
+        local = "_h" + base64.b32encode(digest).decode("ascii").rstrip("=").lower()
+    return f"did:eira:{provider_id}.{local}"
 _NONCE_TTL = timedelta(minutes=10)
 
 
@@ -33,7 +83,16 @@ class JWKS:
     """Minimal JWKS container for RSA public keys."""
 
     def __init__(self, keys: list[dict[str, Any]]) -> None:
-        self.keys = {k["kid"]: k for k in keys if k.get("kty") == "RSA" and k.get("use") == "sig"}
+        # "use" and "alg" are optional in a JWK (RFC 7517 §4.2, §4.4); many
+        # providers omit "use". A key stated for something else is skipped.
+        self.keys = {
+            k["kid"]: k
+            for k in keys
+            if k.get("kty") == "RSA"
+            and k.get("use", "sig") == "sig"
+            and k.get("alg", _SUPPORTED_ALG) == _SUPPORTED_ALG
+            and "kid" in k
+        }
 
     @classmethod
     def from_json(cls, jwks_json: dict[str, Any]) -> JWKS:
@@ -135,32 +194,64 @@ def _verify_jwt_signature(token: str, jwk: dict[str, Any]) -> bool:
 
 @dataclass
 class OidcConfig:
+    provider_id: str
     issuer: str
     client_id: str
     client_secret: str
     redirect_uri: str
     scopes: str
-    tenant_id: str
     mock_enabled: bool
+    display_name: str = ""
+    subject_claim: str = "sub"
+    subject_case_insensitive: bool = False
+    groups_claim: str = "groups"
+    org_claim: str = ""
+    # Override the discovery document (all must be https).
+    authorization_endpoint: str = ""
+    token_endpoint: str = ""
+    jwks_uri: str = ""
 
-    def authority_base(self) -> str:
-        if self.issuer:
-            issuer = self.issuer.rstrip("/")
-            if issuer.endswith("/v2.0"):
-                return issuer[: -len("/v2.0")]
-            return issuer
-        tenant = self.tenant_id or "common"
-        return f"https://login.microsoftonline.com/{tenant}"
+    def require_live(self) -> None:
+        """Fail closed: live login needs an explicit provider. There is no
+        default issuer."""
+        if not PROVIDER_ID.fullmatch(self.provider_id or ""):
+            raise OidcNotConfigured(
+                "OIDC_PROVIDER_ID must be set (lowercase letters, digits and '-', at most 32)"
+            )
+        if not self.issuer.startswith("https://"):
+            raise OidcNotConfigured("OIDC_ISSUER must be set to the provider's https issuer")
+        if not self.client_id:
+            raise OidcNotConfigured("OIDC_CLIENT_ID must be set")
+        for name in ("authorization_endpoint", "token_endpoint", "jwks_uri"):
+            value = getattr(self, name)
+            if value and not value.startswith("https://"):
+                raise OidcNotConfigured(f"{name} override must be https")
+
+    def endpoint(self, name: str) -> str:
+        """An endpoint (authorization_endpoint, token_endpoint, jwks_uri): its
+        override, else the issuer's discovery document. Must be https."""
+        value = getattr(self, name)
+        if value:
+            return value
+        discovered = str(_discover(self.issuer).get(name) or "")
+        if not discovered.startswith("https://"):
+            raise ValueError(f"discovery document has no https {name}")
+        return discovered
+
+    def endpoints(self) -> dict[str, str]:
+        return {n: self.endpoint(n) for n in ("authorization_endpoint", "token_endpoint", "jwks_uri")}
 
     def authorize_url(self) -> str:
-        return f"{self.authority_base()}/oauth2/v2.0/authorize"
+        return self.endpoint("authorization_endpoint")
 
     def token_url(self) -> str:
-        return f"{self.authority_base()}/oauth2/v2.0/token"
+        return self.endpoint("token_endpoint")
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
-            "issuer": self.issuer or self.authority_base() + "/v2.0",
+            "provider_id": self.provider_id or None,
+            "provider_name": self.display_name or self.provider_id or None,
+            "issuer": self.issuer or None,
             "client_id": self.client_id or None,
             "redirect_uri": self.redirect_uri,
             "scopes": self.scopes,
@@ -171,28 +262,82 @@ class OidcConfig:
         }
 
 
+_discovery_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
+
+
+def _discover(issuer: str) -> dict[str, Any]:
+    """OpenID Connect Discovery 1.0 §4: the document's issuer must be exactly
+    the configured issuer, or nothing from it is used."""
+    now = datetime.now(timezone.utc)
+    cached = _discovery_cache.get(issuer)
+    if cached is not None and now - cached[0] < _DISCOVERY_TTL:
+        return cached[1]
+    url = issuer.rstrip("/") + "/.well-known/openid-configuration"
+    with httpx.Client(timeout=10.0) as client:
+        response = client.get(url)
+    if response.status_code != 200:
+        raise ValueError(f"OIDC discovery failed: {response.status_code}")
+    doc = response.json()
+    if not isinstance(doc, dict) or doc.get("issuer") != issuer:
+        raise ValueError("OIDC discovery issuer does not match the configured issuer")
+    _discovery_cache[issuer] = (now, doc)
+    return doc
+
+
+def _flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
 def load_oidc_config() -> OidcConfig:
     # Recheck on every load as well as import/startup, including tests or
     # launchers that alter the environment after Python imports this module.
     validate_mock_login_configuration()
-    client_id = os.environ.get("OIDC_CLIENT_ID", "").strip()
-    force_mock = os.environ.get("EIRA_OIDC_MOCK", "").strip().lower() in ("1", "true", "yes")
-    mock_enabled = force_mock
-    tenant_id = os.environ.get("OIDC_TENANT_ID", "common").strip() or "common"
-    issuer = os.environ.get("OIDC_ISSUER", "").strip()
-    if not issuer and not mock_enabled:
-        issuer = f"https://login.microsoftonline.com/{tenant_id}/v2.0"
+    env = os.environ.get
+    if env("OIDC_TENANT_ID", "").strip() and not env("OIDC_ISSUER", "").strip():
+        # The old Entra-only setting: there is no built-in provider any more.
+        raise OidcNotConfigured(
+            "OIDC_TENANT_ID is no longer used: set OIDC_PROVIDER_ID and OIDC_ISSUER "
+            "(see config.example.env for an Entra configuration)"
+        )
     return OidcConfig(
-        issuer=issuer,
-        client_id=client_id,
-        client_secret=os.environ.get("OIDC_CLIENT_SECRET", "").strip(),
-        redirect_uri=os.environ.get(
-            "OIDC_REDIRECT_URI", "http://localhost:8765/v1/auth/oidc/callback"
-        ).strip(),
-        scopes=os.environ.get("OIDC_SCOPES", "openid profile email").strip(),
-        tenant_id=tenant_id,
-        mock_enabled=mock_enabled,
+        provider_id=env("OIDC_PROVIDER_ID", "").strip(),
+        display_name=env("OIDC_PROVIDER_NAME", "").strip(),
+        issuer=env("OIDC_ISSUER", "").strip(),
+        client_id=env("OIDC_CLIENT_ID", "").strip(),
+        client_secret=env("OIDC_CLIENT_SECRET", "").strip(),
+        redirect_uri=env("OIDC_REDIRECT_URI", "http://localhost:8765/v1/auth/oidc/callback").strip(),
+        scopes=env("OIDC_SCOPES", "openid profile email").strip(),
+        mock_enabled=_flag("EIRA_OIDC_MOCK"),
+        subject_claim=env("OIDC_SUBJECT_CLAIM", "sub").strip() or "sub",
+        subject_case_insensitive=_flag("OIDC_SUBJECT_CASE_INSENSITIVE"),
+        groups_claim=env("OIDC_GROUPS_CLAIM", "groups").strip() or "groups",
+        org_claim=env("OIDC_ORG_CLAIM", "").strip(),
+        authorization_endpoint=env("OIDC_AUTHORIZATION_ENDPOINT", "").strip(),
+        token_endpoint=env("OIDC_TOKEN_ENDPOINT", "").strip(),
+        jwks_uri=env("OIDC_JWKS_URI", "").strip(),
     )
+
+
+def bind_provider(cfg: OidcConfig) -> None:
+    """Pin the provider id to its issuer the first time it is used.
+
+    Identities are ``did:eira:<provider-id>.<subject>``, and rights sets from
+    Fleet name them. If the id were later pointed at another issuer, that
+    issuer's subjects would become the old identities. Fail closed instead:
+    changing a provider's issuer is an explicit administrative step.
+    """
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO oidc_provider_bindings (provider_id, issuer, bound_at)"
+            " VALUES (?, ?, ?)",
+            (cfg.provider_id, cfg.issuer, utc_now_iso()),
+        )
+        row = conn.execute(
+            "SELECT issuer FROM oidc_provider_bindings WHERE provider_id = ?", (cfg.provider_id,)
+        ).fetchone()
+        conn.commit()
+    if row is None or row["issuer"] != cfg.issuer:
+        raise ValueError("provider_issuer_changed")
 
 
 def _pkce_pair() -> tuple[str, str]:
@@ -262,7 +407,7 @@ def validate_loopback_redirect(redirect_uri: str) -> str:
 
 
 def start_oidc_login(os_uid: int | None = None, redirect_uri: str | None = None) -> dict[str, str]:
-    """Build Entra authorize URL with PKCE state and nonce (live mode only).
+    """Build the provider's authorize URL with PKCE state and nonce (live mode only).
     `os_uid` binds the login to the OS user who started it; `redirect_uri`
     is the desktop app's loopback (validated) instead of the configured one."""
     cfg = load_oidc_config()
@@ -270,6 +415,7 @@ def start_oidc_login(os_uid: int | None = None, redirect_uri: str | None = None)
         validate_loopback_redirect(redirect_uri)
     if cfg.mock_enabled:
         raise PermissionError("Mock mode active — use POST /v1/auth/oidc/mock-login")
+    cfg.require_live()
 
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
@@ -302,21 +448,15 @@ def _decode_jwt_payload_unverified(token: str) -> dict[str, Any]:
 
 
 def _get_jwks_url(cfg: OidcConfig) -> str:
-    """Build the Entra ID JWKS URL.
-
-    Entra publishes keys at ``{authority}/discovery/v2.0/keys``; the issuer
-    itself ends in ``/v2.0``, so the authority (issuer without ``/v2.0``) must
-    be used. ``OIDC_JWKS_URI`` overrides this for other providers.
-    """
-    override = os.environ.get("OIDC_JWKS_URI", "").strip()
-    if override:
-        return override
-    return f"{cfg.authority_base()}/discovery/v2.0/keys"
+    """The provider's JWKS: OIDC_JWKS_URI, else ``jwks_uri`` from discovery."""
+    return cfg.endpoint("jwks_uri")
 
 
 def _verify_token_claims(payload: dict[str, Any], cfg: OidcConfig, nonce: str | None = None) -> None:
     """Verify iss, aud, exp, and nonce claims."""
-    issuer = cfg.issuer or cfg.authority_base() + "/v2.0"
+    issuer = cfg.issuer
+    if not issuer:
+        raise ValueError("no issuer configured")
 
     # Verify iss
     token_iss = payload.get("iss")
@@ -352,6 +492,8 @@ def _verify_and_decode_id_token(id_token: str, cfg: OidcConfig, nonce: str | Non
     # Get header to find kid
     header_b64 = parts[0] + "=" * (-len(parts[0]) % 4)
     header = json.loads(base64.urlsafe_b64decode(header_b64))
+    if header.get("alg") != _SUPPORTED_ALG:
+        raise ValueError(f"unsupported JWT alg {header.get('alg')!r}")
     kid = header.get("kid")
     if not kid:
         raise ValueError("missing kid in JWT header")
@@ -376,10 +518,14 @@ def _verify_and_decode_id_token(id_token: str, cfg: OidcConfig, nonce: str | Non
 
 
 def claims_from_id_token(id_token: str, cfg: OidcConfig | None = None, nonce: str | None = None) -> dict[str, Any]:
-    """Map Entra id_token claims to EIRA session fields with full verification."""
+    """Map verified id_token claims to EIRA session fields. Which claims hold
+    the subject, groups and organisation is configuration, not code."""
     cfg = cfg or load_oidc_config()
+    cfg.require_live()
     payload = _verify_and_decode_id_token(id_token, cfg, nonce)
 
+    # Order kept from the Entra-only version, so actor ids of existing users
+    # do not change.
     email = str(
         payload.get("preferred_username")
         or payload.get("email")
@@ -390,16 +536,20 @@ def claims_from_id_token(id_token: str, cfg: OidcConfig | None = None, nonce: st
         raise ValueError("id_token missing email claim")
 
     name = str(payload.get("name") or email.split("@")[0])
-    tenant_id = str(payload.get("tid") or "")
-    org_unit = str(payload.get("tenant_name") or tenant_id or "Entra")
-    # The gate's identity is the Entra object id: stable, unlike an email.
-    # It lives in Eira's own namespace (EDP 1.0 allows did:eira:… and
-    # external:…), so EDP participants, the gate and rights-set principals
-    # share one form: did:eira:entra.<oid>.
-    oid = str(payload.get("oid") or "").strip()
-    if not oid or not all(c.isalnum() or c == "-" for c in oid) or len(oid) > 64:
-        raise ValueError("id_token missing or malformed oid claim")
-    groups = payload.get("groups") or []
+    org = str(payload.get(cfg.org_claim) or "").strip() if cfg.org_claim else ""
+    # The gate's identity is the provider's stable subject (EIRA-IDENTITY 1.0),
+    # not an email: did:eira:<provider-id>.<subject>. EDP participants, the
+    # gate and rights-set principals share this one form.
+    subject = payload.get(cfg.subject_claim)
+    if not isinstance(subject, str) or not subject.strip():
+        raise ValueError(f"id_token missing or malformed {cfg.subject_claim} claim")
+    try:
+        identity = eira_identity(
+            cfg.provider_id, subject, case_insensitive=cfg.subject_case_insensitive
+        )
+    except ValueError as exc:
+        raise ValueError(f"id_token missing or malformed {cfg.subject_claim} claim: {exc}") from None
+    groups = payload.get(cfg.groups_claim) or []
     if not isinstance(groups, list) or len(groups) > 200 or not all(isinstance(g, str) for g in groups):
         raise ValueError("id_token groups claim is malformed")
 
@@ -407,11 +557,11 @@ def claims_from_id_token(id_token: str, cfg: OidcConfig | None = None, nonce: st
         "sub": payload.get("sub") or email,
         "email": email,
         "name": name,
-        "org_unit": org_unit,
-        "tenant_id": tenant_id,
-        "identity": f"did:eira:entra.{oid.lower()}",
+        "org_unit": org or cfg.display_name or cfg.provider_id,
+        "tenant_id": org,
+        "identity": identity,
         "groups": sorted({g for g in groups if 0 < len(g) <= 128}),
-        "idp": "entra",
+        "idp": cfg.provider_id,
         "assurance_level": "idp_authenticated",
     }
 
@@ -469,6 +619,7 @@ def complete_oidc_callback(
         if not id_token:
             raise ValueError("token response missing id_token")
         claims = claims_from_id_token(id_token, nonce=nonce)
+        bind_provider(load_oidc_config())
         return complete_oidc_login(claims)
     except ValueError as exc:
         fail_oidc_login(str(exc), detail={"mode": "oidc"})
@@ -491,7 +642,7 @@ def claims_from_mock_login(body: dict[str, Any]) -> dict[str, Any]:
         "name": name,
         "org_unit": "Mock",
         "tenant_id": "mock-tenant",
-        "idp": "entra_mock",
+        "idp": "mock",
         "assurance_level": "mock_authenticated",
     }
 

@@ -57,17 +57,17 @@ Fleet Control
 
 ## Identitet og autorisation (besluttet af ejer, 7. november 2026)
 
-> Identity (Entra/identityd) er kilde til identitet og gruppemedlemskab.
+> Identity (identitetsudbyderen via identityd, [EIRA-IDENTITY 1.0](../../specs/EIRA-IDENTITY-1.0.md)) er kilde til identitet og gruppemedlemskab. Udbyderen er installationens valg (ADR-0004 D1).
 > Fleet er kilde til autorisation: mapping fra identitet/grupper → skabelon → konkrete rettigheder.
 > EiraOS håndhæver; det udleder ikke rettigheder selv fra grupper.
 
 | Lag | Ansvar | Eksempel |
 |---|---|---|
-| **Entra / identityd** | *Hvem* brugeren er, og *hvilke grupper* vedkommende tilhører | `sub`, e-mail, `OU=Skole`, `group=lærere` |
+| **Identitetsudbyder / identityd** | *Hvem* brugeren er, og *hvilke grupper* vedkommende tilhører | `sub`, e-mail, `OU=Skole`, `group=lærere` |
 | **Fleet (rettigheds-API)** | *Hvad* grupperne eller skabelonen må | intents, adapters, audit-niveau, step-up-krav |
 
 ```
-Login (Entra/OIDC)
+Login (installationens OIDC-udbyder)
     → identityd: authenticated principal + groups
         → Fleet/rettigheds-API: groups + device + tenant → skabelon + grants
             → agent: desired rights

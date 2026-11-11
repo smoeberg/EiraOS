@@ -32,7 +32,8 @@ export function AuthButton({ actorId, onAuthChange }: Props) {
   const handleLogin = useCallback(async () => {
     setError(null);
     if (desktop) {
-      // Installed EiraOS: Entra in the system browser, completed by identityd.
+      // Installed EiraOS: the configured provider in the system browser,
+      // completed by identityd.
       setBusy(true);
       try {
         const result = await desktopLogin();
@@ -95,8 +96,14 @@ export function AuthButton({ actorId, onAuthChange }: Props) {
         onClick={handleLogin}
         disabled={busy}
       >
-        {busy ? "Logger ind…" : config?.mock_enabled ? "Log ind (dev)" : "Log ind med Entra"}
+        {busy ? "Logger ind…" : config?.mock_enabled ? "Log ind (dev)" : loginLabel(config)}
       </button>
     </div>
   );
+}
+
+/** No provider is built in (ADR-0004 D1): name it only if the installation does. */
+export function loginLabel(config: OidcConfig | null): string {
+  const name = config?.provider_name?.trim();
+  return name ? `Log ind med ${name}` : "Log ind";
 }
