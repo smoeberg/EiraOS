@@ -53,6 +53,7 @@ def caller_uid(params: dict[str, Any]) -> int:
         raise JsonRpcError(LOGIN_FAILED, "loginuid_does_not_match_peer")
     if peer.uid < 1000:
         raise JsonRpcError(LOGIN_FAILED, "system_users_do_not_log_in")
+    params["_login_peer"] = peer  # overwrites anything a client sent under that name
     return peer.uid
 
 
@@ -92,20 +93,35 @@ def login_complete(params: dict[str, Any]) -> dict[str, Any]:
     except (ValueError, OSError) as exc:
         oidc.fail_oidc_login(str(exc), detail={"mode": "desktop"})
         raise JsonRpcError(LOGIN_FAILED, "login_failed", {"detail": str(exc)}) from None
-    sid = create_session_from_claims(claims, os_uid=uid)
+    sid = create_session_from_claims(claims, os_uid=uid, logind_session=_logind_session(params))
     oidc.record_auth_event("auth.login.success", {
         "session_id": sid, "identity": claims["identity"], "os_uid": uid, "mode": "desktop",
         "tenant_id": claims.get("tenant_id"),
     })
     session = get_session_for_gate(sid) or {}
-    # The consent key goes only to the process that completed the login (the
-    # app's Rust core, which never hands it to the webview).
-    return {
-        "session_id": sid,
-        "identity": claims["identity"],
-        "expires_at": session.get("expires_at"),
-        "consent_key": session.get("consent_key"),
-    }
+    answer = {"session_id": sid, "identity": claims["identity"], "expires_at": session.get("expires_at")}
+    # EIRA-CONSENT-AGENT §5.3: on an installed system the app never gets the
+    # consent key; the registered agent claims it. A development machine
+    # keeps the app's path (same condition as mock login).
+    from app.gate.caller import installed
+
+    if not installed():
+        answer["consent_key"] = session.get("consent_key")
+    return answer
+
+
+def _logind_session(params: dict[str, Any]) -> str | None:
+    """The logind session of the app that completed the login (its peer pid
+    was already checked against loginuid by caller_uid)."""
+    from app.auth.consent_agent import Refused, logind_session
+
+    peer = params.get("_login_peer")
+    if peer is None or not hasattr(peer, "pid"):
+        return None
+    try:
+        return logind_session(peer.pid)
+    except Refused:
+        return None
 
 
 def wants_peer(handler):

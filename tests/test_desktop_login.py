@@ -205,6 +205,14 @@ def test_consent_key_never_reaches_clients(app_db, entra, loginuids):
     assert "consent_key" not in identity_session({"session_id": done["session_id"]})
 
 
+def test_on_an_installed_system_the_app_never_gets_the_key(app_db, entra, loginuids, monkeypatch):
+    """EIRA-CONSENT-AGENT §5.3: only the registered consent agent claims it."""
+    monkeypatch.setattr("app.gate.caller.installed", lambda: True)
+    start = call(login.login_start, HUMAN)
+    done = call(login.login_complete, HUMAN, state=start["state"], code="abc")
+    assert "consent_key" not in done and done["session_id"]
+
+
 def test_expired_session_is_no_session(app_db, entra, loginuids, tmp_path):
     from app.session_store import get_connection, get_session
 

@@ -73,8 +73,11 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             ("identity", "TEXT"),
             ("groups_json", "TEXT"),
             ("expires_at", "TEXT"),
-            # Trusted path: only the app that completed the login holds it.
+            # Trusted path: only the consent agent claims it (EIRA-CONSENT-AGENT).
             ("consent_key", "TEXT"),
+            # The logind session the login came from: the agent claims the key
+            # of its own logind session, never one the app names.
+            ("logind_session", "TEXT"),
         ):
             if column not in columns:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
@@ -124,7 +127,8 @@ def ensure_session(
     return sid
 
 def create_session_from_claims(
-    claims: dict, *, session_id: str | None = None, os_uid: int | None = None
+    claims: dict, *, session_id: str | None = None, os_uid: int | None = None,
+    logind_session: str | None = None,
 ) -> str:
     """The only way to a session the gate accepts: claims the caller has
     verified, bound to the OS user who logged in (`os_uid`). Without
@@ -150,12 +154,12 @@ def create_session_from_claims(
                 INSERT INTO sessions (
                     session_id, actor_id, actor_name, org_unit, assurance_level,
                     delegated_for, presentation_mode, created_at, updated_at,
-                    os_uid, authenticated_at, identity, groups_json, expires_at, consent_key
-                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?, ?)
+                    os_uid, authenticated_at, identity, groups_json, expires_at, consent_key, logind_session
+                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO NOTHING
                 """,
                 (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires,
-                 new_consent_key()),
+                 new_consent_key(), logind_session),
             )
             if cursor.rowcount == 1:
                 conn.commit()

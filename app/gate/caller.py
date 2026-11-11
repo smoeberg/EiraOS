@@ -35,6 +35,15 @@ class Caller:
     model: bool
     acting_as: str | None = None
     delegation_id: str | None = None
+    # Effective gid at connect() (SO_PEERCRED). eira-consent means the setgid
+    # consent agent (EIRA-CONSENT-AGENT §3).
+    gid: int | None = None
+
+    @property
+    def consent_agent(self) -> bool:
+        from app.gate.consent_path import is_consent_agent
+
+        return is_consent_agent(self.gid)
 
 
 CALLER: contextvars.ContextVar[Caller | None] = contextvars.ContextVar("gate_caller", default=None)
@@ -61,7 +70,7 @@ def from_peer(peer) -> Caller | None:
     """PeerCredentials (app.ipc.socket_security) → Caller."""
     if peer is None:
         return None
-    return Caller(uid=peer.uid, pid=peer.pid, model=peer.uid == model_uid())
+    return Caller(uid=peer.uid, pid=peer.pid, model=peer.uid == model_uid(), gid=getattr(peer, "gid", None))
 
 
 class ModelIdentityMissing(RuntimeError):

@@ -59,6 +59,7 @@ class Gate:
         boot_clock: Callable[[], BootInstant] = boot_now,
         rights: RightsCache | None = None,
         delegations: Any = None,
+        consent_agent_required: Callable[[], bool] | None = None,
     ) -> None:
         self.store = store or GateStore()
         if delegations is None:
@@ -67,6 +68,13 @@ class Gate:
             delegations = DelegationService()
         # Who may let the model prepare (EIRA-DELEGATION-1.0); tests inject.
         self._delegations = delegations
+        # EIRA-CONSENT-AGENT §7: on an installed system only the consent agent
+        # (effective gid eira-consent) may consent or confirm.
+        if consent_agent_required is None:
+            from app.gate.caller import installed
+
+            consent_agent_required = installed
+        self._consent_agent_required = consent_agent_required
         self._registry = registry if registry is not None else default_registry(self.store.db_path)
         if sessions is None:
             from app.session_store import get_session_for_gate as get_session
@@ -271,6 +279,28 @@ class Gate:
         record = self.store.find(action_id)
         return record["state"] if record else None
 
+    def rendering_for(self, action_id: str, session_id: str | None) -> dict[str, Any] | None:
+        """EIRA-CONSENT-AGENT §5.4: what the agent shows, from the gate and
+        never from the app. Only the proposing user's own pending action;
+        on an installed system only to the agent. ``next`` says which
+        decision is due: ``consent`` or, with a valid consent, ``confirm``."""
+        caller = current_caller()
+        if self._consent_agent_required() and (caller is None or not caller.consent_agent):
+            return None
+        actor = self._human_actor(session_id)
+        record = self.store.find(action_id)
+        if actor is None or record is None or record["state"] != "pending":
+            return None
+        if actor["identity"] != record["actor_identity"] or not _rendering_intact(record):
+            return None
+        return {
+            "action_id": action_id,
+            "content_hash": record["content_hash"],
+            "rendering": _rendering(record),
+            "origin": record["origin"],
+            "next": "confirm" if self._valid_consent(record, session_id) else "consent",
+        }
+
     def status(self, action_id: str, session_id: str | None) -> dict[str, Any] | None:
         """Only the acting user or a member of the conversation may see an
         action; anyone else gets the same answer as for an unknown id."""
@@ -380,18 +410,9 @@ class Gate:
             return
         # Bilag A pkt. 6: validity on CLOCK_BOOTTIME within this boot. Setting
         # the wall clock back cannot extend a consent; a reboot ends it.
-        now = self._boot_clock()
-        ttl_ns = int(self._consent_ttl.total_seconds() * 1_000_000_000)
+        if self._valid_consent(record, session_id):
+            return
         consents = self.store.consents_for(record["action_id"])
-        for consent in consents:
-            if (
-                consent["content_hash"] == record["content_hash"]
-                and consent["rendering_hash"] == record["rendering_hash"]
-                and consent["session_id"] == session_id
-                and consent["revoked_at"] is None
-                and within(_boot_instant(consent), now, ttl_ns)
-            ):
-                return
         if at_proposal and not consents:
             raise LayerFailure(
                 GateCode.E_NEED_CONSENT,
@@ -399,6 +420,18 @@ class Gate:
                 data={"reversibility": policy.reversibility.value},
             )
         raise LayerFailure(GateCode.E_CONSENT, "no valid consent covers this action")
+
+    def _valid_consent(self, record: dict[str, Any], session_id: str | None) -> bool:
+        now = self._boot_clock()
+        ttl_ns = int(self._consent_ttl.total_seconds() * 1_000_000_000)
+        return any(
+            consent["content_hash"] == record["content_hash"]
+            and consent["rendering_hash"] == record["rendering_hash"]
+            and consent["session_id"] == session_id
+            and consent["revoked_at"] is None
+            and within(_boot_instant(consent), now, ttl_ns)
+            for consent in self.store.consents_for(record["action_id"])
+        )
 
     def _layer_6_authorization(
         self, envelope: dict[str, Any], policy: ActionPolicy, actor: dict[str, Any] | None
@@ -599,6 +632,12 @@ class Gate:
         actor, the decision must carry the app's proof for exactly this step."""
         if actor is None:
             return None
+        caller = current_caller()
+        if self._consent_agent_required() and (caller is None or not caller.consent_agent):
+            return LayerFailure(
+                GateCode.E_CONSENT_PATH,
+                f"{verb} must come from the consent agent (eira-consent-agent)",
+            )
         session = self._sessions(actor["session_id"]) or {}
         if consent_proof.verify(
             session.get("consent_key"), proof, verb, actor["caller_uid"], actor["session_id"],

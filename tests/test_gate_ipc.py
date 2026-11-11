@@ -74,7 +74,8 @@ def test_full_flow_over_ipc(rpc):
 
 
 def test_no_ipc_method_reaches_an_executor_directly(rpc):
-    assert set(rpc) == {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "gate.capabilities"}
+    assert set(rpc) == {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "gate.capabilities",
+                        "gate.rendering"}
 
 
 def test_bad_parameters(rpc):
@@ -99,7 +100,7 @@ def test_intentd_registers_the_gate():
 # someone decides which class it belongs to. KNOWN_BYPASSES are write paths
 # that do not go through the gate yet (spec Bilag A, limitation 5); the next
 # PR redirects them to E_GATE_REQUIRED and empties this set.
-GATE_METHODS = {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "gate.capabilities"}
+GATE_METHODS = {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "gate.capabilities", "gate.rendering"}
 READ_ONLY = {
     "health",
     "dashboard.get",

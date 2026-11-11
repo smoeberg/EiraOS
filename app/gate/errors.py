@@ -30,6 +30,9 @@ class GateCode(str, Enum):
     # Consent/confirm without the proof only the EiraOS app can make: another
     # program running as the user, or a stolen session id (bilag A pkt. 1).
     E_CONSENT_PROOF = "E_CONSENT_PROOF"
+    # Consent/confirm from a process that is not the consent agent (its
+    # effective gid, EIRA-CONSENT-AGENT §7): an attempt to bypass the agent.
+    E_CONSENT_PATH = "E_CONSENT_PATH"
     E_STEP_UP_REQUIRED = "E_STEP_UP_REQUIRED"
     E_STATE = "E_STATE"
     E_PARTIAL = "E_PARTIAL"
@@ -48,6 +51,7 @@ CODE_LAYER = {
     GateCode.E_UNAUTHORIZED: 6,
     GateCode.E_MODEL_CANNOT_DECIDE: 5,
     GateCode.E_CONSENT_PROOF: 5,
+    GateCode.E_CONSENT_PATH: 5,
     GateCode.E_STEP_UP_REQUIRED: 6,
     GateCode.E_STATE: 7,
     GateCode.E_PARTIAL: 8,
