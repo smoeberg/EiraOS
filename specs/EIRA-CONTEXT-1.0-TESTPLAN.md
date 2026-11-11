@@ -25,7 +25,7 @@
 | X-1 | T-X1-a, T-X1-b | Nej | Nej |
 | R-1 | T-R1-a … T-R1-d | Nej | Nej |
 | F-1 | T-F1-a … T-F1-c | Nej | Nej |
-| A-1 | T-A1-a … T-A1-d | Nej | Nej |
+| A-1 | T-A1-a … T-A1-e | Nej | Nej |
 
 En invariant er **verificeret**, når alle dens tests består på det niveau, tabellerne angiver, *og* alle dens mutanter (§2) får mindst én af testene til at fejle.
 
@@ -252,7 +252,22 @@ Kører på N3 med emuleret TPM (`swtpm`). En installeret VM tilmeldes Fleet, få
 | T-A1-c | Udfør en beskyttet handling gennem gaten og bed `identityd` om samtykkenøglen | Rettighedssættets anker kan ikke verificeres på den nye TPM, så gaten afviser; samtykkenøglen udleveres ikke |
 | T-A1-d | Tilmeld den nye VM normalt (§4.1) og log ind | Data synkroniseres tilbage fra hjemmet; enheden får sin egen `device_id`, sin egen plads på enhedslisten og sine egne nøgler; intet fra klonens disk genbruges som autoritet |
 
-**Mutanter:** CTX-A1-1 CMK gemmes ved siden af forseglingen (fx som fallback i en fil); CTX-A1-2 enhedens signeringsnøgle ligger i en fil i stedet for i TPM'en; CTX-A1-3 `device_id` læses fra disken i stedet for at afledes af TPM-nøglen.
+| T-A1-e | Klonen udgiver sig for den oprindelige enhed over for Fleet og hjemmet i alle kombinationer nedenfor | Se matrixen |
+
+**Identitetsmatrix for T-A1-e.** Klonen har den oprindelige disk, men en ny TPM. Den oprindelige enhed er enten stadig aktiv eller tilbagekaldt.
+
+| `device_id` | Offentlig nøgle | Auth-token | Forventet |
+|---|---|---|---|
+| Gammel | Gammel | Gammelt | Afvist: klonen kan ikke bevise besiddelse af den private nøgle, som kun findes i den gamle TPM |
+| Gammel | Ny | Gammelt | Afvist: nøglen matcher ikke registret |
+| Gammel | Ny | Intet | Afvist |
+| Ny, selvvalgt | Ny | Intet | Afvist: `device_id` er ikke fingeraftrykket af nøglen |
+| Fingeraftryk af ny nøgle | Ny | Intet, uden tilmeldingskode | Afvist |
+| Fingeraftryk af ny nøgle | Ny | Normal tilmelding med kode fra en administrator | Accepteret som **ny** enhed uden noget fra den oprindelige (T-A1-d) |
+
+Hver afvisning auditeres. Ingen kombination må give adgang til den oprindelige enheds rettighedssæt, kontekster eller tilmeldingsstatus.
+
+**Mutanter:** CTX-A1-4 `device_id` tages fra forespørgslen; CTX-A1-5 gyldigt token accepteres uden bevis for den private nøgle; CTX-A1-1 CMK gemmes ved siden af forseglingen (fx som fallback i en fil); CTX-A1-2 enhedens signeringsnøgle ligger i en fil i stedet for i TPM'en; CTX-A1-3 `device_id` læses fra disken i stedet for at afledes af TPM-nøglen.
 
 ## 5. Fund under arbejdet med planen
 
