@@ -41,8 +41,7 @@ jobs:
 
     - name: Install AppArmor parser for packaging validation
       run: |
-        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y apparmor-utils xorriso
+        scripts/ci/apt-install.sh apparmor-utils xorriso
 
     - name: Run database migrations (Alembic)
       run: |
@@ -68,14 +67,9 @@ jobs:
       # EIRA-CONSENT-AGENT: the agent's window against a real (headless)
       # compositor, and its binary links nothing but libc (R-5.5).
       - name: Consent agent window and linkage
+        timeout-minutes: 25
         run: |
-          # A stale mirror index 404s on fresh packages: refresh and retry.
-          for i in 1 2 3; do
-            sudo apt-get -o Acquire::Retries=5 update -q &&
-            sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 \
-              install -y --no-install-recommends weston && break
-            [ "$i" = 3 ] && exit 1; sleep 20
-          done
+          scripts/ci/apt-install.sh weston
           cargo build -p eira-consent-agent --release
           ! ldd target/release/eira-consent-agent | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
           cargo build -p eira-consent-agent --features smoke --example window_smoke
@@ -112,8 +106,7 @@ jobs:
           restore-keys: tauri-${{ runner.os }}-cargo-
       - name: Install Tauri system dependencies (Linux)
         run: |
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          scripts/ci/apt-install.sh libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
           # NB: no --locked here: ui/src-tauri/Cargo.lock is gitignored, so
           # --locked would fail with "cannot create the lock file". The root
           # workspace lock does not apply (src-tauri is excluded from it).
