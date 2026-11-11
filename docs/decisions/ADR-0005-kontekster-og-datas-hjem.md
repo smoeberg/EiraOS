@@ -127,6 +127,7 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 - **Minimal logning:** ID-hjemmet gemmer ikke IP-adresser eller tidspunkter for opslag ud over det, driften strengt kræver, og sletter dem hurtigt. Brugsmønstre er også følsomme data.
 - **Exit-garantien gælder:** personen kan altid hente en krypteret kopi af sin ID-post. Forsvinder Eiras ID-hjem, har personen stadig sine kontekst-hjem og nøgler og kan læse alle data (K8).
 - **Ikke i datavejen:** ID-hjemmet bruges ved login og ved skift af enhed, ikke ved hver læsning eller skrivning. Er det nede, kører allerede åbnede kontekster videre (K4).
+- **Lukkede enheder kører uden (besluttet af ejer):** en enhed, som Fleet har lukket for andre end organisationens kontekster (K6), bruger ikke ID-hjemmet. Kontekstlisten kommer da fra Fleet, og der er ingen Eira-tjeneste i login-vejen. Organisationer, der ikke vil have en tredjepart i medarbejdernes login, kan altså bruge EiraOS. Åbnes enheden for flere kontekster, bruges ID-hjemmet for de personer, der har mere end organisationens kontekster.
 - **Privat indhold** hører ikke til i ID-hjemmet. Ønsker personen at bruge Eira til private data, er det et kontekst-hjem som alle andre, et tilvalg og ikke en del af ID-hjemmet.
 
 ## Konsekvenser for det eksisterende
@@ -146,7 +147,7 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 
 ## Åbne spørgsmål
 
-- **O-7 Arbejds-pc'er uden ID-hjem.** Kræver en lukket, Fleet-styret enhed (K6) med kun organisationens kontekster også personens ID-hjem, eller kan den køre helt uden Eira i login-vejen? Forslag: kan køre uden, fordi nogle organisationer ikke vil acceptere en tredjepart i login-vejen.
+- ~~**O-7 Arbejds-pc'er uden ID-hjem.**~~ Besluttet: en lukket enhed kan køre helt uden ID-hjemmet (K11).
 
 - ~~**O-1 Isolation i OS'et.**~~ Besluttet: K7.
 - ~~**O-2 Genoprettelsestjenesten.**~~ Besluttet: Eira driver funktionen, nøglen ligger i kontekstens hjem (K5).
