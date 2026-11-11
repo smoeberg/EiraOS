@@ -9,6 +9,7 @@ app/auth/oidc.py
 app/auth/production_cert_verifier.py
 app/capability.py
 app/clock.py
+app/consent_keys.py
 app/conversation/__init__.py
 app/conversation/feed.py
 app/conversation/ipc.py
@@ -36,7 +37,6 @@ app/daemons/runner.py
 app/daemons/stated.py
 app/daemons/veritasd.py
 app/database.py
-app/executor.py
 app/fleet/__init__.py
 app/fleet/device_registry.py
 app/fleet/e2ee.py
