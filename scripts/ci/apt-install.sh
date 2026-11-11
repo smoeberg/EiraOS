@@ -12,12 +12,15 @@ set -euo pipefail
 [[ $# -gt 0 ]] || { echo "usage: $0 PACKAGE..." >&2; exit 64; }
 SUDO=()
 [[ $(id -u) -eq 0 ]] || SUDO=(sudo)
+# Short per-try limits: when the runners cannot reach Ubuntu's mirrors at all
+# (seen 11 Nov 2026: every InRelease timed out after 20 s, five apt retries
+# each), long apt retries turn one job into an hour. Fail fast, retry here.
 APT=("${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get
-     -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60)
+     -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
 
 for attempt in 1 2 3 4 5 6; do
-    if "${APT[@]}" update -q --error-on=any \
-        && "${APT[@]}" install -y --no-install-recommends "$@"; then
+    if timeout 300 "${APT[@]}" update -q --error-on=any \
+        && timeout 900 "${APT[@]}" install -y --no-install-recommends "$@"; then
         exit 0
     fi
     if [[ $attempt -eq 6 ]]; then
