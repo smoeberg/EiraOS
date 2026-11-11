@@ -20,3 +20,12 @@ def _human_caller():
 
     with acting_as(HUMAN):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _consent_key_store(tmp_path, monkeypatch):
+    """Each test gets its own consent-key store. Tests run on whatever
+    filesystem tmp_path is on, so the tmpfs requirement is waived here;
+    tests/test_consent_keys_ram_only.py checks it with the waiver removed."""
+    monkeypatch.setenv("EIRA_CONSENT_KEY_DB", str(tmp_path / "consent-keys.db"))
+    monkeypatch.setenv("EIRA_CONSENT_KEYS_ALLOW_DISK", "1")
