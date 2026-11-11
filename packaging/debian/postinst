@@ -26,6 +26,13 @@ case "${1:-configure}" in
                 --disabled-password --shell /usr/sbin/nologin eira-model
         fi
         adduser --quiet eira-model eira-clients
+        # Fleet administrators create pairing codes and revoke devices
+        # (eira-fleetd checks SO_PEERCRED). The group starts empty: no desktop
+        # user, not eira and never eira-model. An administrator is added
+        # deliberately.
+        if ! getent group eira-fleet-admin >/dev/null; then
+            addgroup --system eira-fleet-admin
+        fi
         # Upgrade from earlier versions, where desktop users were put in
         # eira: move them to eira-clients.
         for member in $(getent group eira | cut -d: -f4 | tr ',' ' '); do

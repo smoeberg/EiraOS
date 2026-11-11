@@ -15,10 +15,15 @@ import pytest
 
 from app.core.store import StateStore
 from app.daemons.fleetd import FleetSyncService
-from app.fleet.device_registry import DeviceAuthorizationError, DeviceRegistry
+from app.fleet.device_registry import (
+    DeviceAuthorizationError,
+    DeviceRegistry,
+    device_fingerprint,
+)
 from app.fleet.e2ee import StatePayloadEncryptor
 
-DEVICE_ID = "victim-laptop"
+PUBLIC_KEY = base64.b64encode(os.urandom(32)).decode("ascii")
+DEVICE_ID = device_fingerprint(PUBLIC_KEY)
 
 
 @pytest.fixture
@@ -26,10 +31,9 @@ def paired(tmp_path):
     registry = DeviceRegistry(str(tmp_path / "devices.db"))
     pairing = registry.create_pairing_token(300)
     code = pairing.get("pairing_code") or pairing.get("code")
-    public_key = base64.b64encode(os.urandom(32)).decode("ascii")
+    public_key = PUBLIC_KEY
     enrollment = registry.enroll(
         pairing_code=code,
-        device_id=DEVICE_ID,
         name="Victim",
         os_type="ubuntu",
         public_key=public_key,
