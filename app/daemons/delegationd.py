@@ -57,6 +57,17 @@ def _session(caller: Caller, session_id: Any) -> dict[str, Any]:
     return session
 
 
+def _require_agent(caller: Caller) -> None:
+    """On an installed system only the consent agent may decide (its
+    effective gid, EIRA-CONSENT-AGENT §7); a development machine keeps the
+    app's path, like the gate."""
+    from app.gate.caller import installed
+
+    if installed() and not caller.consent_agent:
+        raise JsonRpcError(BAD_PROOF, "E_CONSENT_PATH",
+                           {"user_message": "Delegation gives gennem EiraOS' samtykkevindue."})
+
+
 def _identity(session: dict[str, Any]) -> str:
     return str(session.get("identity") or session.get("actor_id") or "")
 
@@ -84,8 +95,24 @@ def register_delegation_handlers(server, service: DelegationService | None = Non
         except (PermissionError, ValueError) as error:
             raise JsonRpcError(NOT_ALLOWED, str(error)) from None
 
+    def proposal(params: dict[str, Any]) -> dict[str, Any]:
+        """What the consent agent shows (EIRA-CONSENT-AGENT §5.4): the text
+        fixed at propose time, read here and never taken from the app."""
+        caller = _caller(params)
+        _require_agent(caller)
+        session = _session(caller, params.get("session_id"))
+        found = svc.repo.proposal(_text(params, "proposal_id"), _identity(session), params["session_id"])
+        if found is None:
+            raise JsonRpcError(NOT_ALLOWED, "unknown, expired or used proposal")
+        return {
+            "proposal_id": found["id"],
+            "content_hash": found["content_hash"],
+            "rendering": {"text": found["rendering_text"], "hash": found["rendering_hash"], "lang": "da"},
+        }
+
     def create(params: dict[str, Any]) -> dict[str, Any]:
         caller = _caller(params)
+        _require_agent(caller)
         session = _session(caller, params.get("session_id"))
         proposal_id = _text(params, "proposal_id")
         content_hash = _text(params, "content_hash")
@@ -149,9 +176,10 @@ def register_delegation_handlers(server, service: DelegationService | None = Non
             ]
         }
 
-    for handler in (propose, create, revoke, check, listing):
+    for handler in (propose, proposal, create, revoke, check, listing):
         handler.wants_peer = True
     server.register("delegation.propose", propose)
+    server.register("delegation.proposal", proposal)
     server.register("delegation.create", create)
     server.register("delegation.revoke", revoke)
     server.register("delegation.check", check)

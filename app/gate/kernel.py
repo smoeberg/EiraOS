@@ -630,14 +630,16 @@ class Gate:
     ) -> LayerFailure | None:
         """No actor is handled by the normal path (it fails there). With an
         actor, the decision must carry the app's proof for exactly this step."""
-        if actor is None:
-            return None
+        # The path first, with or without a session: every attempt to decide
+        # outside the consent agent gets the same code (EIRA-CONSENT-AGENT §7).
         caller = current_caller()
         if self._consent_agent_required() and (caller is None or not caller.consent_agent):
             return LayerFailure(
                 GateCode.E_CONSENT_PATH,
                 f"{verb} must come from the consent agent (eira-consent-agent)",
             )
+        if actor is None:
+            return None
         session = self._sessions(actor["session_id"]) or {}
         if consent_proof.verify(
             session.get("consent_key"), proof, verb, actor["caller_uid"], actor["session_id"],

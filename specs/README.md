@@ -8,6 +8,12 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 **Status:** Draft, binding as an implementation target; not proof that all Gate checks are implemented or tested. Reconcile its decision/error semantics with the actual intent pipeline and regression tests before enabling new protected actions.
 
+## Consent Agent
+
+- [EIRA Consent Agent](EIRA-CONSENT-AGENT-0.1.md) (rev. 0.3) — trusted path to consent against programs running as the user (GATE-KERNEL bilag A pkt. 1, "Rest"): setgid agent holding the consent key, gate accepts consent only from it, compositor requirements.
+
+**Status:** Accepted by the owner (11 November 2026) and implemented except R-6.2 (labwc patch). See the status table in §0.
+
 ## Conversation layer
 
 - [EIRA-CONVERSATION-1.0](EIRA-CONVERSATION-1.0.md) — membership (who may act and see in a conversation) and the read-only event stream for Explorer.

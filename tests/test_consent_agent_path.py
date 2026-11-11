@@ -250,3 +250,10 @@ def test_a_reused_agent_pid_is_not_registered(tree):
         consent_agent.claim_key(peer(), tree.db)
 
 
+
+
+def test_without_a_session_a_bypass_still_gets_e_consent_path(world):
+    require_agent(world)
+    digest, rhash = proposed(world)
+    result = world.gate.grant_consent("dlg-0001", digest, rhash, "no-such-session")
+    assert result.code is GateCode.E_CONSENT_PATH

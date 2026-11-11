@@ -65,6 +65,18 @@ jobs:
         run: cargo check --workspace
       - name: Cargo test workspace
         run: cargo test --workspace -- --nocapture
+      # EIRA-CONSENT-AGENT: the agent's window against a real (headless)
+      # compositor, and its binary links nothing but libc (R-5.5).
+      - name: Consent agent window and linkage
+        run: |
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y weston
+          cargo build -p eira-consent-agent --release
+          ! ldd target/release/eira-consent-agent | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
+          cargo build -p eira-consent-agent --features smoke --example window_smoke
+          export XDG_RUNTIME_DIR=$(mktemp -d) && chmod 700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless --renderer=pixman --socket=wayland-ci --width=1280 --height=800 &
+          for i in $(seq 1 20); do [ -S "$XDG_RUNTIME_DIR/wayland-ci" ] && break; sleep 0.5; done
+          WAYLAND_DISPLAY=wayland-ci timeout 60 target/debug/examples/window_smoke
       # Phase 0 IPC & Event Bus contract (docs/specs/PHASE-0-IPC-EVENT-BUS.md).
       # Behind a feature so the Android/WASM state core stays syscall-free.
       - name: Phase 0 contract tests (eira-core --features ipc-tokio)

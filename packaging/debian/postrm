@@ -17,6 +17,9 @@ case "${1:-}" in
         fi
         ;;
 esac
+if [ "${1:-}" = purge ] && dpkg-statoverride --list /usr/lib/eira-os/eira-consent-agent >/dev/null 2>&1; then
+    dpkg-statoverride --remove /usr/lib/eira-os/eira-consent-agent || true
+fi
 
 #DEBHELPER#
 

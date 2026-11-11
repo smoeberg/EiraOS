@@ -248,6 +248,17 @@ class DelegationRepository:
                  row["rendering_text"], row["rendering_hash"], row["created_at"]),
             )
 
+    def proposal(self, proposal_id: str, delegator_id: str, session_id: str) -> dict[str, Any] | None:
+        self._ensure_schema()
+        not_before = (datetime.now(timezone.utc) - PROPOSAL_TTL).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                """SELECT * FROM delegation_proposals WHERE id = ? AND delegator_id = ? AND session_id = ?
+                   AND used_at IS NULL AND created_at > ?""",
+                (proposal_id, delegator_id, session_id, not_before),
+            ).fetchone()
+        return dict(row) if row else None
+
     def claim_proposal(self, proposal_id: str, delegator_id: str, session_id: str,
                        content_hash: str, rendering_hash: str, not_before: datetime) -> dict[str, Any] | None:
         """Single use: the proposal is marked used in the same statement that

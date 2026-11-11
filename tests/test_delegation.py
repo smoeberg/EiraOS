@@ -153,7 +153,7 @@ def daemon(service, monkeypatch):
     def call(method, params, as_=HUMAN):
         handler = server.methods[method]
         assert handler.wants_peer
-        return handler({**params, "_peer": Peer(as_)})
+        return handler({**params, "_peer": as_ if isinstance(as_, Peer) else Peer(as_)})
 
     return call
 
@@ -229,3 +229,37 @@ def test_the_command_line_cannot_delegate(capsys):
     assert main(["create", "--session-id", "s", "--delegee", MODEL_ID,
                  "--scope", '{"actions":["prepare"]}']) == 2
     assert "EiraOS-appen" in capsys.readouterr().err
+
+
+# --- EIRA-CONSENT-AGENT: on an installed system only the agent delegates -------------
+
+
+def test_installed_only_the_consent_agent_reads_the_proposal_and_creates(daemon, service, monkeypatch):
+    from app.gate import caller as caller_module
+    from app.gate import consent_path
+    from app.gate.caller import Caller
+
+    monkeypatch.setattr(caller_module, "installed", lambda: True)
+    monkeypatch.setattr(consent_path, "consent_gid", lambda: 777)
+    agent = Caller(uid=HUMAN.uid, pid=HUMAN.pid, model=False, gid=777)
+
+    class AgentPeer(Peer):
+        def __init__(self):
+            super().__init__(HUMAN)
+            self.gid = 777
+
+    p = proposed(daemon)
+    # The app (gid = the user's) can neither read the proposal through this
+    # path nor create the delegation, even with a valid proof.
+    for method in ("delegation.proposal", "delegation.create"):
+        with pytest.raises(JsonRpcError) as error:
+            if method == "delegation.proposal":
+                daemon(method, {"session_id": "s-anne", "proposal_id": p["proposal_id"]})
+            else:
+                created(daemon, p)
+        assert error.value.message == "E_CONSENT_PATH"
+    shown = daemon("delegation.proposal", {"session_id": "s-anne", "proposal_id": p["proposal_id"]},
+                   AgentPeer())
+    assert shown["rendering"]["text"] == p["rendering"]["text"] and agent.consent_agent
+    assert created(daemon, p, as_=AgentPeer())["status"] == "created"
+    assert check(service, "intent:utterance")
