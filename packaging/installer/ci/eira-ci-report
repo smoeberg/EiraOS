@@ -246,7 +246,14 @@ seal_owner_handover() {
     key=$(/usr/bin/eira-audit-seal show | grep -E '^[0-9a-f]+(-[0-9a-f]+)*/[0-9a-f]+-[0-9a-f]+$') || return 1
     [ -n "$key" ] && [ ! -e /var/lib/eira-audit-seal/verify-key ] || return 1
     journalctl --rotate >/dev/null 2>&1 || true
-    /usr/bin/eira-audit-verify --journal --verify-key "$key"
+    if ! journalctl --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+        say "diag seal-verify: $(tr '\n' ' ' </tmp/seal-verify.txt | cut -c1-1500)"
+        return 1
+    fi
+    /usr/bin/eira-audit-verify --journal --verify-key "$key" >/tmp/seal-audit.txt 2>&1 || {
+        say "diag seal-audit-verify: $(tr '\n' ' ' </tmp/seal-audit.txt | cut -c1-800)"
+        return 1
+    }
 }
 check audit-seal-set-up wait_for 120 test -f /var/lib/eira-audit-seal/state.json
 check audit-seal-journal-keys sh -c 'ls /var/log/journal/*/fss >/dev/null 2>&1'
