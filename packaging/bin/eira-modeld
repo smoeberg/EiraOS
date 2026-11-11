@@ -1,0 +1,6 @@
+#!/bin/sh
+# The model process (GATE-KERNEL bilag A). Refuses to run as anyone but
+# eira-model; see app/model/daemon.py.
+set -eu
+export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -m app.model.daemon

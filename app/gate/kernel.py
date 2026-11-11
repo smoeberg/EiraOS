@@ -126,6 +126,11 @@ class Gate:
         self, raw: str | bytes | None, session_id: str | None, origin: Origin, lang: str = "da"
     ) -> GateResult:
         _reset_rights()
+        # The model's proposals are origin model, whatever the caller claims:
+        # the IPC layer already does this, the gate does not rely on it.
+        caller = current_caller()
+        if caller is not None and caller.model:
+            origin = Origin.MODEL
         actor = self._actor(session_id)
         record: dict[str, Any] | None = None
         try:
