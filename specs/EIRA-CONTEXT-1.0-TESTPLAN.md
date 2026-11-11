@@ -17,7 +17,7 @@
 | M-1 | T-M1-a … T-M1-e | Nej | Nej |
 | S-1 | T-S1-a … T-S1-d | Nej | Nej |
 | U-1 | T-U1-a, T-U1-b | Nej | Nej |
-| I-1 | T-I1-0 … T-I1-h | Nej | Nej |
+| I-1 | T-I1-0 … T-I1-j | Nej | Nej |
 | O-1 | T-O1-a … T-O1-d | Nej | Nej |
 | G-1 | T-G1-a … T-G1-d | Nej | Nej |
 | E-1 | T-E1-a … T-E1-e | Nej | Nej |
@@ -156,8 +156,10 @@ N2 kører mod tre slags hjem:
 | T-I1-f | Læs udklipsholderen, mens B har kopieret en kendt tekst | Teksten kan ikke læses |
 | T-I1-g | Læs B's låste LUKS-fil som root uden CMK | Kun chiffertekst |
 | T-I1-h | Opret en Linux-bruger fra en kontekst-bruger eller fra `eira-shell` | Afvist; kun `eira-contextd` kan |
+| T-I1-i | List `/proc`, kør `ps -e`, og læs `/proc/<pid>/cmdline` og `environ` for en af B's processer (pid kendt fra testen) | B's processer findes ikke i listen; direkte læsning giver `ENOENT` |
+| T-I1-j | Tjek `/proc`-monteringen og gruppen `eira-procview` på det installerede system; start en session og brug systemets almindelige funktioner (log ind, lås skærm, polkit-godkendelse, netværk) | Monteret med `hidepid=invisible,gid=eira-procview`; gruppen har kun systemtjenester som medlemmer; `user@<uid>.service` har `ProtectProc=invisible`; intet fejler. Fejler noget, er det et fund, der afgør, hvilke tjenester der skal undtages |
 
-**Mutanter:** CTX-I1-1 B's hjem monteres `0755`; CTX-I1-2 kontekst-brugere i samme gruppe; CTX-I1-3 compositorens hovedsocket `0666`; CTX-I1-4 fælles udklipsholder.
+**Mutanter:** CTX-I1-0 `/proc` uden `hidepid`; CTX-I1-5 `eira-shell` er medlem af `eira-procview`; CTX-I1-1 B's hjem monteres `0755`; CTX-I1-2 kontekst-brugere i samme gruppe; CTX-I1-3 compositorens hovedsocket `0666`; CTX-I1-4 fælles udklipsholder.
 
 ### O-1 Offline-perioden kan ikke forlænges ved at stille uret tilbage (§4.2)
 
@@ -242,5 +244,5 @@ Kører på N3. Konteksten åbnes og får et kendt `display_name` og en markørte
 
 1. **Manglende fejlkoder.** Kontrakten nævnte ikke, hvilken fejl en manifest-kollision, en AEAD-fejl på en blok og et hjem uden opret-hvis-fraværende giver. Rettet i kontrakten v0.3 (§12): `E_CONTEXT_INTEGRITY` dækker nu også blokke og manifest-kollision, og `E_CONTEXT_HOME_UNSUPPORTED` er ny.
 2. **Den eksisterende `app/daemons/contextd.py` modsiger kontrakten.** Den har en fast liste af seks kontekster, én "aktiv" kontekst og en beløbsgrænse for automatisk godkendelse i wallet pr. kontekst. Den skal erstattes af `eira-contextd`, ikke udbygges. Beløbsgrænsen hører under gaten og rettighedssættet, ikke under kontekstlaget.
-3. **`/proc` er ikke nævnt i §3.3.** Som standard kan alle brugere læse `/proc/<pid>/cmdline` for alle processer, så kontekst A kan se, hvilke webapps og URL'er kontekst B kører. Anbefaling: montér `/proc` med `hidepid=invisible` og tilføj det til I-1. Det kræver ejerens beslutning, fordi det også påvirker systemværktøjer.
+3. **`/proc` manglede i §3.3.** Som standard kan alle brugere læse alle processers kommandolinje. Tilføjet i kontrakten: `hidepid=invisible` for hele systemet med undtagelsesgruppen `eira-procview` (besluttet af ejer). Testes i T-I1-i og T-I1-j.
 4. **Tilbagekaldelse og glemsel** manglede i §12a. Tilføjet som R-1 og F-1 (besluttet af ejer).
