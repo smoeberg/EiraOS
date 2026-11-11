@@ -1,7 +1,7 @@
 # EIRA Context 1.0 — kontekster, lagring og synkronisering
 
-**Status:** Udkast v0.2 til ejerens accept. **Ikke normativ**, før det er accepteret. Testplanen er et separat trin efter accept.
-**Version:** 0.2 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer)
+**Status:** Accepteret af ejer 11. november 2026. Normativ. Testplan: [EIRA-CONTEXT-1.0-TESTPLAN](EIRA-CONTEXT-1.0-TESTPLAN.md).
+**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen)
 **Grundlag:** [ADR-0005](../docs/decisions/ADR-0005-kontekster-og-datas-hjem.md) (K1–K11), [ADR-0004](../docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [ADR-0006](../docs/decisions/ADR-0006-livets-indbakke.md) L5 (glimt)
 **Berører:** ny `eira-contextd` (rod-formidler), `identityd`, gaten, graphd, samtalelaget, den neutrale skal, compositoren, `eira-governance-agent`/Fleet, RIGHTS-SET (revision, §10)
 
@@ -199,7 +199,7 @@ Alt er **kun tilføjelse**: en blok eller et manifest overskrives aldrig. Det g�
 
 - **S3:** `PutObject` med `If-None-Match: *`; svaret `412 Precondition Failed` betyder "findes allerede" og er ikke en fejl for en blok, men en fejl for et manifest (så har en anden skrevet samme `<device_id>/<seq>`).
 - **WebDAV/HTTP:** `PUT` med `If-None-Match: *` (RFC 9110 §13.1.2) med samme betydning.
-- Et hjem, der ikke kan garantere opret-hvis-fraværende, understøttes ikke. EiraOS tjekker det, når et hjem tilknyttes (prøveskrivning af samme objekt to gange), og nægter at bruge hjemmet ellers.
+- Et hjem, der ikke kan garantere opret-hvis-fraværende, understøttes ikke. EiraOS tjekker det, når et hjem tilknyttes: skriv A til en prøvesti, skriv B til samme sti med `If-None-Match: *`, og læs tilbage. Kun svaret `412` *og* A ved tilbagelæsning godkender hjemmet. Ellers `E_CONTEXT_HOME_UNSUPPORTED`.
 
 For blokke er konsekvensen af et overskrevet objekt begrænset (begge chiffertekster dekrypterer til samme klartekst, B-1), men for manifester ville det være omskrivning af historikken. Derfor gælder kravet begge.
 
@@ -345,7 +345,8 @@ En kontekst med `governance.source = guardian` har et regeldokument signeret af 
 | `E_CONTEXT_DEVICE_REVOKED` | Enheden er ikke på kontekstens enhedsliste (§8) |
 | `E_CONTEXT_IDENTITY_REQUIRED` | Konteksten kræver login med en anden identitet (§4.1) |
 | `E_CONTEXT_HOME_UNREACHABLE` | Hjemmet svarer ikke; arbejder videre lokalt (ikke en fejl for brugeren, men logges) |
-| `E_CONTEXT_INTEGRITY` | Manifest med ugyldig signatur, ukendt enhed eller Merkle-afvigelse. Manifestet ignoreres og hændelsen auditeres |
+| `E_CONTEXT_INTEGRITY` | Manifest med ugyldig signatur, ukendt enhed, Merkle-afvigelse eller en sti (`<device_id>/<seq>`), der allerede findes. Blok, der ikke kan dekrypteres (AEAD-fejl), eller hvis klartekst ikke matcher `block_id`. Objektet ignoreres og hændelsen auditeres |
+| `E_CONTEXT_HOME_UNSUPPORTED` | Hjemmet kan ikke garantere opret-hvis-fraværende (§6.1) og afvises ved tilknytning |
 | `E_CONTEXT_POLICY` | Fleet-politik forbyder handlingen (fx åben kontekst på en lukket enhed) |
 
 ## 12a. Invarianter, testplanen skal dække
