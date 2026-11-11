@@ -2,6 +2,7 @@
 app/__init__.py
 app/auth/__init__.py
 app/auth/audit.py
+app/auth/consent_agent.py
 app/auth/delegation.py
 app/auth/login.py
 app/auth/mock_guard.py
@@ -46,6 +47,7 @@ app/gate/audit_anchor.py
 app/gate/audit_seal.py
 app/gate/audit_verify.py
 app/gate/caller.py
+app/gate/consent_path.py
 app/gate/consent_proof.py
 app/gate/edp-1.0.schema.json
 app/gate/edp.py
