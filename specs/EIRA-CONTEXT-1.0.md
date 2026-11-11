@@ -298,6 +298,33 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 
 Skallen kan på personens anmodning oprette en begivenhed i en anden åben kontekst ud fra et kalender-glimt. Kun `start`, `end` og `place` fra glimtet overføres; titlen indtastes af personen. Handlingen går gennem gaten i målkonteksten. Kildekonteksten får ingen besked og ingen data retur.
 
+## 11a. Værgestyret kontekst: håndhævelse (ADR-0005 K12)
+
+En kontekst med `governance.source = guardian` har et regeldokument signeret af værgernes enhedsnøgler (samme signaturform som enhedslisten, §8). Det ligger i familiens hjem. Reglerne håndhæves af kernen og af komponenter, EiraOS ejer, aldrig af skallen alene. Barnets kontekst er en Linux-bruger (§3), og al håndhævelse knytter sig til den:
+
+| Regel | Håndhæves af |
+|---|---|
+| Tidsrum og sengetid | `eira-contextd` låser konteksten uden for tidsrummet (§4). Processerne stoppes |
+| Webapps | Web App Manager starter kun tilladte (under 13) eller ikke-spærrede (13–17) webapps |
+| Programmer | AppArmor-profil for kontekst-brugeren. Under 13: ingen terminal og kun tilladte programmer. Aldersmærkning fra programmernes AppStream-metadata (OARS) kan bruges som udgangspunkt |
+| Installation | Kontekst-brugere kan aldrig installere systemprogrammer |
+| Internetfiltrering | nftables-regler pr. kontekst-brugerens UID tvinger al DNS gennem enhedens filtrerende resolver og spærrer kendte krypterede DNS-endpoints (DoH/DoT) uden om den. Gælder alle programmer, ikke kun webapps |
+| Køb og handlinger med konsekvens | Gaten, med værgens godkendelse som andet sæt øjne |
+
+**Internetfiltrering: kilde.** Filterkilden er udskiftelig (ADR-0004 D1) og vælges i reglerne:
+
+- **Standard:** DNS4EU Public Service, variant *Protective + Child Protection* (EU-medfinansieret, drevet af et europæisk konsortium, krypteret DoH/DoT). Forudsætning, der skal verificeres: DNS4EU's vilkår beskriver tjenesten som rettet mod den enkelte borger og ikke kommerciel brug; at barnets enhed forespørger direkte på familiens vegne skal afklares med operatøren, før det bliver standard.
+- **Alternativ uden ekstern forespørgsel:** lokal filtrering i enhedens resolver med åbne kategorilister (fx UT1-listerne fra Université Toulouse Capitole, som bruges bredt i skoler). Licens og opdateringsvej skal afklares.
+- **Begrænsning, der skal stå i brugerfladen:** DNS-filtrering spærrer domæner, ikke indhold inden for et tilladt domæne.
+
+**Brugsoverblik.** Barnets enhed skriver et overblik (tid pr. dag, hvilke webapps, programmer og kontekster) krypteret til værgernes nøgler i familiens hjem. Det indeholder aldrig indhold.
+
+**Værgens webvisning** (besluttet af ejer). Værger kan se overblikket og ændre reglerne fra en browser, også på deres nuværende telefon:
+
+- Webvisningen er en statisk webapp. Den henter de krypterede data direkte fra familiens hjem og dekrypterer dem **i værgens browser**. Den, der leverer webappen (Eira eller familien selv), kan ikke læse reglerne eller overblikket (ID-hjemmet, K11, berøres ikke).
+- Værgens nøgle i browseren afledes af en passkey via WebAuthn PRF-udvidelsen, så ingen adgangskode eller nøglefil skal gemmes på telefonen.
+- Ændrede regler signeres i browseren med en nøgle, der er registreret som en af værgens enheder (§8).
+
 ## 12. Fejlkoder
 
 | Kode | Hvornår |
