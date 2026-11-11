@@ -3,6 +3,7 @@
 **Status:** Forslag til grundlæggende platformprincip — afventer ejerens godkendelse  
 **Type:** Strategisk produkt- og arkitekturprincip  
 **Scope:** Hele EIRA-platformen; ikke en selvstændig app eller et nyt vertikalt fagsystem
+**Afstemt med:** [ADR-0005](../decisions/ADR-0005-kontekster-og-datas-hjem.md) (kontekster), [ADR-0006](../decisions/ADR-0006-livets-indbakke.md) (livets indbakke, glimt), [EIRA-CONTEXT 1.0](../../specs/EIRA-CONTEXT-1.0.md). Hvor dette forslag og de dokumenter er uenige, gælder de (rev. 11. november 2026).
 
 ---
 
@@ -45,6 +46,8 @@ Eksempler på eksisterende produkter som Holdsport, SkoleIntra og Aula repræsen
 | Økonomisk hændelse | Kontingent, betaling, tilskud, udgift og økonomisk status |
 
 Modellen skal være generel. Den må ikke hardcodes til en bestemt organisationsform.
+
+**Én grundmodel betyder ikke én database.** Alle fællesskaber bruger de samme objekttyper, men hvert fællesskab er en kontekst (ADR-0005) med sine egne data, sit eget hjem og sine egne regler. Det, der er fælles, er modellen og kontrakterne, ikke data.
 
 ### 2.2 Konfiguration frem for nye systemer
 
@@ -89,9 +92,16 @@ En familie skal kunne bruge EIRA som én samlet indgang til sine fællesskaber.
 
 Eksempel: Et barn går i skole, spiller fodbold og går på musikskole. Familien skal ikke vedligeholde tre separate identiteter, tre uafhængige kontaktlister og tre kalendere for at få hverdagen til at hænge sammen.
 
-EIRA skal kunne vise relevante aktiviteter, beskeder og opgaver på tværs, samtidig med at adgang og information respekterer hvert fællesskabs grænser.
+EIRA skal give familien ét overblik over hverdagen på tværs af fællesskaberne, uden at indhold krydser grænserne (ADR-0006 L5):
+
+- **Kalender-glimt:** et fællesskab kan tillade, at dets aktiviteter vises på tværs med **tidspunkt og sted**, fx *"torsdag 17–18, Havnsø Stadion"*. Ingen titel, beskrivelse, deltagere eller beskeder.
+- **Aktivitets-glimt:** at der er nyt i et fællesskab (antal og tidspunkt), aldrig hvad.
+- **Indhold** (beskeder, opgaver, dokumenter) læses kun i fællesskabets egen kontekst. Et klik på et glimt tilbyder at skifte dertil.
+- **Arbejdskontekster** viser som standard kun aktivitets-glimt.
 
 En lærer må ikke automatisk få adgang til klubbens oplysninger. En træner må ikke automatisk få adgang til skolens oplysninger. En forælder/værge får kun adgang i kraft af en verificeret relation og de rettigheder, der gælder i den konkrete kontekst.
+
+**Forældre og værger** får en **egen rolle i fællesskabets kontekst** (fx "forælder til Anna" i skolens kontekst) med deres egen identitet. De får ikke adgang til barnets kontekst. Fællesskabet styrer rollen og dens gyldighed; barnets data forbliver barnets. Verifikation af værgerelationen og aldersregler skal specificeres, før funktioner med børns persondata implementeres (§9 pkt. 4).
 
 **Fælles platform betyder ikke fælles adgang til alle data.** Sammenhæng i oplevelsen skal kombineres med streng kontekstuel adgangskontrol og dataminimering.
 
@@ -175,4 +185,5 @@ Dette dokument fastlægger retningen, ikke en færdig implementering.
 - Ushahidi: https://www.ushahidi.com/
 - EIRA Platform Principles: `docs/specs/EIRA_Platform_Principles_v1.0.md`
 - EIRA Cognitive Runtime: `docs/specs/EIRA_Cognitive_Runtime_v1.0.md`
-- EIRA Object Graph Specification: `docs/specs/EIRA_Object_Graph_Specification_v0.3.md`
+- EIRA Object Graph Specification: `docs/specs/EIRA_Object_Graph_Specification_v0.3.md` (findes i tre versioner, v0.1–v0.3; skal afklares ved oprydningen af `docs/specs/`)
+- ADR-0005, ADR-0006 og EIRA-CONTEXT 1.0 (se øverst)
