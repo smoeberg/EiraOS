@@ -19,7 +19,13 @@ override_dh_auto_test:
 
 override_dh_auto_install:
 	install -d debian/eira-os-core/usr/lib/eira-os
-	cp -a app debian/eira-os-core/usr/lib/eira-os/
+	# Only the production import closure of app/, never the dev HTTP bridge,
+	# its routers or prototype daemons (scripts/app_modules.py).
+	python3 scripts/app_modules.py > debian/app-modules.closure
+	grep -v '^#' packaging/app-modules.txt | diff -u - debian/app-modules.closure
+	grep -v '^#' packaging/app-modules.txt | while read -r f; do \
+		install -D -m 0644 "$$f" "debian/eira-os-core/usr/lib/eira-os/$$f" || exit 1; \
+	done
 	install -m 0644 requirements.txt debian/eira-os-core/usr/lib/eira-os/
 	install -d debian/eira-os-core/usr/share/eira-os
 	install -m 0644 packaging/daemon-policy.json debian/eira-os-core/usr/share/eira-os/daemon-policy.json
