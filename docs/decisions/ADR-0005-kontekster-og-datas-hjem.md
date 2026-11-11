@@ -1,6 +1,6 @@
 # ADR-0005 — Kontekster: enheden er neutral, rollen bestemmer, data bor hos konteksten
 
-**Status:** Foreslået, til ejerens accept (11. november 2026). K1–K11 er ejerens retning.
+**Status:** Foreslået, til ejerens accept (11. november 2026). K1–K12 er ejerens retning.
 **Gælder for:** `identityd`, Gate (lag 4 og 6), `fleetd`/`eira-governance-agent`, graphd (universet), Web App Manager (ADR-0004 D3), lagring og synkronisering, installer og første opstart
 **Relateret:** [ADR-0003](ADR-0003-rettigheder-fra-fleet.md) (rettigheder fra Fleet), [ADR-0004](ADR-0004-gui-arkitektur-vendor-neutral.md) (vendor-neutral), [EIRA-IDENTITY 1.0](../../specs/EIRA-IDENTITY-1.0.md)
 
@@ -130,6 +130,31 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 - **Lukkede enheder kører uden (besluttet af ejer):** en enhed, som Fleet har lukket for andre end organisationens kontekster (K6), bruger ikke ID-hjemmet. Kontekstlisten kommer da fra Fleet, og der er ingen Eira-tjeneste i login-vejen. Organisationer, der ikke vil have en tredjepart i medarbejdernes login, kan altså bruge EiraOS. Åbnes enheden for flere kontekster, bruges ID-hjemmet for de personer, der har mere end organisationens kontekster.
 - **Privat indhold** hører ikke til i ID-hjemmet. Ønsker personen at bruge Eira til private data, er det et kontekst-hjem som alle andre, et tilvalg og ikke en del af ID-hjemmet.
 
+### K12 — Familie og værger (besluttet af ejer, 11. november 2026)
+
+**Familien er en kontekst.** Forældre og børn er medlemmer; familiekalenderen og fælles begivenheder bor i familiens hjem (fx CalDAV). Klubbers og skolers begivenheder ser forældre i fællesskabets egen kontekst via en forælderrolle (forslag #165).
+
+**"Overfør glimt"** er den eneste undtagelse fra "ingen deling" (K2): personen kan oprette en begivenhed i en anden kontekst (fx familiekalenderen) ud fra et kalender-glimt (ADR-0006 L5). Kun tid og sted følger med; titlen skriver personen selv. Det virker kun, hvis kildekonteksten har tilladt kalender-glimt.
+
+**Værgestyret kontekst.** Et barns personlige kontekst styres af dets værger med samme politikmekanisme som Fleet, men uden Fleet-tjenesten:
+
+- Værgernes regler er et dokument signeret med værgernes enhedsnøgler. Det ligger i familiens hjem og håndhæves af barnets enheder som et rettighedssæt. Ingen central tjeneste og ingen organisation imellem.
+- **Værgen ser kun regler og et brugsoverblik** (tid, hvilke apps og kontekster). Aldrig indhold: beskeder, dokumenter, billeder. Forældrestyring er ikke overvågning.
+- **Faste alderstrin i EiraOS:**
+
+| Trin | Værgen kan |
+|---|---|
+| Under 13 år | Sætte tidsrum; tillade webapps og adaptere (kun tilladte virker); godkende nye kontakter; godkende køb og andre handlinger med konsekvens gennem gaten (andet sæt øjne) |
+| 13–17 år | Sætte tidsrum; spærre bestemte webapps og adaptere (alt andet virker); godkende køb over en grænse, værgen sætter |
+| 18 år | Intet. Værgestyringen ophører automatisk, og konteksten bliver fuldt personlig. Data har hele tiden været barnets |
+
+- **Alderstrin afgøres uden at gemme fødselsdato:** ved barnets login med eID bruges en aldersattest ("over 13", "over 18"), som EU Digital Identity Wallet understøtter. EiraOS gemmer ikke CPR-nummer eller fødselsdato.
+- **Værgerelationen i 1.0** (besluttet af ejer): samme niveau som branchen (Apple Familiedeling, Microsoft Family Safety), men stærkere bevis for voksenstatus. Som hos dem bekræftes, at værgen er voksen, ikke at værgen er barnets forælder:
+  - **Voksenstatus via eID-aldersattest** ("over 18"), ikke via betalingskort.
+  - **Den første værge opretter barnets kontekst** og inviterer den anden. To værger er ligestillede; ingen af dem kan fjerne den anden alene. Uenighed om værgeskab løses uden for EiraOS og afspejles i EiraOS, når begge værger eller en officiel kilde bekræfter det.
+  - **Gennemsigtighed som værn:** fra 13 år kan barnet selv se, hvem dets værger er, og hvilke regler der gælder.
+- **Officiel bekræftelse af forældremyndighed** (fx fra offentlige registre eller som attest i EU Digital Identity Wallet) undersøges parallelt og tilføjes, når der findes en lovlig adgangsvej. Det er ikke et krav for 1.0.
+
 ## Konsekvenser for det eksisterende
 
 - **ADR-0003 og RIGHTS-SET** binder i dag rettighedssæt til en enhed (`tenant_id`, `device_id`). Det skal udvides til at binde til en kontekst, så en organisation kan styre sin kontekst på en enhed, den ikke ejer. Revision af RIGHTS-SET kræves.
@@ -137,6 +162,7 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 - **Sessioner** i `identityd` og gaten bliver pr. kontekst. Samtykkeagenten (EIRA-CONSENT-AGENT) viser altid, i hvilken kontekst et samtykke gives.
 - **graphd:** et univers pr. kontekst.
 - **Web App Manager:** profil = kontekst (afløser ADR-0004 O-4).
+- **Politikmekanismen** (Fleet) skal også kunne bruges med værgesignerede regler (K12); EIRA-CONTEXT §2 får `governance.source = guardian`.
 - **`fleetd`**s E2EE-synkronisering med Merkle-træer afløses af K8. Merkle-teknikken genbruges i lag 2.
 - **Compositor og skal (ADR-0004):** én Wayland-socket pr. kontekst og en neutral skal-bruger (K7) skal ind i compositor-sporet og Eira UI.
 - **Session (K9):** greetd skal autologge ind som den neutrale skal-bruger i stedet for `ubuntu`.

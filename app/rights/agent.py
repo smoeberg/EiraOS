@@ -310,10 +310,21 @@ def sync(client: FleetRightsClient | None = None, cache: RightsCache | None = No
     cache.record_sync(outcome, now, next_poll)
     heartbeat = getattr(client, "heartbeat", None)
     if heartbeat is not None and outcome != "offline":
+        from app.gate import audit_seal
+
+        seal = audit_seal.for_fleet()
         try:
-            heartbeat(heartbeat_fields(cache, datetime.now(timezone.utc)), audit_anchor_for_fleet())
+            if seal is None:
+                heartbeat(heartbeat_fields(cache, datetime.now(timezone.utc)), audit_anchor_for_fleet())
+            else:
+                heartbeat(heartbeat_fields(cache, datetime.now(timezone.utc)), audit_anchor_for_fleet(), seal)
         except FleetError as exc:
             _log("rights.sync", heartbeat="not_delivered", error=str(exc))
+        else:
+            if seal is not None:
+                # Fleet has it (2xx): it no longer stays on this machine.
+                audit_seal.handed_over("fleet")
+                _log("rights.sync", audit_seal="handed_over_to_fleet")
     return SYNC_EXIT[outcome]
 
 

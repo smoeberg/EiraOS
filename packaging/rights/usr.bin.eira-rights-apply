@@ -30,6 +30,10 @@
   /data/audit/anchor.json r,
   /data/rights/ rw,
   /data/rights/** rwk,
+  # The journal's FSS verification key, until handed to Fleet (audit_seal.py).
+  /etc/machine-id r,
+  /var/lib/eira-audit-seal/ rw,
+  /var/lib/eira-audit-seal/** rw,
 
   network inet stream,
   network inet6 stream,

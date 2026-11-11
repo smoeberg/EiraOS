@@ -75,6 +75,7 @@ Sendes efter hvert sæt, Fleet har leveret:
 
   `missing` skal sættes op; `misconfigured` er en fejl.
 - `audit` (valgfri, OpenAPI 1.3): gatens seneste audit-anker `{seq, head, at}` (GATE-KERNEL bilag A pkt. 2). Fleet gemmer hvert par pr. enhed, alarmerer, hvis `seq` falder eller et kendt head ændres, og kan eksportere dem til `eira-audit-verify --anchors`.
+- `audit_seal` (valgfri, OpenAPI 1.4): journalens FSS-verifikationsnøgle `{verify_key, interval, machine_id}` (GATE-KERNEL bilag A pkt. 2). Sendes kun, mens nøglen venter på overdragelse, og slettes på enheden efter et 2xx-svar. Nøglen kan genskabe forseglingsnøglerne: Fleet skal opbevare den som en hemmelighed og kun bruge den til at verificere enhedens journal.
 - `clock_rollback`: enheden har set sit ur gå tilbage forbi sit højvandsmærke. Fleet Console bør vise det.
 
 ## 4. Agentens runde (`sync_once`)

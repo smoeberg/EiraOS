@@ -103,10 +103,14 @@ class HttpsFleetRightsClient:
 
     # --- heartbeat (rights fields; FLEET-RIGHTS-API §3.3) ---------------------
 
-    def heartbeat(self, rights: RightsHeartbeat, audit: dict | None = None) -> None:
+    def heartbeat(self, rights: RightsHeartbeat, audit: dict | None = None, seal: dict | None = None) -> None:
         body = {"device_id": self._device_id, "rights": rights.to_json()}
         if audit is not None:
             body["audit"] = audit  # Fleet witnesses the audit chain (§3.3)
+        if seal is not None:
+            # The journal's FSS verification key, once (§3.3): Fleet keeps it
+            # off the machine; the caller deletes it here after a 2xx.
+            body["audit_seal"] = seal
         self._post("/v1/heartbeat", body)
 
     # --- plumbing -------------------------------------------------------------

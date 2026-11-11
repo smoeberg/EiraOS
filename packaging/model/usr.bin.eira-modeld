@@ -1,0 +1,32 @@
+#include <tunables/global>
+
+# The model process: reads its code, talks to the gate, nothing else.
+/usr/bin/eira-modeld flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/python>
+
+  /usr/bin/eira-modeld rix,
+  /bin/dash ix,
+  /usr/bin/dash ix,
+  /usr/bin/python3{,.[0-9]*} mrix,
+  /usr/lib/eira-os/ r,
+  /usr/lib/eira-os/** r,
+  /etc/eira/eira.conf r,
+
+  # Its own socket.
+  /run/eira-model/ rw,
+  /run/eira-model/modeld.sock rwk,
+  # The gate's socket, and only that one.
+  /run/eira/ r,
+  /run/eira/intentd.sock rw,
+
+  network unix stream,
+  deny network inet,
+  deny network inet6,
+  deny /data/** rwklx,
+  deny /var/lib/eira/** rwklx,
+  deny /var/log/eira/** rwklx,
+  deny /run/eira/{stated,identityd,fleetd,veritasd,graphd,delegationd}.sock rw,
+  deny @{HOME}/** rwklx,
+}
