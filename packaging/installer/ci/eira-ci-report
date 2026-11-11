@@ -136,10 +136,15 @@ token = ""
 for line in open("/etc/eira/eira.conf", encoding="utf-8"):
     if line.startswith("EIRA_IPC_TOKEN="):
         token = line.split("=", 1)[1].strip()
-for method, params in (
-    ("delegation.propose", {"session_id": "forged", "delegee_id": "model:x", "scope": {"actions": ["prepare"]}}),
+# propose: a forged session is refused (-32003). proposal/create: only the
+# consent agent may decide, refused before the session is looked at
+# (EIRA-CONSENT-AGENT §5.4a: -32004 E_CONSENT_PATH).
+for method, params, code, message in (
+    ("delegation.propose", {"session_id": "forged", "delegee_id": "model:x", "scope": {"actions": ["prepare"]}},
+     -32003, None),
+    ("delegation.proposal", {"session_id": "forged", "proposal_id": "p"}, -32004, "E_CONSENT_PATH"),
     ("delegation.create", {"session_id": "forged", "proposal_id": "p", "content_hash": "c",
-                           "rendering_hash": "r", "proof": "0" * 64}),
+                           "rendering_hash": "r", "proof": "0" * 64}, -32004, "E_CONSENT_PATH"),
 ):
     s = socket.socket(socket.AF_UNIX)
     s.settimeout(5)
@@ -147,7 +152,9 @@ for method, params in (
     s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
                            "params": {**params, "_eira": {"ipc_token": token}}}) + "\n").encode())
     reply = json.loads(s.makefile().readline())
-    assert reply.get("error", {}).get("code") == -32003, (method, reply)
+    error = reply.get("error", {})
+    assert error.get("code") == code, (method, reply)
+    assert message is None or error.get("message") == message, (method, reply)
 PY
 # The packaged model process (GATE-KERNEL bilag A): its own user, confined,
 # and it reaches the gate, which refuses it without a human's delegation.
@@ -341,7 +348,19 @@ seal_owner_handover() {
     # No forced rotation here: rotating twice within one sealing interval
     # makes journald write two tags with the same epoch, which
     # journalctl --verify reports as corruption (seen in this VM).
-    if ! journalctl --system --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+    # The online system.journal is appended to while it is read; a hash
+    # entry can point at an object not yet written ("Invalid data object",
+    # seen in this VM while the archived files passed). Sync and retry; a
+    # real seal break fails every attempt.
+    ok=
+    for attempt in 1 2 3; do
+        journalctl --sync >/dev/null 2>&1 || true
+        if journalctl --system --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+            ok=1; break
+        fi
+        sleep 3
+    done
+    if [ -z "$ok" ]; then
         say "diag seal-verify: $(tr '\n' ' ' </tmp/seal-verify.txt | cut -c1-1500)"
         return 1
     fi
