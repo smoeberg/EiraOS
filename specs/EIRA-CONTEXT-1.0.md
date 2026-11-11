@@ -138,8 +138,11 @@ Kontekst-brugerens hjemmekatalog er krypteret med en nøgle afledt af CMK (`eira
 ### 5.4 Organisationens nøgle (escrow)
 
 - Hver organisationskontekst har **sin egen** escrow-nøgle (besluttet af ejer). `keys/org` er CMK pakket til den. En kompromitteret escrow-nøgle åbner derfor kun én medarbejders kontekst, ikke alle.
-- Escrow-nøglerne opbevares i Fleet og er tilgængelige for organisationens medarbejdere med adgang til Fleet.
-- Enhver brug af en escrow-nøgle (udpakning af en CMK) er en auditeret hændelse i Fleet med hvem, hvornår, hvilken kontekst og begrundelse.
+- Escrow-nøglerne opbevares i Fleet (besluttet af ejer), med tre værn (besluttet af ejer):
+  1. **Særskilt rolle:** kun medarbejdere med Fleet-rollen *nøgleforvalter* kan bruge en escrow-nøgle. Rollen følger ikke automatisk med anden Fleet-adgang (fx support eller enhedsadministration).
+  2. **Fire øjne:** brug kræver godkendelse fra to forskellige nøgleforvaltere. Den ene kan ikke være den medarbejder, hvis kontekst åbnes.
+  3. **Besked til medarbejderen:** medarbejderen får besked om, at konteksten er åbnet (hvem, hvornår, begrundelse), medmindre organisationen registrerer en lovlig grund til udsættelse (fx en verserende sag). Udsættelsen er tidsbegrænset og selv auditeret.
+- Enhver brug af en escrow-nøgle (udpakning af en CMK) er en auditeret hændelse i Fleet med hvem (begge godkendere), hvornår, hvilken kontekst og begrundelse.
 
 ### 5.5 Rotation
 
@@ -270,4 +273,4 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 - **O-3 Oprydning af blokke:** hvor mange manifestversioner pr. enhed der bevares (versionshistorik vs. lagerforbrug).
 - ~~**O-4 Glimt fra låste kontekster.**~~ Besluttet af ejer: nej i 1.0. Kun åbne kontekster viser glimt (§11).
 - **O-5 fscrypt eller andet** til lokal kryptering i hvile (§5.3), og samspil med TPM-forsegling.
-- ~~**O-6 Organisationens escrow.**~~ Besluttet af ejer: én nøgle pr. kontekst, opbevaret i Fleet, tilgængelig for organisationens medarbejdere med adgang til Fleet (§5.4).
+- ~~**O-6 Organisationens escrow.**~~ Besluttet af ejer: én nøgle pr. kontekst, opbevaret i Fleet, brugt af rollen nøgleforvalter med fire øjne og besked til medarbejderen (§5.4).
