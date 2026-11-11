@@ -23,7 +23,6 @@ from app.routers import (
     capability,
     context,
     dashboard,
-    fleet,
     graph,
     health,
     intent,
@@ -63,7 +62,6 @@ app.include_router(health.router)
 app.include_router(dashboard.router)
 app.include_router(intent.router)
 app.include_router(auth.router)
-app.include_router(fleet.router)
 app.include_router(graph.router)
 app.include_router(audit.router)
 app.include_router(veritas.router)

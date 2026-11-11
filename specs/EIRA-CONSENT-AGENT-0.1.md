@@ -23,6 +23,7 @@ Intet i denne kontrakt er en opnået sikkerhedsegenskab. Alle punkter nedenfor e
 | Agentregistrering mod sessionens compositor | §5.2 | Ja (`app/auth/consent_agent.py`) | Test med falsk `/proc` (indlejret, anden session, anden bruger, genbrugt PID); **O-6 ikke verificeret i VM** |
 | Nøgleudlevering kun til registreret agent; appen får ingen nøgle | §5.3 | Ja | Test; VM: kald uden agentens GID afvises (`consent-key-only-to-agent`) |
 | Gaten afviser samtykke uden agentens GID (`E_CONSENT_PATH`) | §7 | Ja, også uden session | Test; VM (`consent-path-enforced`) |
+| Samtykkenøglen skrives aldrig til disk og er ugyldig efter genstart | §5.3 | Ja, med tmpfs og boot-id (#178) | Kun enhedstests. Ikke i VM |
 | Agentens miljø-, fd- og argumentkrav | R-5.1–R-5.5 | Ja (`hygiene.rs`; binæren linker kun libc) | Enhedstest; VM og CI: `ldd` (`consent-agent-links-only-libc`) |
 
 **Det, der står tilbage:** R-6.2 (labwc-patchen) og verifikation i en rigtig grafisk session (O-6, R-6.1–R-6.3). Indtil da kan et program, der kører som brugeren, ikke få fat i samtykkenøglen eller samtykke selv, men det kan i princippet lægge et almindeligt vindue over agentens og narre brugerens klik (clickjacking); R-6.3 dæmper det. ADR-0003's sætning (§8) gælder først, når R-6.2 er lavet.
@@ -123,6 +124,8 @@ Agenten forbinder til sin compositor (`WAYLAND_DISPLAY` under `XDG_RUNTIME_DIR`)
 Uændret OIDC-flow i appen (`identity.login_start` / `identity.login_complete`). Ændringen er, at `login_complete` **ikke** returnerer `consent_key` på et installeret system.
 
 **Besluttet i 0.3:** Agenten får ikke session-id'et fra appen. Ved login gemmer `identityd` den logind-session, appen kørte i (`/proc/<pid>/sessionid`). `identity.consent_key_claim` (uden parametre) giver nøglen til den nyeste gyldige Eira-session for agentens uid i agentens egen logind-session, og kun til en registreret agent (§5.2). Agenten henter nøglen for hver beslutning og sletter den fra hukommelsen bagefter.
+
+**Nøglen skrives aldrig til disk** (11. november 2026, fra invariant A-1 i EIRA-CONTEXT). Den findes kun i hukommelsen hos `identityd` og agenten og er bundet til sessionens logind-session og boot-id. Efter genstart findes der ingen gyldig samtykkenøgle, og en kopi af disken indeholder ingen. `identityd`, gaten og `delegationd` deler nøglen gennem en fil på tmpfs (`/run/eira/consent-keys.db`, `app/consent_keys.py`), bundet til boot-id; den afviser en sti, der ikke er tmpfs. `identity.consent_key_claim` læser nøglen derfra.
 
 ### 5.4 Samtykke og bekræftelse
 

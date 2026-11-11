@@ -15,6 +15,10 @@
 
   /run/eira/ rw,
   /run/eira/*.sock rwk,
+  /run/eira/consent-keys.db rwk,
+  # app/consent_keys.py: the store must be on tmpfs and keys are tied to the boot.
+  @{PROC}/@{pid}/mounts r,
+  @{PROC}/sys/kernel/random/boot_id r,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
   /var/log/eira/** rw,

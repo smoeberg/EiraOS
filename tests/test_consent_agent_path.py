@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app import consent_keys
 from app.auth import consent_agent
 from app.gate import GateCode, consent_path
 from app.gate.caller import Caller, acting_as
@@ -168,14 +169,17 @@ def tree(tmp_path, monkeypatch):
     db = str(tmp_path / "app.db")
     conn = sqlite3.connect(db)
     conn.execute("""CREATE TABLE sessions (session_id TEXT, os_uid INTEGER, authenticated_at TEXT,
-                    identity TEXT, expires_at TEXT, consent_key TEXT, logind_session TEXT)""")
-    conn.executemany("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)", [
-        ("s-old", HUMAN_UID, "2026-11-11T08:00:00Z", "did:eira:anne", "2099-01-01T00:00:00Z", "aa" * 32, "2"),
-        ("s-new", HUMAN_UID, "2026-11-11T09:00:00Z", "did:eira:anne", "2099-01-01T00:00:00Z", CONSENT_KEY, "2"),
-        ("s-elsewhere", HUMAN_UID, "2026-11-11T10:00:00Z", "did:eira:anne", "2099-01-01T00:00:00Z",
-         "bb" * 32, "7"),
-        ("s-expired", HUMAN_UID, "2026-11-11T11:00:00Z", "did:eira:anne", "2000-01-01T00:00:00Z", "cc" * 32, "2"),
+                    identity TEXT, expires_at TEXT, logind_session TEXT)""")
+    conn.executemany("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?)", [
+        ("s-old", HUMAN_UID, "2026-11-11T08:00:00Z", "did:eira:anne", "2099-01-01T00:00:00Z", "2"),
+        ("s-new", HUMAN_UID, "2026-11-11T09:00:00Z", "did:eira:anne", "2099-01-01T00:00:00Z", "2"),
+        ("s-elsewhere", HUMAN_UID, "2026-11-11T10:00:00Z", "did:eira:anne", "2099-01-01T00:00:00Z", "7"),
+        ("s-expired", HUMAN_UID, "2026-11-11T11:00:00Z", "did:eira:anne", "2000-01-01T00:00:00Z", "2"),
     ])
+    # The keys live in the RAM store (app/consent_keys.py), not in the session row.
+    for sid, key in (("s-old", "aa" * 32), ("s-new", CONSENT_KEY), ("s-elsewhere", "bb" * 32),
+                     ("s-expired", "cc" * 32)):
+        consent_keys.put(sid, key)
     conn.commit()
     return SimpleNamespace(proc=proc, db=db)
 
@@ -188,6 +192,17 @@ def test_the_agent_on_the_session_compositor_registers_and_gets_the_newest_key(t
     assert consent_agent.register(peer(), COMPOSITOR, tree.db)["logind_session"] == "2"
     claimed = consent_agent.claim_key(peer(), tree.db)
     assert (claimed["session_id"], claimed["consent_key"]) == ("s-new", CONSENT_KEY)
+
+
+def test_a_session_without_a_key_in_ram_is_skipped(tree):
+    """After a reboot or logout the newest session has no key (#178): the
+    claim falls back to an older one that still has one, never to disk."""
+    consent_agent.register(peer(), COMPOSITOR, tree.db)
+    consent_keys.forget("s-new")
+    assert consent_agent.claim_key(peer(), tree.db)["session_id"] == "s-old"
+    consent_keys.forget("s-old")
+    with pytest.raises(consent_agent.Refused, match="no logged-in"):
+        consent_agent.claim_key(peer(), tree.db)
 
 
 @pytest.mark.parametrize(("who", "compositor", "reason"), [

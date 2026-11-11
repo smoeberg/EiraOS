@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app import consent_keys
 from app.ipc.jsonrpc import JsonRpcError
 
 PROC = Path(os.environ.get("EIRA_PROC", "/proc"))
@@ -193,16 +194,20 @@ def claim_key(peer, db_path: str | None = None) -> dict[str, Any]:
     with _connect(db_path) as conn:
         registration = _registered(conn, peer)
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        row = conn.execute(
-            """SELECT session_id, identity, expires_at, consent_key FROM sessions
+        rows = conn.execute(
+            """SELECT session_id, identity, expires_at FROM sessions
                 WHERE os_uid = ? AND logind_session = ? AND authenticated_at IS NOT NULL
-                  AND consent_key IS NOT NULL AND expires_at > ?
-                ORDER BY authenticated_at DESC LIMIT 1""",
+                  AND expires_at > ?
+                ORDER BY authenticated_at DESC""",
             (peer.uid, registration["logind_session"], now),
-        ).fetchone()
-    if row is None:
-        raise Refused("no logged-in Eira session in this logind session")
-    return dict(row)
+        ).fetchall()
+    # The key lives in RAM only and only for this boot (app/consent_keys.py):
+    # the newest session that still has one.
+    for row in rows:
+        key = consent_keys.get(row["session_id"])
+        if key:
+            return {**dict(row), "consent_key": key}
+    raise Refused("no logged-in Eira session in this logind session")
 
 
 def handlers(db_path: str | None = None):

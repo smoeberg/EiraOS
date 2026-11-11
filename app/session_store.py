@@ -4,6 +4,8 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from app import consent_keys
+
 
 def new_consent_key() -> str:
     from app.gate.consent_proof import new_key
@@ -73,7 +75,8 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             ("identity", "TEXT"),
             ("groups_json", "TEXT"),
             ("expires_at", "TEXT"),
-            # Trusted path: only the consent agent claims it (EIRA-CONSENT-AGENT).
+            # Kept only so old databases open; never written. Consent keys
+            # live in RAM (app/consent_keys.py).
             ("consent_key", "TEXT"),
             # The logind session the login came from: the agent claims the key
             # of its own logind session, never one the app names.
@@ -81,6 +84,13 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
         ):
             if column not in columns:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
+        # Upgrade: erase consent keys earlier versions wrote to disk, with
+        # freed pages zeroed (EIRA-CONSENT-AGENT §5.3).
+        if conn.execute(
+            "SELECT 1 FROM sessions WHERE consent_key IS NOT NULL LIMIT 1"
+        ).fetchone():
+            conn.execute("PRAGMA secure_delete=ON")
+            conn.execute("UPDATE sessions SET consent_key = NULL")
         conn.commit()
     finally:
         if close:
@@ -154,14 +164,18 @@ def create_session_from_claims(
                 INSERT INTO sessions (
                     session_id, actor_id, actor_name, org_unit, assurance_level,
                     delegated_for, presentation_mode, created_at, updated_at,
-                    os_uid, authenticated_at, identity, groups_json, expires_at, consent_key, logind_session
-                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    os_uid, authenticated_at, identity, groups_json, expires_at, logind_session
+                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO NOTHING
                 """,
                 (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires,
-                 new_consent_key(), logind_session),
+                 logind_session),
             )
             if cursor.rowcount == 1:
+                # The key is made in RAM, never in this database. If it cannot
+                # be stored, the login fails rather than leave a session that
+                # would need a key on disk.
+                consent_keys.put(sid, new_consent_key())
                 conn.commit()
                 return sid
     raise RuntimeError("could not create a fresh session")
@@ -196,8 +210,12 @@ def get_session(session_id: str) -> dict | None:
 
 def get_session_for_gate(session_id: str) -> dict | None:
     """The gate's view, including the consent key it verifies proofs with.
-    Only the gate kernel may use this."""
-    return _read_session(session_id)
+    Only the gate kernel may use this. The key comes from RAM and only for
+    this boot; after a reboot it is None, and every proof fails."""
+    session = _read_session(session_id)
+    if session is not None:
+        session["consent_key"] = consent_keys.get(session_id)
+    return session
 
 def update_assurance(session_id: str, assurance_level: str) -> dict:
     ensure_session(session_id)

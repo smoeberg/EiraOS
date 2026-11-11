@@ -2,7 +2,7 @@
 
 **Audit-base:** `main` / `audit/a-components-ipc` ved commit `5b750114523e0d5f02a471d9feaccd35712c1c76`  
 **Metode:** Statisk gennemgang af `app/daemons/*.py` og `app/ipc/*.py`. Runtime-permissions er ikke målt på Ubuntu.  
-**Scope:** Afsnit B i `docs/EIRA_GUI_Audit_Checklist.md`. Ingen kodeændringer.
+**Scope:** Afsnit B i `docs/archive/sprints/EIRA_GUI_Audit_Checklist.md`. Ingen kodeændringer.
 
 ## Transport og framing
 

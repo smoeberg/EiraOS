@@ -82,7 +82,7 @@ Styr udvikling i Redmine: [`redmine/REDMINE_SETUP.md`](redmine/REDMINE_SETUP.md)
 | IPC token | `EIRA_IPC_TOKEN` + `_eira.ipc_token` |
 | Intent execute | `executor.execute_intent()` |
 
-Se [Scope Closure](../docs/specs/EIRA_Scope_Closure_Engineering_v0.1.md).
+Se [Scope Closure](../docs/archive/specs-v0/EIRA_Scope_Closure_Engineering_v0.1.md).
 
 ---
 

@@ -83,7 +83,7 @@ jobs:
           weston --backend=headless --renderer=pixman --socket=wayland-ci --width=1280 --height=800 &
           for i in $(seq 1 20); do [ -S "$XDG_RUNTIME_DIR/wayland-ci" ] && break; sleep 0.5; done
           WAYLAND_DISPLAY=wayland-ci timeout 60 target/debug/examples/window_smoke
-      # Phase 0 IPC & Event Bus contract (docs/specs/PHASE-0-IPC-EVENT-BUS.md).
+      # Phase 0 IPC & Event Bus contract (specs/PHASE-0-IPC-EVENT-BUS.md).
       # Behind a feature so the Android/WASM state core stays syscall-free.
       - name: Phase 0 contract tests (eira-core --features ipc-tokio)
         run: |
