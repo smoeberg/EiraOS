@@ -255,7 +255,7 @@ def test_rust_rejects_integers_beyond_64_bit_fail_closed(rust_library: Path) -> 
 def test_bit_identical_sha3_hashes_python_vs_rust(rust_library: Path) -> None:
     """Same states through Python and Rust paths → bit-identical SHA3-256 digests.
 
-    Hard gate for docs/EIRA_Sprint8_Cutover_Checklist.md full cutover clearance.
+    Hard gate for docs/archive/sprints/EIRA_Sprint8_Cutover_Checklist.md full cutover clearance.
     """
     states = _chain(25)
     # Extra edge vectors: empty payload keys, unicode, large timestamp, null parent.

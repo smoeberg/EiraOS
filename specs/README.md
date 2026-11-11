@@ -41,6 +41,27 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 EDP does not replace external protocols. Adapters map supported actions to and from external systems and must report unsupported or degraded mappings honestly. Schema validation does not establish identity, authorization, delivery, provenance validity, consent, or truth.
 
+## Delegation
+
+- [EIRA Delegation Protocol 1.1](EIRA-DELEGATION-PROTOCOL-1.1.md) — human-to-model preparation delegation ("på vegne af", GATE-KERNEL bilag A pkt. 1), created only through the trusted path.
+
+**Status:** Normative. Moved from `docs/specs/` on 11 November 2026.
+
+## Rights from Fleet
+
+- [EIRA Rights Set 1.0](EIRA-RIGHTS-SET-1.0.md) — the signed rights set, anchors, root and operational keys, offline time (ADR-0003).
+- [EIRA Fleet Rights API 1.0](EIRA-FLEET-RIGHTS-API-1.0.md) and [OpenAPI](eira-fleet-rights-api-1.0.openapi.json) — how a set reaches the device, enroll and transport.
+
+**Status:** Approved by the owner 8 November 2026; normative.
+
+## Core IPC (Rust)
+
+- [Phase 0 IPC & Event Bus](PHASE-0-IPC-EVENT-BUS.md) — normative for `crates/eira-core`. Moved from `docs/specs/` on 11 November 2026.
+
+## Archive
+
+Earlier specifications (the former `docs/specs/`) are in [`docs/archive/specs-v0/`](../docs/archive/specs-v0/). They are not normative.
+
 ## Consistency rule
 
 The architecture baseline describes how these specifications fit together. If a spec, schema, implementation, or test disagrees with another, record the discrepancy and reconcile the source contract and tests before relying on it. Do not silently treat a draft as runtime behavior.
