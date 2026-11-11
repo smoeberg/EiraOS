@@ -35,7 +35,18 @@ WORK=$(mktemp -d -t eira-labwc.XXXXXXXX)
 trap 'rm -rf -- "$WORK"' EXIT INT TERM
 
 # --- sources -----------------------------------------------------------------
-curl -sSfL -o "$WORK/wlroots.tar.bz2" "$WLROOTS_URL"
+# The tarball is pinned by SHA-256 and SHA-512, so any full Ubuntu mirror may
+# serve it: archive.ubuntu.com first, then EIRA_UBUNTU_MIRRORS (used when
+# *.ubuntu.com is unreachable, as on GitHub's runners on 11 Nov 2026).
+fetched=
+for url in "$WLROOTS_URL" $(for m in ${EIRA_UBUNTU_MIRRORS:-http://mirrors.mit.edu/ubuntu http://mirrors.edge.kernel.org/ubuntu}; do
+        printf '%s\n' "${WLROOTS_URL/#http:\/\/archive.ubuntu.com\/ubuntu/$m}"; done); do
+    if curl -sSfL --connect-timeout 20 --retry 2 -o "$WORK/wlroots.tar.bz2" "$url"; then
+        fetched=1; break
+    fi
+    echo "eira-labwc: kunne ikke hente $url" >&2
+done
+[ -n "$fetched" ] || { echo "eira-labwc: wlroots kunne ikke hentes" >&2; exit 69; }
 echo "$WLROOTS_SHA256  $WORK/wlroots.tar.bz2" | sha256sum -c --quiet -
 echo "$WLROOTS_SHA512  $WORK/wlroots.tar.bz2" | sha512sum -c --quiet -
 

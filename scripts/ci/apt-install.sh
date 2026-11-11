@@ -10,7 +10,7 @@
 # * each try is short (one apt retry, 20 s timeouts, a hard limit), so an
 #   outage costs minutes, not an hour;
 # * after two failed tries the sources are pointed at a full Ubuntu mirror
-#   outside ubuntu.com. Trust does not change: apt still verifies every
+#   outside ubuntu.com (MIT, then kernel.org). Trust does not change: apt still verifies every
 #   index against Ubuntu's archive key, whichever host serves it.
 #
 # Usage: scripts/ci/apt-install.sh PACKAGE...   (sudo is used if not root)
@@ -21,7 +21,7 @@ SUDO=()
 [[ $(id -u) -eq 0 ]] || SUDO=(sudo)
 APT=("${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get
      -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
-read -r -a FALLBACKS <<<"${EIRA_APT_FALLBACK_MIRRORS:-http://mirrors.edge.kernel.org/ubuntu http://mirrors.mit.edu/ubuntu}"
+read -r -a FALLBACKS <<<"${EIRA_APT_FALLBACK_MIRRORS:-http://mirrors.mit.edu/ubuntu http://mirrors.edge.kernel.org/ubuntu}"
 BACKUP=$(mktemp -d)
 
 source_files() {
@@ -50,7 +50,7 @@ for attempt in 1 2 3 4 5 6; do
         use_mirror "${FALLBACKS[$(( (attempt - 3) % ${#FALLBACKS[@]} ))]}"
     fi
     if timeout 300 "${APT[@]}" update -q --error-on=any \
-        && timeout 900 "${APT[@]}" install -y --no-install-recommends "$@"; then
+        && timeout 1500 "${APT[@]}" install -y --no-install-recommends "$@"; then
         exit 0
     fi
     if [[ $attempt -eq 6 ]]; then

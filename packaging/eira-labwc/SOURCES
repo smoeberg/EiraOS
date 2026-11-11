@@ -1,5 +1,6 @@
 # Pinned upstream sources for eira-labwc (EIRA-CONSENT-AGENT §6.1).
-# build.sh reads this file; nothing else is downloaded.
+# build.sh reads this file; nothing else is downloaded. The wlroots tarball
+# may come from another Ubuntu mirror (same path); the hashes decide.
 #
 # wlroots: Ubuntu's copy of the upstream release tarball. Its SHA-512 is the
 # one in Ubuntu's signed Sources index (stonking, wlroots 0.20.2-1), so the
