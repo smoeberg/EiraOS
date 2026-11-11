@@ -135,9 +135,15 @@ Når en kontekst åbnes første gang på en enhed, forsegles CMK i TPM'en til (a
 
 Kontekst-brugerens hjemmekatalog er krypteret med en nøgle afledt af CMK (`eira-ctx-local-v1`), fx via fscrypt-politik pr. katalog. Uden CMK kan selv root ikke læse en låst kontekst på en slukket enhed. (En åben kontekst på en kørende enhed er ikke beskyttet mod root, jf. trusselsmodellen i EIRA-CONSENT-AGENT §9.)
 
-### 5.4 Rotation
+### 5.4 Organisationens nøgle (escrow)
 
-CMK roteres ved tilbagekaldelse af en enhed (§8) og på organisationens anmodning. Ny CMK bruges til alt nyt; gamle blokke genkrypteres i baggrunden. Indtil da kan den tilbagekaldte enhed i princippet læse det, den allerede havde (det kan ikke undgås), men intet nyt.
+- Hver organisationskontekst har **sin egen** escrow-nøgle (besluttet af ejer). `keys/org` er CMK pakket til den. En kompromitteret escrow-nøgle åbner derfor kun én medarbejders kontekst, ikke alle.
+- Escrow-nøglerne opbevares i Fleet og er tilgængelige for organisationens medarbejdere med adgang til Fleet.
+- Enhver brug af en escrow-nøgle (udpakning af en CMK) er en auditeret hændelse i Fleet med hvem, hvornår, hvilken kontekst og begrundelse.
+
+### 5.5 Rotation
+
+CMK roteres ved tilbagekaldelse af en enhed (§8) og på organisationens anmodning. Ny CMK (og ny pakning til escrow-nøglen) bruges til alt nyt; gamle blokke genkrypteres i baggrunden. Indtil da kan den tilbagekaldte enhed i princippet læse det, den allerede havde (det kan ikke undgås), men intet nyt.
 
 ## 6. Lagerformat (K8 lag 2) — åbent og dokumenteret
 
@@ -206,7 +212,7 @@ Universet (graphd), samtaler og andre strukturerede data er Automerge-dokumenter
 - `keys/devices.signed` er listen over enheder, der må læse og skrive konteksten. Den signeres af:
   - for `organisation`: organisationens nøgle via Fleet (samme rod- og driftsnøgler som RIGHTS-SET §3.1);
   - for `personal`: en af personens eksisterende enheder (første enhed signerer sig selv ved oprettelse; genoprettelse (ADR-0005 K5) kan starte en ny liste).
-- **Tilbagekaldelse:** enheden fjernes fra listen, dens `keys/devices/<device_id>` slettes, og CMK roteres (§5.4). Næste gang den tilbagekaldte enhed er online, ser den, at den ikke er på listen, og fjerner konteksten (§4). Er den offline, låses konteksten senest, når `max_offline_days` udløber.
+- **Tilbagekaldelse:** enheden fjernes fra listen, dens `keys/devices/<device_id>` slettes, og CMK roteres (§5.5). Næste gang den tilbagekaldte enhed er online, ser den, at den ikke er på listen, og fjerner konteksten (§4). Er den offline, låses konteksten senest, når `max_offline_days` udløber.
 
 ## 9. ID-hjemmet (K11)
 
@@ -235,7 +241,7 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 
 - Hver åben kontekst må, hvis `policy.glimt_allowed`, sende til skallen: `{context_id, count, since}`. Skallen slår `display_name` op i sin egen krypterede cache, der kun findes, mens personen er logget ind.
 - Intet andet felt er tilladt. Skallen afviser beskeder med andre felter.
-- En låst kontekst sender ikke glimt (dens processer kører ikke). Glimt fra låste kontekster kræver, at hjemmet kan svare på "antal nye manifester siden X" uden at afsløre indhold. Det er O-4.
+- En låst kontekst sender ikke glimt (dens processer kører ikke). Glimt fra låste kontekster findes ikke i 1.0 (O-4): det ville kræve, at hjemmet kan tælle nye manifester og dermed ser personens aktivitetsmønstre.
 
 ## 12. Fejlkoder
 
@@ -262,6 +268,6 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 - **O-1 UID-interval** for kontekst-brugere. Forslag: et dedikeret interval uden kollision med systemd (dynamiske brugere 61184–65519, homed 60001–60513, containere fra 524288). Skal verificeres mod Ubuntu 26.04 og værktøjer, der ikke tåler UID'er over 65535.
 - **O-2 Glemselsfrist** for ubrugte kontekster (forslag: 30 dage) og om personen kan ændre den.
 - **O-3 Oprydning af blokke:** hvor mange manifestversioner pr. enhed der bevares (versionshistorik vs. lagerforbrug).
-- **O-4 Glimt fra låste kontekster:** skal en låst kontekst kunne vise aktivitet? Det kræver, at hjemmet kan tælle nye manifester, hvilket afslører aktivitetsmønstre for hjemmet. Forslag: nej i 1.0; kun åbne kontekster viser glimt.
+- ~~**O-4 Glimt fra låste kontekster.**~~ Besluttet af ejer: nej i 1.0. Kun åbne kontekster viser glimt (§11).
 - **O-5 fscrypt eller andet** til lokal kryptering i hvile (§5.3), og samspil med TPM-forsegling.
-- **O-6 Organisationens escrow** (`keys/org`): én nøgle pr. organisation eller pr. kontekst, og hvem i organisationen kan bruge den?
+- ~~**O-6 Organisationens escrow.**~~ Besluttet af ejer: én nøgle pr. kontekst, opbevaret i Fleet, tilgængelig for organisationens medarbejdere med adgang til Fleet (§5.4).
