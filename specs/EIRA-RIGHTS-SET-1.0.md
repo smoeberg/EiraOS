@@ -26,7 +26,7 @@ Et **rettighedssæt** er ét signeret dokument, der fuldt ud beskriver, hvad pri
 
 | Begreb | Kilde | Eksempel |
 |---|---|---|
-| Principal og grupper (*hvem*) | Entra / `identityd` | `did:eira:entra.<oid>` (Entra-objekt-id i Eiras navnerum, samme form som EDP-deltagere), gruppenavne fra tokenets `groups` |
+| Principal og grupper (*hvem*) | Identitetsudbyderen / `identityd` | `did:eira:<provider-id>.<subjekt>` ([EIRA-IDENTITY 1.0](EIRA-IDENTITY-1.0.md), samme form som EDP-deltagere; fx `did:eira:entra.<oid>` for en installation med Entra), gruppenavne fra den konfigurerede gruppe-claim |
 | Grant og deny (*hvad*) | Fleet, via skabelon | `edp:commitment_proposed` på `obj:sag:*` for `group:laerere` |
 | Håndhævelse | Gate (lag 4 og 6) | `REJECT E_UNAUTHORIZED` |
 

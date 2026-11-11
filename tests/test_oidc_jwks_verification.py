@@ -99,14 +99,20 @@ def valid_jwks(valid_jwk):
 @pytest.fixture
 def oidc_config():
     """Create a test OIDC config."""
+    # Microsoft Entra as one configuration among others (config.example.env):
+    # subject from "oid" (a GUID, so case-insensitive), organisation from "tid".
     return OidcConfig(
+        provider_id="entra",
         issuer="https://login.microsoftonline.com/test-tenant/v2.0",
         client_id="test-client-id",
         client_secret="test-secret",
         redirect_uri="http://localhost:8765/v1/auth/oidc/callback",
         scopes="openid profile email",
-        tenant_id="test-tenant",
         mock_enabled=False,
+        subject_claim="oid",
+        subject_case_insensitive=True,
+        org_claim="tid",
+        jwks_uri="https://login.microsoftonline.com/test-tenant/discovery/v2.0/keys",
     )
 
 
@@ -283,7 +289,7 @@ class TestClaimsFromIdToken:
         assert claims["name"] == "Test User"
         assert claims["tenant_id"] == "test-tenant"
         assert claims["sub"] == "test-sub"
-        assert claims["idp"] == "entra"
+        assert claims["idp"] == "entra"  # the configured provider id
 
     def test_token_without_oid_is_rejected(self, rsa_keys, valid_jwks, oidc_config):
         """The gate's identity is the object id; an email alone is not one."""
@@ -432,49 +438,119 @@ class TestClaimsFromIdToken:
                 claims_from_id_token(token, oidc_config, nonce="test-nonce")
 
 
-class TestJwksUrl:
-    """The JWKS URL is derived from the authority, not the /v2.0 issuer.
+class TestDiscovery:
+    """Endpoints come from the issuer's discovery document (OIDC Discovery
+    1.0), not from URLs built into the code. Only an override wins."""
 
-    Entra: issuer https://login.microsoftonline.com/{tenant}/v2.0,
-    keys at https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys.
-    Every other test patches ``_fetch_jwks``, so a wrong URL went unnoticed.
-    """
+    ISSUER = "https://idp.example/realms/kommune"
 
     @staticmethod
-    def _cfg(issuer: str = "", tenant_id: str = "contoso") -> "OidcConfig":
+    def _cfg(**kw) -> "OidcConfig":
         from app.auth.oidc import OidcConfig
 
-        return OidcConfig(
-            issuer=issuer,
-            client_id="client",
-            client_secret="",
-            redirect_uri="http://localhost/callback",
-            scopes="openid",
-            tenant_id=tenant_id,
-            mock_enabled=False,
-        )
+        base = dict(provider_id="keycloak", issuer=TestDiscovery.ISSUER, client_id="client",
+                    client_secret="", redirect_uri="http://localhost/callback", scopes="openid",
+                    mock_enabled=False)
+        base.update(kw)
+        return OidcConfig(**base)
 
-    def test_url_from_explicit_v2_issuer(self, monkeypatch):
-        from app.auth.oidc import _get_jwks_url
+    @staticmethod
+    def _serve(monkeypatch, doc, status=200):
+        from app.auth import oidc
 
-        monkeypatch.delenv("OIDC_JWKS_URI", raising=False)
-        cfg = self._cfg(issuer="https://login.microsoftonline.com/contoso/v2.0")
-        assert (
-            _get_jwks_url(cfg)
-            == "https://login.microsoftonline.com/contoso/discovery/v2.0/keys"
-        )
+        oidc._discovery_cache.clear()
+        calls = []
 
-    def test_url_from_tenant_only(self, monkeypatch):
-        from app.auth.oidc import _get_jwks_url
+        class Response:
+            status_code = status
 
-        monkeypatch.delenv("OIDC_JWKS_URI", raising=False)
-        assert (
-            _get_jwks_url(self._cfg())
-            == "https://login.microsoftonline.com/contoso/discovery/v2.0/keys"
-        )
+            @staticmethod
+            def json():
+                return doc
 
-    def test_explicit_override(self, monkeypatch):
-        from app.auth.oidc import _get_jwks_url
+        class Client:
+            def __init__(self, *a, **k):
+                pass
 
-        monkeypatch.setenv("OIDC_JWKS_URI", "https://idp.example/keys")
-        assert _get_jwks_url(self._cfg()) == "https://idp.example/keys"
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def get(self, url):
+                calls.append(url)
+                return Response()
+
+        monkeypatch.setattr(oidc.httpx, "Client", Client)
+        return calls
+
+    def _doc(self, **kw):
+        doc = {
+            "issuer": self.ISSUER,
+            "authorization_endpoint": self.ISSUER + "/protocol/openid-connect/auth",
+            "token_endpoint": self.ISSUER + "/protocol/openid-connect/token",
+            "jwks_uri": self.ISSUER + "/protocol/openid-connect/certs",
+        }
+        doc.update(kw)
+        return doc
+
+    def test_endpoints_from_discovery(self, monkeypatch):
+        calls = self._serve(monkeypatch, self._doc())
+        cfg = self._cfg()
+        assert cfg.authorize_url() == self.ISSUER + "/protocol/openid-connect/auth"
+        assert cfg.token_url() == self.ISSUER + "/protocol/openid-connect/token"
+        assert cfg.endpoints()["jwks_uri"] == self.ISSUER + "/protocol/openid-connect/certs"
+        assert calls == [self.ISSUER + "/.well-known/openid-configuration"]  # cached
+
+    def test_discovery_with_another_issuer_is_refused(self, monkeypatch):
+        self._serve(monkeypatch, self._doc(issuer="https://evil.example"))
+        with pytest.raises(ValueError, match="issuer does not match"):
+            self._cfg().authorize_url()
+
+    def test_discovered_endpoint_must_be_https(self, monkeypatch):
+        self._serve(monkeypatch, self._doc(token_endpoint="http://idp.example/token"))
+        with pytest.raises(ValueError, match="https token_endpoint"):
+            self._cfg().token_url()
+
+    def test_overrides_skip_discovery(self, monkeypatch):
+        calls = self._serve(monkeypatch, {})
+        cfg = self._cfg(authorization_endpoint="https://a.example/auth",
+                        token_endpoint="https://a.example/token", jwks_uri="https://a.example/keys")
+        assert cfg.authorize_url() == "https://a.example/auth"
+        assert calls == []
+
+
+class TestNoBuiltInProvider:
+    """ADR-0004 D1: there is no default provider and no Microsoft URL in code."""
+
+    def test_live_login_needs_provider_issuer_and_client(self, monkeypatch):
+        from app.auth.oidc import OidcNotConfigured
+
+        for missing in ("provider_id", "issuer", "client_id"):
+            cfg = TestDiscovery._cfg(**{missing: ""})
+            with pytest.raises(OidcNotConfigured):
+                cfg.require_live()
+
+    def test_provider_id_grammar(self):
+        from app.auth.oidc import OidcNotConfigured
+
+        for bad in ("Entra", "my.idp", "-x", "1idp", "a" * 33, "idp_1"):
+            with pytest.raises(OidcNotConfigured):
+                TestDiscovery._cfg(provider_id=bad).require_live()
+
+    def test_old_tenant_only_setting_fails_closed(self, monkeypatch):
+        from app.auth.oidc import OidcNotConfigured, load_oidc_config
+
+        monkeypatch.delenv("EIRA_OIDC_MOCK", raising=False)
+        monkeypatch.delenv("OIDC_ISSUER", raising=False)
+        monkeypatch.setenv("OIDC_TENANT_ID", "contoso")
+        with pytest.raises(OidcNotConfigured, match="OIDC_PROVIDER_ID"):
+            load_oidc_config()
+
+    def test_no_vendor_url_in_auth_code(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1] / "app" / "auth"
+        for path in root.glob("*.py"):
+            assert "microsoftonline" not in path.read_text(), path

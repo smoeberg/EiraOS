@@ -2,6 +2,12 @@
 
 This directory contains protocol and interface specifications for EiraOS. The integrated architecture map is [EiraOS Architecture Baseline 1.0](../docs/architecture/eiraos-architecture-baseline-1.0.md).
 
+## Identity
+
+- [EIRA Identity 1.0](EIRA-IDENTITY-1.0.md) — vendor-neutral identity from any OpenID Connect provider: provider as configuration, `did:eira:<provider-id>.<subject>`, provider pinned to its issuer.
+
+**Status:** Draft, implemented in `app/auth/`. Existing `did:eira:entra.<oid>` identities are preserved by the Entra configuration (§4).
+
 ## Gate Kernel
 
 - [Gate Kernel 1.0](GATE-KERNEL-1.0.md) — authoritative protected-action boundary: validation, semantic/policy checks, consent, authorization, state safety, execution and result verification.
