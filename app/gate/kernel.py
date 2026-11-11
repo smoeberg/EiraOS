@@ -604,7 +604,8 @@ class Gate:
         elif int(bound) != caller.uid:
             return None
         # Installed logins carry the identity from verified claims
-        # (did:eira:entra.<oid>); gate_identities is the binding for older sessions.
+        # (did:eira:<provider-id>.<subject>, EIRA-IDENTITY 1.0); gate_identities
+        # is the binding for older sessions.
         identity = session.get("identity") or self.store.identity_for(session["actor_id"])
         if identity is None:
             return None
@@ -612,7 +613,7 @@ class Gate:
             "session_id": session_id,
             "identity": identity,
             "assurance_level": session.get("assurance_level"),
-            # Group membership comes from identity (Entra/identityd), never
+            # Group membership comes from identity (the provider via identityd), never
             # from the request; rights for groups come from the set (ADR-0003).
             "groups": tuple(session.get("groups") or ()),
             "caller_uid": caller.uid,

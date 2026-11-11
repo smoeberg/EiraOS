@@ -20,7 +20,8 @@ export function isDesktop(): boolean {
 }
 
 /**
- * Desktop login: the app opens the system browser on Entra, catches the
+ * Desktop login: the app opens the system browser on the configured identity
+ * provider, catches the
  * loopback redirect itself and completes the login with identityd. The
  * authorization code never reaches this webview; only the session id does.
  */
@@ -40,7 +41,7 @@ const MESSAGES: Array<[RegExp, string]> = [
   [/login_timed_out/, "Login tog for lang tid. Prøv igen."],
   [/could not open the browser/, "Browseren kunne ikke åbnes."],
   [/caller_not_in_a_login_session|loginuid_does_not_match_peer/, "Appen kører ikke i din login-session."],
-  [/live_login_unavailable/, "Login med Entra er ikke sat op på denne maskine."],
+  [/live_login_unavailable/, "Login er ikke sat op på denne maskine."],
   [/invalid_or_expired_state/, "Login udløb. Prøv igen."],
 ];
 

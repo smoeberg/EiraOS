@@ -85,6 +85,9 @@ function loadStoredSession(): string | null {
 sessionId = loadStoredSession();
 
 export interface OidcConfig {
+  /** Installation-chosen provider id and display name (EIRA-IDENTITY 1.0). */
+  provider_id?: string | null;
+  provider_name?: string | null;
   issuer: string | null;
   client_id: string | null;
   redirect_uri: string;

@@ -223,6 +223,16 @@ def _migrate_oidc(conn: sqlite3.Connection) -> None:
     for column in ("nonce TEXT", "os_uid INTEGER", "redirect_uri TEXT"):
         if column.split()[0] not in columns:
             conn.execute(f"ALTER TABLE oidc_auth_states ADD COLUMN {column}")
+    # EIRA-IDENTITY 1.0 §3: a provider id is pinned to its issuer on first use.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS oidc_provider_bindings (
+            provider_id TEXT PRIMARY KEY,
+            issuer TEXT NOT NULL,
+            bound_at TEXT NOT NULL
+        )
+        """
+    )
 
 
 def _migrate_v03(conn: sqlite3.Connection) -> None:

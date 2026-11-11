@@ -1,7 +1,7 @@
 //! Desktop login (GATE-KERNEL bilag A pkt. 1; RFC 8252 "OAuth 2.0 for Native Apps").
 //!
 //! 1. Bind an ephemeral port on 127.0.0.1 (the IPv4 loopback literal).
-//! 2. identityd `identity.login_start` with that redirect: Entra URL with
+//! 2. identityd `identity.login_start` with that redirect: the provider URL with
 //!    PKCE + nonce, state bound to this OS user (loginuid + SO_PEERCRED).
 //! 3. Open the system browser on the URL.
 //! 4. Wait for exactly one `GET /callback` carrying the expected `state`.
@@ -45,7 +45,7 @@ const MAX_REQUEST_HEAD: usize = 8 * 1024;
 pub enum Callback {
     /// The expected callback with its authorization code.
     Code(String),
-    /// Entra reported an error (user cancelled, consent denied, …).
+    /// The identity provider reported an error (user cancelled, consent denied, …).
     Denied(String),
     /// Not our callback: wrong path, wrong state or malformed. Ignore it.
     Ignore,
