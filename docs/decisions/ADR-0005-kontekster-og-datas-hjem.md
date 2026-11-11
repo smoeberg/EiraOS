@@ -1,6 +1,6 @@
 # ADR-0005 — Kontekster: enheden er neutral, rollen bestemmer, data bor hos konteksten
 
-**Status:** Foreslået, til ejerens accept (11. november 2026). K1–K10 er ejerens retning.
+**Status:** Foreslået, til ejerens accept (11. november 2026). K1–K11 er ejerens retning.
 **Gælder for:** `identityd`, Gate (lag 4 og 6), `fleetd`/`eira-governance-agent`, graphd (universet), Web App Manager (ADR-0004 D3), lagring og synkronisering, installer og første opstart
 **Relateret:** [ADR-0003](ADR-0003-rettigheder-fra-fleet.md) (rettigheder fra Fleet), [ADR-0004](ADR-0004-gui-arkitektur-vendor-neutral.md) (vendor-neutral), [EIRA-IDENTITY 1.0](../../specs/EIRA-IDENTITY-1.0.md)
 
@@ -19,7 +19,8 @@
 | **Person** | Mennesket ved skærmen |
 | **Identitet** | Et login hos en identitetsudbyder (`did:eira:<provider-id>.<subjekt>`, EIRA-IDENTITY) |
 | **Kontekst** | En identitet *plus* en rolle givet af en organisation (eller af personen selv), med eget regelsæt, eget hjem, egne data, eget univers og egne webprofiler. Eksempler: arbejde (kommunen), fritid (personen), bestyrelse (klubben) |
-| **Hjem** | Det sted, en konteksts data autoritativt ligger: valgt af organisationen eller personen, aldrig af EiraOS |
+| **Kontekst-hjem** | Det sted, en konteksts data autoritativt ligger: valgt af organisationen eller personen, aldrig af EiraOS |
+| **ID-hjem** | Personens faste anker, drevet af EiraOS. Indeholder ingen følsomme data i læsbar form (K11) |
 | **Enhed** | Maskinen. Har en krypteret, lokal kopi af de kontekster, der er i brug, og er aldrig den autoritative kilde |
 
 En kontekst er ikke altid en egen identitetsudbyder. En forening har sjældent et login-system. Bestyrelsesrollen er en rolle, som klubben giver personens private identitet.
@@ -39,7 +40,7 @@ Alt, hvad EiraOS viser og gør, sker i en kontekst. At skifte rolle er at skifte
 
 ### K3 — Data bor hos konteksten; EiraOS definerer protokollen, ikke skyen
 
-- EiraOS definerer, hvordan en kontekst synkroniseres med sit hjem. Lagringen bag kan udskiftes (fx S3-kompatibel, WebDAV). EiraOS kræver ingen egen sky. Krævede den det, blev Eira den nye leverandørbinding (ADR-0004 D1).
+- EiraOS definerer, hvordan en kontekst synkroniseres med sit hjem. Lagringen bag kan udskiftes (fx S3-kompatibel, WebDAV). EiraOS kræver ingen egen sky til **data**. Krævede den det, blev Eira den nye leverandørbinding (ADR-0004 D1). Det eneste, EiraOS selv driver, er ID-hjemmet (K11), som ikke indeholder data.
 - Hjemmet behøver ikke kunne læse data: lagring hos en tredjepart er end-to-end-krypteret med nøgler, som kun personen og dennes enheder har (for arbejdskontekster: organisationen).
 - **Valg af hjem:** Fleet kan skubbe hjemmet ud for sine kontekster. Ellers peger brugeren selv på et hjem ved opstart. EiraOS foreslår ikke et bestemt hjem som standard.
 
@@ -106,6 +107,28 @@ Konsekvens: greetd autologger i dag ind som en fast bruger (`ubuntu`). Det skal 
 
 EiraOS udvikles ud fra, at forbindelse er næsten konstant. Offline (K4) er en sikker reserve, ikke den normale tilstand: konteksten virker videre ved afbrydelser, og konflikter håndteres som i K4, men designet optimeres ikke til lange offline-perioder. Standard for maksimal offline-periode i personlige kontekster: **7 dage** (foreslået, kan ændres af personen). Organisationer sætter deres egen via Fleet.
 
+### K11 — ID-hjemmet: fast hos EiraOS, uden følsomme data (besluttet)
+
+Der er to slags hjem: **kontekst-hjem** (data, valgt pr. kontekst, K3) og ét **ID-hjem** pr. person, som altid er EiraOS'. ID-hjemmet er personens anker på tværs af enheder: ved login på en hvilken som helst EiraOS-maskine finder enheden personens kontekster gennem det.
+
+**ID-hjemmet indeholder kun:**
+
+| Indhold | Form | Hvad Eira kan se |
+|---|---|---|
+| Kontoens id | Pseudonym, afledt pr. tjeneste af personens eID (ikke CPR eller tilsvarende) | At en konto findes |
+| Personens kontekstliste og pegepinde til kontekst-hjemmene | Krypteret med personens nøgle | Intet: en uigennemsigtig blok og dens størrelse |
+| Offentlige nøgler for personens enheder | Offentlige nøgler | Hvor mange enheder kontoen har |
+
+**ID-hjemmet indeholder aldrig:** data fra nogen kontekst, læsbare navne på organisationer, roller eller kontekster, nøgler, der kan åbne data (genoprettelsens indpakkede nøgler ligger i kontekst-hjemmene, K5), eller indhold af nogen art.
+
+Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgiver og foreningsliv). Derfor ligger den kun krypteret. Eira kan ikke læse den, heller ikke på krav fra en myndighed.
+
+**Krav:**
+- **Minimal logning:** ID-hjemmet gemmer ikke IP-adresser eller tidspunkter for opslag ud over det, driften strengt kræver, og sletter dem hurtigt. Brugsmønstre er også følsomme data.
+- **Exit-garantien gælder:** personen kan altid hente en krypteret kopi af sin ID-post. Forsvinder Eiras ID-hjem, har personen stadig sine kontekst-hjem og nøgler og kan læse alle data (K8).
+- **Ikke i datavejen:** ID-hjemmet bruges ved login og ved skift af enhed, ikke ved hver læsning eller skrivning. Er det nede, kører allerede åbnede kontekster videre (K4).
+- **Privat indhold** hører ikke til i ID-hjemmet. Ønsker personen at bruge Eira til private data, er det et kontekst-hjem som alle andre, et tilvalg og ikke en del af ID-hjemmet.
+
 ## Konsekvenser for det eksisterende
 
 - **ADR-0003 og RIGHTS-SET** binder i dag rettighedssæt til en enhed (`tenant_id`, `device_id`). Det skal udvides til at binde til en kontekst, så en organisation kan styre sin kontekst på en enhed, den ikke ejer. Revision af RIGHTS-SET kræves.
@@ -117,14 +140,17 @@ EiraOS udvikles ud fra, at forbindelse er næsten konstant. Offline (K4) er en s
 - **Compositor og skal (ADR-0004):** én Wayland-socket pr. kontekst og en neutral skal-bruger (K7) skal ind i compositor-sporet og Eira UI.
 - **Session (K9):** greetd skal autologge ind som den neutrale skal-bruger i stedet for `ubuntu`.
 - **Ny kontrakt:** et åbent, dokumenteret lagerformat (K8 lag 2) med et referenceværktøj, der læser det uden EiraOS.
+- **Ny tjeneste:** ID-hjemmet (K11) med kontrakt for indhold, kryptering, pseudonym og logning.
 
 **Rækkefølge (forslag):** ADR-0005 accepteres → kontrakt for kontekster og lagring → EIRA-IDENTITY 1.1 (identitet pr. kontekst) → Web App Manager. Web App Manager bygges ikke før konteksten, fordi dens profiler er konteksterne.
 
 ## Åbne spørgsmål
 
+- **O-7 Arbejds-pc'er uden ID-hjem.** Kræver en lukket, Fleet-styret enhed (K6) med kun organisationens kontekster også personens ID-hjem, eller kan den køre helt uden Eira i login-vejen? Forslag: kan køre uden, fordi nogle organisationer ikke vil acceptere en tredjepart i login-vejen.
+
 - ~~**O-1 Isolation i OS'et.**~~ Besluttet: K7.
 - ~~**O-2 Genoprettelsestjenesten.**~~ Besluttet: Eira driver funktionen, nøglen ligger i kontekstens hjem (K5).
 - ~~**O-3 Synkroniseringsprotokol.**~~ Besluttet: K8.
 - ~~**O-4 Maksimal offline-periode.**~~ Besluttet: K10.
-- ~~**O-5 Flere personer.**~~ Besluttet: K9. Åbent: om enheden må huske, hvilke kontekster en person har (hurtigere skift), eller skal glemme det ved log ud.
+- ~~**O-5 Flere personer.**~~ Besluttet: K9 og K11. Enheden husker intet læsbart: før login ved den hverken, hvem der har brugt den, eller hvilke kontekster der findes. Personens kontekstliste hentes fra ID-hjemmet ved login. Enheden har kun en krypteret cache af listen og af de kontekster, der er i brug, og ubrugte kontekster ryddes væk efter en periode.
 - ~~**O-6 Deling mellem kontekster.**~~ Besluttet: ingen deling (K2).
