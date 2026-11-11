@@ -1,7 +1,7 @@
 # EIRA Context 1.0 — kontekster, lagring og synkronisering
 
-**Status:** Udkast v0.1 til ejerens accept. **Ikke normativ**, før det er accepteret. Testplanen er et separat trin efter accept.
-**Version:** 0.1 (11. november 2026)
+**Status:** Udkast v0.2 til ejerens accept. **Ikke normativ**, før det er accepteret. Testplanen er et separat trin efter accept.
+**Version:** 0.2 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer)
 **Grundlag:** [ADR-0005](../docs/decisions/ADR-0005-kontekster-og-datas-hjem.md) (K1–K11), [ADR-0004](../docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [ADR-0006](../docs/decisions/ADR-0006-livets-indbakke.md) L5 (glimt)
 **Berører:** ny `eira-contextd` (rod-formidler), `identityd`, gaten, graphd, samtalelaget, den neutrale skal, compositoren, `eira-governance-agent`/Fleet, RIGHTS-SET (revision, §10)
 
@@ -10,6 +10,18 @@ Kontrakten gør ADR-0005 konkret: hvad en kontekst er som data, hvordan den leve
 ---
 
 ## 1. Begreber og identifikatorer
+
+**Ingen identifikator må bruges i stedet for en anden** (rev. 0.2):
+
+| Identifikator | Hvad den er | Rækkevidde |
+|---|---|---|
+| `context_id` | Kontekstens semantiske identitet | Global: Fleet, ID-hjemmet, kontekst-hjemmet, rettighedssæt |
+| `identity` (`did:eira:…`) | Hvem der er logget ind (EIRA-IDENTITY) | Global |
+| `device_id` | Enhedens identitet | Global |
+| `tenant_id` | Organisationen, der styrer (governance) | Global |
+| Linux-UID | Kernens isolationsprimitiv for én kontekst på én enhed | **Kun lokal.** Forlader aldrig enheden og optræder aldrig i data, protokoller, audit uden for enheden eller rettighedssæt |
+
+Hvor koden har en UID (fx fra `SO_PEERCRED`) og skal bruge en kontekst, slår den `context_id` op i `eira-contextd`s lokale tabel. Opslaget er det eneste sted, de to mødes.
 
 | Begreb | Identifikator | Form |
 |---|---|---|
@@ -184,8 +196,23 @@ Alt er **kun tilføjelse**: en blok eller et manifest overskrives aldrig. Det g�
 ### 6.2 Blokke
 
 - Filer opdeles med FastCDC (min 256 KiB, gennemsnit 1 MiB, maks 4 MiB). Små filer er én blok.
-- `block_id` = hex(HMAC-SHA256(K_id, klartekst)), hvor `K_id` = HKDF(CMK, `eira-ctx-blockid-v1`). Hjemmet kan ikke afgøre, om to kontekster har samme indhold.
-- Kryptering: ChaCha20-Poly1305 med nøgle HKDF(CMK, `eira-ctx-block-v1` ‖ `block_id`) og nonce på 12 nulbytes. Nøglen er unik pr. indhold, så nonce-genbrug med forskelligt klartekst kan ikke forekomme. Valgt for at følge `app/fleet/e2ee.py` og fordi det findes i alle gængse biblioteker.
+- `block_id` = hex(HMAC-SHA256(K_id, klartekst)), hvor `K_id` = HKDF(CMK, `eira-ctx-blockid-v1`). Id'et bruges til adressering og deduplikering. Hjemmet kan ikke afgøre, om to kontekster har samme indhold.
+- **Kryptering er ikke-deterministisk** (rev. 0.2). Hver kryptering, også af en blok med et kendt `block_id`, bruger frisk tilfældighed:
+
+  ```
+  salt       = 32 tilfældige bytes (CSPRNG)
+  nonce      = 12 tilfældige bytes (CSPRNG)
+  block_key  = HKDF-SHA256(CMK, salt, info = "eira-ctx-block-v2" ‖ block_id)
+  aad        = "eira-ctx-block-v2" ‖ context_id ‖ block_id
+  ciphertext = ChaCha20-Poly1305(block_key, nonce, klartekst, aad)
+  blok       = version(1) ‖ salt(32) ‖ nonce(12) ‖ ciphertext
+  ```
+
+- **Hvorfor:** sikkerheden må ikke hvile på en implicit invariant. Rev. 0.1 brugte en nøgle afledt af `block_id` og en fast nonce. Det var korrekt, så længe `block_id` altid var HMAC af præcis den klartekst, der blev krypteret. Én implementeringsfejl (fx et id taget fra en sti eller et sekvensnummer i stedet for indholdet) ville give genbrug af nøgle og nonce i ChaCha20-Poly1305 (RFC 8439 §4), som afslører klartekst og tillader forfalskning. Med frisk salt og nonce pr. kryptering er hver nøgle brugt én gang, uanset hvordan id'et dannes.
+- **AAD** binder chifferteksten til kontekst og blok, så en blok ikke kan flyttes til en anden kontekst eller et andet id uden at dekrypteringen fejler.
+- **Ved læsning** genberegnes HMAC af klarteksten og sammenlignes med `block_id`. Afvigelse er `E_CONTEXT_INTEGRITY`.
+- **Deduplikering** sker på `block_id`: findes blokken allerede i hjemmet, uploades den ikke igen. To enheder, der samtidig uploader samme blok, giver to gyldige chiffertekster under samme id; den først skrevne bevares (kun tilføjelse), og begge dekrypterer til samme klartekst.
+- Biblioteker: ChaCha20-Poly1305 og HKDF-SHA256 findes i alle gængse biblioteker (også `cryptography`, som `app/fleet/e2ee.py` bruger), så formatet kan læses med åbne værktøjer (exit-garantien).
 
 ### 6.3 Manifester
 
@@ -203,7 +230,7 @@ Et manifest beskriver kontekstens tilstand set fra én enhed på ét tidspunkt:
 ```
 
 - `merkle_root` er roden af et Merkle-træ over alle `block_id` i manifestet. Det beviser, at intet er udeladt eller byttet.
-- Manifestet er krypteret som en blok og signeret med enhedens Ed25519-nøgle. En læser godtager kun manifester fra enheder på den signerede enhedsliste (§8).
+- Manifestet krypteres med samme konstruktion som en blok (§6.2, frisk salt og nonce), med `info`/`aad`-etiketten `eira-ctx-manifest-v2` og manifestets sti (`<device_id>/<seq>`) i stedet for `block_id`. Det signeres med enhedens Ed25519-nøgle over chifferteksten. En læser godtager kun manifester fra enheder på den signerede enhedsliste (§8).
 - `parents` peger på de manifester, enheden havde set; det giver en DAG, som sammenfletning bygger på (§7).
 
 ### 6.4 Strukturerede data
@@ -254,7 +281,7 @@ Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fas
 
 Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§8), politik (`max_offline_days`, `glimt_allowed`, `devices`) og hjemmet (K3), samt for enheder: `device_mode` = `closed` | `open` (K6).
 
-**Revision krævet af RIGHTS-SET:** et rettighedssæt bindes i dag til (`tenant_id`, `device_id`). Med kontekster skal det kunne bindes til (`tenant_id`, `context_id`) og gælde på enhver enhed på kontekstens enhedsliste. Gaten vælger sæt efter den kontekst, kaldet kommer fra (kontekst-brugerens UID → `context_id`). Revisionen af RIGHTS-SET er et separat dokument.
+**Revision krævet af RIGHTS-SET:** et rettighedssæt bindes i dag til (`tenant_id`, `device_id`). Med kontekster skal det kunne bindes til (`tenant_id`, `context_id`) og gælde på enhver enhed på kontekstens enhedsliste. Gaten vælger sæt efter den kontekst, kaldet kommer fra: peer-UID'en fra `SO_PEERCRED` slås op i `eira-contextd`s lokale tabel (§1), og sættet vælges på `context_id`. UID'en bruges aldrig selv som nøgle i et rettighedssæt. Revisionen af RIGHTS-SET er et separat dokument.
 
 ## 11. Glimt (ADR-0006 L5)
 
