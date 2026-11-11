@@ -199,6 +199,7 @@ Alt er **kun tilføjelse**: en blok eller et manifest overskrives aldrig. Det g�
 
 - Filer opdeles med FastCDC (min 256 KiB, gennemsnit 1 MiB, maks 4 MiB). Små filer er én blok.
 - `block_id` = hex(HMAC-SHA256(K_id, klartekst)), hvor `K_id` = HKDF(CMK, `eira-ctx-blockid-v1`). Id'et bruges til adressering og deduplikering. Hjemmet kan ikke afgøre, om to kontekster har samme indhold.
+- **Normativ regel (B-1):** `block_id` beregnes af præcis den klartekst, der krypteres i samme operation, i den funktion, der krypterer. Det må aldrig tages fra en filsti, metadata, et sekvensnummer, et tidligere id eller et argument fra kalderen. Krypteringsfunktionen tager kun klarteksten (og konteksten) som input og returnerer selv `block_id`.
 - **Kryptering er ikke-deterministisk** (rev. 0.2). Hver kryptering, også af en blok med et kendt `block_id`, bruger frisk tilfældighed:
 
   ```
@@ -338,6 +339,25 @@ En kontekst med `governance.source = guardian` har et regeldokument signeret af 
 | `E_CONTEXT_HOME_UNREACHABLE` | Hjemmet svarer ikke; arbejder videre lokalt (ikke en fejl for brugeren, men logges) |
 | `E_CONTEXT_INTEGRITY` | Manifest med ugyldig signatur, ukendt enhed eller Merkle-afvigelse. Manifestet ignoreres og hændelsen auditeres |
 | `E_CONTEXT_POLICY` | Fleet-politik forbyder handlingen (fx åben kontekst på en lukket enhed) |
+
+## 12a. Invarianter, testplanen skal dække
+
+Testplanen (separat dokument) skal have mindst én test pr. invariant, og hver test skal fejle, hvis invarianten brydes (mutationstjek):
+
+| # | Invariant | Afsnit |
+|---|---|---|
+| B-1 | `block_id` beregnes af præcis den krypterede klartekst; krypteringsfunktionens signatur tillader ikke et id udefra; en blok med forkert id afvises ved læsning (`E_CONTEXT_INTEGRITY`) | §6.2 |
+| B-2 | Salt og nonce er friske pr. kryptering: to krypteringer af samme klartekst giver forskellige chiffertekster | §6.2 |
+| B-3 | AAD binder til `context_id` og `block_id`: en blok flyttet til en anden kontekst eller et andet id kan ikke dekrypteres | §6.2 |
+| M-1 | Et manifest fra en enhed uden for den signerede enhedsliste, eller med Merkle-afvigelse, ignoreres og auditeres | §6.3, §8 |
+| S-1 | Samtidige ændringer af samme fil giver to versioner og et konfliktobjekt; intet overskrives | §7 |
+| U-1 | Linux-UID forekommer aldrig i data, manifester, protokolbeskeder, audit uden for enheden eller rettighedssæt | §1 |
+| I-1 | En kontekst-bruger kan hverken læse filer, signalere processer, ptrace, forbinde til D-Bus eller Wayland-socket for en anden kontekst; skal-brugeren kan intet af det over for nogen kontekst | §3.3 |
+| O-1 | En udløbet offline-periode kan ikke forlænges ved at stille uret tilbage | §4.2 |
+| G-1 | Skallen afviser glimt med andre felter end de tilladte, og kalender-glimt fra kontekster med `glimt_level` = `activity` | §11 |
+| E-1 | Brug af en escrow-nøgle kræver to forskellige nøgleforvaltere og giver en audithændelse og besked til medarbejderen | §5.4 |
+| V-1 | En værgestyret kontekst låses uden for tidsrummet, og dens DNS kan ikke gå uden om filtret | §11a |
+| X-1 | `eira-context-export` læser et kontekst-hjem med kun CMK og uden EiraOS (exit-garantien) | §6.5 |
 
 ## 13. Uden for scope
 
