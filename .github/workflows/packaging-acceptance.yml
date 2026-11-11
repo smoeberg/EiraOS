@@ -25,19 +25,15 @@ jobs:
     container: ubuntu:26.04
     timeout-minutes: 90
     steps:
+      # Only for scripts/ci/apt-install.sh; git is not installed yet, so
+      # this is a plain download. The real checkout follows below.
+      - name: Fetch CI scripts
+        uses: actions/checkout@v4
+
       - name: Install package build dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
-          # The container's DNS on GitHub's runners sometimes fails for minutes;
-          # apt then "updates" with warnings and every install says "Unable to
-          # locate package". Fail the update on any error and retry.
-          for i in 1 2 3 4 5 6; do
-            apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update --error-on=any && break
-            [ "$i" = 6 ] && { echo "apt index unavailable; resolv.conf:"; cat /etc/resolv.conf; exit 1; }
-            sleep $((i * 20))
-          done
-          apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y --no-install-recommends \
+          # Retries, then a mirror outside ubuntu.com (scripts/ci/apt-install.sh).
+          scripts/ci/apt-install.sh \
             ca-certificates curl git build-essential pkg-config file \
             debhelper dh-python python3-all python3-dev python3-pytest python3-venv python3-pip \
             nodejs npm libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
@@ -105,19 +101,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install build dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
-          # The container's DNS on GitHub's runners sometimes fails for minutes;
-          # apt then "updates" with warnings and every install says "Unable to
-          # locate package". Fail the update on any error and retry.
-          for i in 1 2 3 4 5 6; do
-            apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update --error-on=any && break
-            [ "$i" = 6 ] && { echo "apt index unavailable; resolv.conf:"; cat /etc/resolv.conf; exit 1; }
-            sleep $((i * 20))
-          done
-          apt-get install -y --no-install-recommends \
-            $(cat packaging/eira-labwc/build-deps) wayland-utils
+          # Retries, then a mirror outside ubuntu.com (scripts/ci/apt-install.sh).
+          scripts/ci/apt-install.sh $(cat packaging/eira-labwc/build-deps) wayland-utils
 
       - name: Build eira-labwc
         run: packaging/eira-labwc/build.sh --output-dir dist
@@ -169,8 +155,7 @@ jobs:
 
       - name: Install ISO tools
         run: |
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y xorriso gnupg curl
+          scripts/ci/apt-install.sh xorriso gnupg curl
 
       - name: Restore Ubuntu base ISO cache
         uses: actions/cache@v4
@@ -250,10 +235,14 @@ jobs:
           name: eira-ci-iso
           path: dist
 
+      - name: Fetch CI scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+
       - name: Install QEMU and enable KVM
         run: |
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y qemu-system-x86 qemu-utils ovmf socat netpbm
+          scripts/ci/apt-install.sh qemu-system-x86 qemu-utils ovmf socat netpbm
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
