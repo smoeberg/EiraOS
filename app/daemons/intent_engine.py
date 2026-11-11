@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import json
 import os
-import uuid
 
-from app.capability import ASSURANCE_RANK, list_manifests
-from app.database import get_connection, utc_now_iso
-from app.executor import execute_intent
+from app.capability import list_manifests
 from app.intent_parser import list_trust_items, parse_intent_request, plan_intent
-from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
-from app.journey import advance_journey, get_journey, list_journeys
+from app.ipc.jsonrpc import JsonRpcError
+from app.journey import get_journey, list_journeys
 from app.mistral import is_mistral_available
 from app.models import ParseIntentRequest
-from app.pending_intents import delete_pending, get_pending, mark_executed, save_pending
+from app.pending_intents import save_pending
 from app.session_store import (
     ensure_session,
     get_presentation_mode,
@@ -59,110 +55,8 @@ def intent_plan(params: dict) -> dict:
     return payload
 
 
-def intent_confirm(params: dict) -> dict:
-    sid = _session_id(params)
-    intent_id = params.get("intent_id")
-    if not intent_id:
-        raise JsonRpcError(-32602, "intent_id required")
-
-    pending = get_pending(intent_id, sid)
-    if not pending:
-        raise JsonRpcError(-32602, "intent not found", {"intent_id": intent_id})
-
-    if pending.get("status") == "clarification_needed":
-        raise JsonRpcError(
-            -32002,
-            "cannot_execute",
-            {"user_message": "Afklar intentionen før bekræftelse"},
-        )
-
-    # The plan is the authorization decision. Never let assurance or a
-    # capability match override an explicit block (or a missing plan decision).
-    if pending.get("can_execute") is not True:
-        raise JsonRpcError(
-            -32002,
-            "cannot_execute",
-            {
-                "user_message": pending.get("block_reason")
-                or "Planen tillader ikke, at handlingen udføres",
-            },
-        )
-
-    session = get_session(sid)
-    if not session:
-        raise JsonRpcError(
-            -32002,
-            "cannot_execute",
-            {"user_message": "Sessionen findes ikke længere — planlæg handlingen igen"},
-        )
-
-    required = pending.get("required_assurance")
-    capability_match = pending.get("capability_match")
-    if not isinstance(capability_match, dict):
-        raise JsonRpcError(
-            -32002,
-            "cannot_execute",
-            {"user_message": "Planen mangler et gyldigt capability-match"},
-        )
-
-    # Recheck assurance at confirmation time; plans may outlive session changes.
-    capability_required = capability_match.get("required_assurance")
-    required_levels = [
-        level for level in (required, capability_required) if level is not None
-    ]
-    current_level = session.get("assurance_level")
-    current_rank = ASSURANCE_RANK.get(current_level, -1)
-    for required_level in required_levels:
-        required_rank = ASSURANCE_RANK.get(required_level)
-        if required_rank is None or current_rank < required_rank:
-            raise JsonRpcError(
-                ASSURANCE_REQUIRED,
-                "assurance_required",
-                {
-                    "required": required_level,
-                    "current": current_level,
-                    "user_message": (
-                        f"Handlingen kræver assurance-niveauet {required_level}"
-                    ),
-                },
-            )
-
-    execution = execute_intent(pending)
-    mark_executed(intent_id)
-
-    result = {
-        "intent_id": intent_id,
-        "session_id": sid,
-        "status": "executed",
-        "message": execution["message"],
-        "execution": execution,
-    }
-    with get_connection() as conn:
-        conn.execute(
-            "INSERT INTO audit_events (id, event_type, payload, created_at) VALUES (?, ?, ?, ?)",
-            (
-                str(uuid.uuid4()),
-                "intent.executed",
-                json.dumps(result),
-                utc_now_iso(),
-            ),
-        )
-    delete_pending(intent_id)
-    return result
-
-
 def journey_list(_params: dict) -> list:
     return [j.model_dump(mode="json") for j in list_journeys()]
-
-
-def journey_advance(params: dict) -> dict:
-    journey_id = params.get("journey_id")
-    if not journey_id:
-        raise JsonRpcError(-32602, "journey_id required")
-    journey = advance_journey(journey_id)
-    if not journey:
-        raise JsonRpcError(-32602, "journey not found")
-    return journey.model_dump(mode="json")
 
 
 def journey_get(params: dict) -> dict:

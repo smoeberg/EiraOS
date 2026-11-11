@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
-import uuid
-
-from app.database import get_connection, utc_now_iso
+from app.database import get_connection
 from app.models import JourneyDetail, JourneyStep, JourneySummary
 
 
@@ -73,56 +70,3 @@ def get_journey(journey_id: str) -> JourneyDetail | None:
         steps=steps,
         status=row["status"],
     )
-
-
-def advance_journey(journey_id: str) -> JourneyDetail | None:
-    journey = get_journey(journey_id)
-    if not journey or journey.status != "active":
-        return journey
-
-    next_pending = next(
-        (s for s in journey.steps if s.status == "pending"), None
-    )
-    if not next_pending:
-        return journey
-
-    now = utc_now_iso()
-    with get_connection() as conn:
-        conn.execute(
-            """
-            UPDATE journey_steps
-            SET status = 'completed', completed_at = ?
-            WHERE id = ?
-            """,
-            (now, next_pending.id),
-        )
-        new_step = journey.current_step + 1
-        status = "completed" if new_step >= journey.total_steps else "active"
-        conn.execute(
-            """
-            UPDATE journeys
-            SET current_step = ?, status = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (new_step, status, now, journey_id),
-        )
-        conn.execute(
-            """
-            INSERT INTO audit_events (id, event_type, payload, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                str(uuid.uuid4()),
-                "journey.step_completed",
-                json.dumps(
-                    {
-                        "journey_id": journey_id,
-                        "step_id": next_pending.id,
-                        "step_label": next_pending.label,
-                    }
-                ),
-                now,
-            ),
-        )
-
-    return get_journey(journey_id)
