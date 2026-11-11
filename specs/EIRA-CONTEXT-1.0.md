@@ -1,7 +1,7 @@
 # EIRA Context 1.0 — kontekster, lagring og synkronisering
 
 **Status:** Accepteret af ejer 11. november 2026. Normativ. Testplan: [EIRA-CONTEXT-1.0-TESTPLAN](EIRA-CONTEXT-1.0-TESTPLAN.md).
-**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`; invariant A-1)
+**Version:** 0.3 (11. november 2026: rev. 0.2 ikke-deterministisk blokkryptering med AAD, skelnen mellem identifikatorer; rev. 0.3 fejlkoder for blokke, manifest-kollision og hjem uden opret-hvis-fraværende, fundet under testplanen; invarianterne R-1 og F-1; `/proc` med `hidepid=invisible`; invariant A-1; Fleet-sync bærer ikke brugerdata)
 **Grundlag:** [ADR-0005](../docs/decisions/ADR-0005-kontekster-og-datas-hjem.md) (K1–K11), [ADR-0004](../docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [ADR-0006](../docs/decisions/ADR-0006-livets-indbakke.md) L5 (glimt)
 **Berører:** ny `eira-contextd` (rod-formidler), `identityd`, gaten, graphd, samtalelaget, den neutrale skal, compositoren, `eira-governance-agent`/Fleet, RIGHTS-SET (revision, §10)
 
@@ -291,6 +291,8 @@ Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fas
 - På en lukket organisationsenhed bruges ID-hjemmet ikke (K11): listen kommer fra Fleet.
 
 ## 10. Fleet og rettigheder
+
+**Fleet bærer styring, ikke brugerdata** (besluttet af ejer). Brugerdata synkroniseres udelukkende gennem kontekstens hjem (§6, §7) med én CMK pr. kontekst, rotation og tilbagekaldelse (§5.5, §8). Den nuværende Fleet-synkronisering (`sync.*` i `eira-fleetd`) bruger én fælles nøgle for alle enheder uden afgrænsning pr. kontekst og uden rotation. Den må ikke bære brugerdata i 1.0 og udfases for brugerdata, når kontekst-synkroniseringen findes. Fleet bærer kun det, der står i dette afsnit: kontekst-poster, enhedslister, politik, rettighedssæt og enhedens tilstand.
 
 Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§8), politik (`max_offline_days`, `glimt_allowed`, `devices`) og hjemmet (K3), samt for enheder: `device_mode` = `closed` | `open` (K6).
 
