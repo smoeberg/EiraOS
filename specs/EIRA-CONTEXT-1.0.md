@@ -13,7 +13,7 @@ Kontrakten gør ADR-0005 konkret: hvad en kontekst er som data, hvordan den leve
 
 | Begreb | Identifikator | Form |
 |---|---|---|
-| Kontekst | `context_id` | `ctx_` + 26 tegn base32 (128 bit tilfældigt). Ændres aldrig |
+| Kontekst | `context_id` | `ctx_` + 26 tegn base32 (128 bit tilfældigt). Ændres aldrig. **Kontekstens eneste identifikator** i Fleet, ID-hjemmet og kontekst-hjemmet. Den er ikke hemmelig: sikkerheden ligger i nøglerne (§5), ikke i id'et |
 | Identitet | `identity` | `did:eira:<provider-id>.<subjekt>` (EIRA-IDENTITY) |
 | Enhed | `device_id` | Fingeraftryk (SHA-256) af enhedens Ed25519-signeringsnøgle |
 | Person | – | Har **ingen** identifikator i EiraOS ud over sine identiteter og (valgfrit) sit ID-hjem-pseudonym (§9). Organisationer kan ikke koble kontekster til en person (K2) |
@@ -34,6 +34,8 @@ En kontekst beskrives af en **kontekst-post**. Posten ligger i kontekstens hjem 
   "policy": {
     "max_offline_days": 7,
     "glimt_allowed": true,
+    "forget_after_days": 30,
+    "versions": {"keep_days": 30, "trash_days": 30},
     "devices": "personal_and_managed"
   },
   "created_at": "…"
@@ -48,6 +50,8 @@ En kontekst beskrives af en **kontekst-post**. Posten ligger i kontekstens hjem 
 | `home` | Kontekst-hjemmet (K3). `type` er `s3` eller `webdav` (K8 lag 1). `prefix` er et pseudonym, så hjemmet ikke ser kontekstens navn |
 | `policy.max_offline_days` | K4/K10. Standard 7 for `personal`. Sat af Fleet for `organisation` |
 | `policy.glimt_allowed` | ADR-0006 L5. En organisation kan forbyde glimt fra sin kontekst |
+| `policy.forget_after_days` | §4.3. Standard 30, 1–90 |
+| `policy.versions` | §7. Standard `keep_days` 30 og `trash_days` 30. Organisationer sætter egne værdier via Fleet |
 | `policy.devices` | `managed_only` (kun enheder enrolled hos organisationen) eller `personal_and_managed` |
 
 `display_name` ligger kun i den krypterede post. Det må aldrig stå i klartekst hos hjemmet, i ID-hjemmet eller i en anden konteksts data.
@@ -64,9 +68,11 @@ En kontekst beskrives af en **kontekst-post**. Posten ligger i kontekstens hjem 
 
 Personer ser aldrig Linux-brugere. `eira-c-<kort-id>` afledes af `context_id`, men afslører ikke `display_name`.
 
+**Linux-UID'en er kun lokal** (besluttet, O-1): den er det tal, kernen på én enhed bruger til at adskille filer og processer, og den er forskellig fra enhed til enhed. `eira-contextd` tildeler den fra et reserveret interval og holder koblingen `context_id` → UID lokalt. Koblingen forlader aldrig enheden, og UID'en bruges aldrig som identifikator uden for enheden. Intervallet vælges, så det ikke kolliderer med systemd's reserverede intervaller (dynamiske brugere 61184–65519, homed 60001–60513, containere fra 524288); det præcise interval fastlægges i testplanen mod Ubuntu 26.04.
+
 ### 3.2 Hvad hver kontekst-bruger har
 
-- Eget hjemmekatalog (`/var/lib/eira/contexts/<kort-id>/`, mode `0700`), krypteret i hvile med kontekstens nøgle (§5.3).
+- Eget hjemmekatalog i en egen LUKS2-volumen (`/var/lib/eira/contexts/<kort-id>.luks`, monteret med mode `0700`), krypteret i hvile med kontekstens nøgle (§5.3).
 - Egen `systemd --user`-instans (startet af `eira-contextd` via `user@<uid>.service`), egen D-Bus-sessionsbus og egen PipeWire-instans.
 - **Egen Wayland-socket**, oprettet af compositoren med `wp_security_context_v1` og mærket med `context_id`. Compositoren ved dermed, hvilken kontekst hvert vindue tilhører (ADR-0004 D6). Ingen kontekst-bruger kan forbinde til compositorens hovedsocket.
 - Lyd ud og notifikationer går gennem en snæver formidler i skallen. Udklipsholder og fil-deling mellem kontekster findes ikke (K2, ADR-0006 L5).
@@ -111,7 +117,12 @@ Tiden måles som i RIGHTS-SET §4.1 ("uret må ikke kunne skrues tilbage"): sene
 
 ### 4.3 Glemsel (K11 / O-5 i ADR-0005)
 
-En kontekst, der ikke har været åben i 30 dage (forslag, O-2), fjernes fra enheden. Data findes stadig i kontekstens hjem. Enheden husker intet læsbart om konteksten bagefter.
+En kontekst, der ikke har været åben i `policy.forget_after_days` dage, fjernes fra enheden (besluttet, O-2). Data findes stadig i kontekstens hjem; kun enhedens kopi forsvinder og synkroniseres igen ved næste åbning. Enheden husker intet læsbart om konteksten bagefter.
+
+| Kontekst | Standard | Kan ændres af |
+|---|---|---|
+| `organisation` | 30 dage | Organisationen via Fleet (1–90 dage) |
+| `personal` | 30 dage | Personen (1–90 dage) |
 
 ## 5. Nøgler
 
@@ -131,9 +142,12 @@ Enhedens X25519-nøgle og Ed25519-signeringsnøgle ligger i TPM'en eller er fors
 
 Når en kontekst åbnes første gang på en enhed, forsegles CMK i TPM'en til (a) enhedens målte opstart (PCR-politik, samme kæde som RIGHTS-SET-ankeret) og (b) personens lokale oplåsning. Låses konteksten, fjernes CMK fra hukommelsen; kun forseglingen bliver.
 
-### 5.3 Lokal kopi i hvile
+### 5.3 Lokal kopi i hvile: LUKS2 pr. kontekst (besluttet, O-5)
 
-Kontekst-brugerens hjemmekatalog er krypteret med en nøgle afledt af CMK (`eira-ctx-local-v1`), fx via fscrypt-politik pr. katalog. Uden CMK kan selv root ikke læse en låst kontekst på en slukket enhed. (En åben kontekst på en kørende enhed er ikke beskyttet mod root, jf. trusselsmodellen i EIRA-CONSENT-AGENT §9.)
+- Hver kontekst har sin egen LUKS2-volumen (fil-baseret, vokser efter behov). Den åbnes med en nøgle afledt af CMK (`eira-ctx-local-v1`) og lukkes, når konteksten låses.
+- LUKS2 er valgt frem for kryptering pr. katalog (fscrypt), fordi den også skjuler filstørrelser, tidsstempler og katalogstruktur. Det er samme model, som systemd-homed bruger til krypterede hjem pr. bruger.
+- Under kontekstvolumenerne ligger fuld diskkryptering bundet til TPM'en.
+- Uden CMK kan selv root ikke læse en låst kontekst. En åben kontekst på en kørende enhed er ikke beskyttet mod root (jf. trusselsmodellen i EIRA-CONSENT-AGENT §9).
 
 ### 5.4 Organisationens nøgle (escrow)
 
@@ -207,7 +221,9 @@ Universet (graphd), samtaler og andre strukturerede data er Automerge-dokumenter
   - **Filer:** samme sti ændret i to manifester, der ikke er hinandens forfædre, giver begge versioner og et synligt **konfliktobjekt** i universet. Intet overskrives stille (K4).
   - **Strukturerede data:** Automerge fletter deterministisk.
   - **Sletning:** en sletning vinder kun over versioner, den har set (via `parents`).
-- **Oprydning:** blokke, som intet manifest i de seneste N versioner pr. enhed peger på, kan slettes af en enhed med skriveret. N er politik (O-3).
+- **Versioner og papirkurv** (besluttet, O-3): versioner tyndes ud over tid: alle versioner det første døgn, én pr. dag i den første måned, derefter én pr. uge, inden for `policy.versions.keep_days`. Slettede filer ligger i papirkurven i `trash_days`. Standard 30 dage for begge; organisationer sætter egne værdier via Fleet.
+- **Oprydning:** blokke, som ingen bevaret version eller fil i papirkurven peger på, kan slettes af en enhed med skriveret.
+- **Versionshistorik er ikke arkivering:** en organisations pligt til journalisering og arkivering ligger i dens egne systemer (fx ESDH), ikke i kontekstens synkronisering.
 - **Offline:** alt foregår mod den lokale kopi; synkronisering sker, når der er net (K10).
 
 ## 8. Enheder og tilbagekaldelse
@@ -266,11 +282,13 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 - ID-hjemmets protokol og genoprettelsestjenesten i detaljer (EIRA-ID-HOME).
 - EiraOS på telefonen (ADR-0006 L4b).
 
-## 14. Åbne spørgsmål
+## 14. Afklaret (11. november 2026)
 
-- **O-1 UID-interval** for kontekst-brugere. Forslag: et dedikeret interval uden kollision med systemd (dynamiske brugere 61184–65519, homed 60001–60513, containere fra 524288). Skal verificeres mod Ubuntu 26.04 og værktøjer, der ikke tåler UID'er over 65535.
-- **O-2 Glemselsfrist** for ubrugte kontekster (forslag: 30 dage) og om personen kan ændre den.
-- **O-3 Oprydning af blokke:** hvor mange manifestversioner pr. enhed der bevares (versionshistorik vs. lagerforbrug).
-- ~~**O-4 Glimt fra låste kontekster.**~~ Besluttet af ejer: nej i 1.0. Kun åbne kontekster viser glimt (§11).
-- **O-5 fscrypt eller andet** til lokal kryptering i hvile (§5.3), og samspil med TPM-forsegling.
-- ~~**O-6 Organisationens escrow.**~~ Besluttet af ejer: én nøgle pr. kontekst, opbevaret i Fleet, brugt af rollen nøgleforvalter med fire øjne og besked til medarbejderen (§5.4).
+- **O-1 UID:** kun lokal; `context_id` er identifikatoren (§1, §3.1).
+- **O-2 Glemsel:** 30 dage som standard, 1–90 dage (§4.3).
+- **O-3 Versioner:** udtynding, 30 dage og 30 dages papirkurv som standard (§7).
+- **O-4 Glimt fra låste kontekster:** ikke i 1.0 (§11).
+- **O-5 Lokal kryptering:** LUKS2 pr. kontekst over fuld diskkryptering (§5.3).
+- **O-6 Organisationens escrow:** én nøgle pr. kontekst i Fleet med nøgleforvalter, fire øjne og besked til medarbejderen (§5.4).
+
+Kontrakten har ingen åbne spørgsmål. Testplanen følger efter accept.
