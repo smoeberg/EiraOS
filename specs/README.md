@@ -6,7 +6,7 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 - [EIRA Context 1.0](EIRA-CONTEXT-1.0.md) — the context as data, one Linux user per context, lifecycle on a device, key hierarchy, the open storage format (exit guarantee), sync over S3/WebDAV, ID home contents, glimt (ADR-0005, ADR-0006 L5).
 
-**Status:** v0.3, accepted by the owner 11 November 2026; binding. [Test plan](EIRA-CONTEXT-1.0-TESTPLAN.md) is a draft for acceptance. Nothing is implemented yet.
+**Status:** v0.3, accepted by the owner 11 November 2026; binding. [Test plan](EIRA-CONTEXT-1.0-TESTPLAN.md) accepted 11 November 2026. Nothing is implemented yet.
 
 ## Gate Kernel
 
