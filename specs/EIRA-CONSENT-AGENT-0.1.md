@@ -27,6 +27,26 @@ Intet i denne kontrakt er en opnået sikkerhedsegenskab. Alle punkter nedenfor e
 
 Indtil alle rækker er verificeret, gælder den nuværende formulering i ADR-0003 og GATE-KERNEL bilag A pkt. 1 ("Rest") uændret: et program, der kører som brugeren, kan i dag stadig få fat i samtykkenøglen.
 
+### 0.1 Verifikationskrav (testplanen)
+
+En egenskab i tabellen ovenfor må først markeres som verificeret, når disse tests findes og består på **det installerede system** (pakken installeret i en VM, ikke kildetræet), og hver fejler, hvis egenskaben brydes (mutationstjek):
+
+**V-1 Compositorens tillid (§5.2, O-6) — det svageste led.**
+- Fastlæg i VM'en den faktiske procestræ på den understøttede opsætning (Ubuntu 26.04, greetd, `eira-session`, `eira-labwc`): forventet *logind-sessionens leader → `eira-session` → labwc*.
+- Registreringen skal afvise: (a) en compositor startet fra brugerens shell; (b) en indlejret compositor; (c) en compositor med genbrugt PID men anden starttid.
+- Afviger det faktiske procestræ, ændres §5.2 til at beskrive den invariant, der faktisk håndhæves, og ikke det forventede træ.
+
+**V-2 Hele setgid-kæden (§3), på den installerede pakke.**
+1. `eira-consent-agent` er `root:eira-consent` med mode `2755`.
+2. Gruppen `eira-consent` har ingen medlemmer og kan ikke opnås via `newgrp`/`sg`.
+3. Den kørende agent har de forventede reelle, effektive og gemte UID'er og GID'er.
+4. `SO_PEERCRED`, som gaten ser, indeholder den forventede effektive GID.
+5. En almindelig brugerproces kan ikke opnå den GID.
+6. `LD_PRELOAD`, ptrace og `/proc/<pid>/mem` mod agenten fejler.
+7. Fjernes eller ændres setgid-bitten eller ejerskabet, fejler systemet lukket: gaten og `identityd` nægter at starte (§3), og intet samtykke accepteres.
+
+**V-3 Øvrige rækker** i tabellen får hver mindst én test efter samme princip (R-6.1–R-6.3 i en rigtig session, nøgleudlevering, `E_CONSENT_PATH`, R-5.1–R-5.5).
+
 ## 1. Problemet
 
 I dag får appens Rust-del samtykkenøglen ved login og laver `proof = HMAC(nøgle, …)` for `gate.consent` og `gate.confirm` (`app/gate/consent_proof.py`, `ui/src-tauri/src/login.rs`). Gaten afviser alt uden gyldigt bevis med `E_CONSENT_PROOF`.
