@@ -15,6 +15,7 @@ Hvert princip er besluttet i en ADR og gjort konkret i en kontrakt under [`specs
 | Leverandørneutral | Ingen udbyder er indbygget i kernen. Login via enhver OIDC-udbyder; webapps i en udskiftelig motor; Microsoft og andre er tilvalg i adaptere | [ADR-0004](docs/decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) |
 | Kontekster | Én Linux-bruger pr. kontekst, egen nøgle, eget hjem (S3/WebDAV), ingen deling mellem kontekster. Personen kan altid tage sine data med (exit-garanti) | [ADR-0005](docs/decisions/ADR-0005-kontekster-og-datas-hjem.md), [EIRA-CONTEXT](specs/EIRA-CONTEXT-1.0.md) |
 | Livets indbakke | Al input (mail, beskeder, kalender, telefoni) kommer ind gennem adaptere til én indbakke pr. kontekst. Åbne standarder er førsteklasses | [ADR-0006](docs/decisions/ADR-0006-livets-indbakke.md) |
+| Ingen kode, du selv finder på | EiraOS skaber, gemmer, udfylder og fornyer adgang (passkeys først); eID er roden ved ny enhed og genoprettelse. Foreslået | [ADR-0007](docs/decisions/ADR-0007-adgangskoder-og-noegler.md) |
 
 ## Arkitektur
 
@@ -60,7 +61,7 @@ Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verifi
 - **Fundregister fra eksterne gennemgange:** [`docs/reviews/`](docs/reviews/GENNEMGANG-2026-11-12.md)
 - **Udviklingsplan:** [`docs/UDVIKLINGSPLAN.md`](docs/UDVIKLINGSPLAN.md) (hvad der bygges i hvilken rækkefølge)
 - **Kontrakter:** [`specs/`](specs/README.md)
-- **Beslutninger:** [`docs/decisions/`](docs/decisions/) (ADR-0001–0006)
+- **Beslutninger:** [`docs/decisions/`](docs/decisions/) (ADR-0001–0007)
 - **Arkitektur og GUI:** [`docs/architecture/`](docs/architecture/)
 - **Installation på en pc:** [`docs/INSTALL.md`](docs/INSTALL.md)
 - **Vision og forslag:** [`docs/manifest/`](docs/manifest/), [`docs/proposals/`](docs/proposals/)

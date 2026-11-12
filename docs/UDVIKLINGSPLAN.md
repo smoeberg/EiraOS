@@ -22,7 +22,9 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 | Desktop | Explorer og Builder Mode, rigtig terminal, strøm via EiraSystemAPI; login gennem GDM |
 | Pakning | `.deb`, `eira-labwc`, installer-ISO på Ubuntu 26.04, offline VM-test |
 
-**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4).
+**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået).
+
+**Ikke besluttet:** økonomi. Det eneste af personens kerneområder uden en ADR (§3, spor P).
 
 **Prototyper uden plads i målbilledet:** `walletd`, `presenced` og `contextd` i `app/daemons/`. De er ikke pakket (`packaging/daemon-policy.json`), men startes stadig af `runner.py` under udvikling. `contextd.py` modsiger EIRA-CONTEXT (testplan §5 pkt. 2).
 
@@ -48,6 +50,7 @@ F1 Teknisk gæld ────┼──► F1b Hele vejen ──► F2 Kontekster
                     └──► F7 EiraSystemAPI (mellem de store trin)    F8 Sprogmodel    F9 Release 1.0
 
 U Brugerbevis løber ved siden af alle trin fra F1b
+P Personens områder: beslutninger og kontrakter skrives parallelt med F2; bygges i takt med F2–F6
 ```
 
 Kontekster kommer før Web App Manager og indbakken, fordi begge bygger på konteksten: en webprofil *er* en kontekst (ADR-0005), og der er én indbakke pr. kontekst (ADR-0006).
@@ -183,6 +186,26 @@ Fra rådene om intuitivt design (se [vurderingen](reviews/RAAD-UX-2026-11-12.md)
 | U.5 | **Gatens gengivelser læses af rigtige mennesker:** hver handlingstype har en sætning, en ikke-teknisk person forstår, inklusive om den kan fortrydes | Gengivelserne i `app/gate/render.py` og `app/gate/system.py` er gennemgået i en brugertest |
 | U.6 | **Brugertest med mennesker, der ikke kender systemet**, ved hvert større trin (F1b, F2, F5): rigtige opgaver uden instruktion; tøven, fejl og spørgsmål noteres | Fund bliver issues og rettes, før næste trin får nye funktioner |
 
+### P — Personens områder: id, økonomi, relationer, pligter, adgange, kommunikation
+
+Ejeren (12. november 2026): det, der er vigtigt for en person, er id, økonomi, relationer, pligter, adgange (også adgangskoder) og kommunikation. Status pr. område:
+
+| Område | Besluttet | Bygget | Trin |
+|---|---|---|---|
+| Id | ADR-0004/0005, EIRA-IDENTITY, EIRA-CONTEXT | Login uden fast udbyder, sessioner | F0.3, F3, F4 |
+| Økonomi | Kun EDP's `value_transfer_requested` (eID høj, maks. 10.000 DKK/EUR) og værgers godkendelse af køb | Intet | **P.3** |
+| Relationer | ADR-0006 (kontakter via CardDAV), ADR-0005 K12 (familie), delegation | Medlemskab i samtaler, delegation | **P.2**, F6 |
+| Pligter | EDP (aftaler), ADR-0006 (kalender, opgaver) | Gaten tager imod aftaler; intet leveres | **P.2**, F6 |
+| Adgange | ADR-0003, samtykkeagenten, ADR-0007 (koder) | Rettighedssæt, samtykke, delegation | F0b, **P.1**, **P.4** |
+| Kommunikation | ADR-0006 | Læsbar hændelsesstrøm, ingen kanal | **P.2**, F6 |
+
+| # | Leverance | Hvornår | Færdig når |
+|---|---|---|---|
+| P.1 | **"Mine adgange":** én oversigt pr. kontekst over hvad personen må (rettighedssættet), hvem der må handle på hendes vegne (delegationer), hvad hun har givet samtykke til, og senere hvilke apps der har kamera, filer osv. og hvilke koder der er svage (ADR-0007 A8). Kun læsning; at ændre noget går gennem gaten | Efter F1b | En ikke-teknisk person kan svare på "hvem må gøre hvad på mine vegne?" i en brugertest (U.6) |
+| P.2 | **Kontrakter for personer og kontakter, pligter (aftaler, opgaver, kalender, deadlines) og indbakken** (F6.2), så den første mail- og kalenderadapter er klar, når konteksterne er | Parallelt med F2 | Ejeren har accepteret kontrakterne |
+| P.3 | **ADR-0008 Økonomi.** Spørgsmålene, der skal besluttes: Rører EiraOS penge, eller samler det kun overblik (konti, regninger, abonnementer) og sender betalingen videre til bankens egen godkendelse? Hvilke bankforbindelser (open banking, PSD2/PSD3) og i hvilke kontekster? Hvordan med familie og værger (ADR-0005 K12)? Hvad med e-faktura og bogføring for selvstændige? `walletd`-prototypen fjernes i F1.2 uanset hvad; den bygger på en anden model | Nu; før kode | ADR'en er accepteret |
+| P.4 | **Adgangskoder og passkeys efter ADR-0007:** kontrakt `EIRA-CREDENTIALS`; nøglebundt i kontekstens lager; passkeys og udfyldning i Web App Manager; import ved første opstart; fornyelse ved læk; eksport i CXF | Kontrakten efter F2.4 og F5.1; bygges med F5 | Ingen kode skal opfindes af personen i en brugertest; AI'en og Eira UI kan bevisligt ikke læse en kode (test) |
+
 ## 4. Dokumentation, der mangler
 
 Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal genereres, så det ikke forældes.
@@ -218,4 +241,6 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | Er `android/` med i 1.0? | F1.8 |
 | Kontakt og svartid for sårbarhedsrapporter | `SECURITY.md` (§4) |
 | Listen over hverdagsrejser og deres mål | U.1–U.2 |
+| Accept af ADR-0007 (adgangskoder) og dens åbne spørgsmål O-1–O-5 (EU-wallet som passkey-udbyder, læk-tjek, digital arv, familiens koder, koder uden for webapps) | P.4 |
+| Grundspørgsmålene til ADR-0008 (økonomi) | P.3 |
 | Hvem der deltager i brugertests | U.5–U.6 |
