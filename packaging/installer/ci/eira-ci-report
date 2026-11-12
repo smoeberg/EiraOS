@@ -292,6 +292,10 @@ identity_reply_has() {
 check identityd-has-database identity_reply_has identity.session '"session_id"'
 check login-needs-login-session identity_reply_has identity.login_start caller_not_in_a_login_session
 check identityd-no-apparmor-denials sh -c "! journalctl -k -b --no-pager | grep 'apparmor=\"DENIED\"' | grep -q 'eira-identityd'"
+# The general apparmor diag shows only the last five denials of any profile;
+# name identityd's own, or a failure here cannot be read from the job log.
+identityd_denials=$(journalctl -k -b --no-pager 2>&1 | grep 'apparmor="DENIED"' | grep 'eira-identityd' | tail -n 5 | tr '\n' ' ' | cut -c1-2000)
+[ -z "$identityd_denials" ] || say "diag identityd-apparmor: $identityd_denials"
 # GATE-KERNEL bilag A pkt. 2: intentd anchors the audit chain in its
 # journal; the chain agrees with the anchors; a whole-chain rewrite of a copy
 # (triggers dropped, hashes recomputed) is caught.
