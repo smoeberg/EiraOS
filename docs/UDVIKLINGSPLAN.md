@@ -2,7 +2,7 @@
 
 **Status:** Forslag til ejerens accept, 12. november 2026
 **Afløser:** rækkefølgen i [MASTER-PLAN-1.0](MASTER-PLAN-1.0.md) §4, §5 og §8 (principperne, statusordene og definition of done dér gælder fortsat)
-**Bygger på:** [ADR-0001–0006](decisions/), kontrakterne i [`specs/`](../specs/README.md), koden på `main` efter #184 og [fundregistret fra de eksterne gennemgange](reviews/GENNEMGANG-2026-11-12.md)
+**Bygger på:** [ADR-0001–0006](decisions/), kontrakterne i [`specs/`](../specs/README.md), koden på `main` efter #184 , [fundregistret fra de eksterne gennemgange](reviews/GENNEMGANG-2026-11-12.md) og [vurderingen af rådene om intuitivt design](reviews/RAAD-UX-2026-11-12.md)
 
 > **AI'en foreslår. Gaten afgør. Systemet udfører.**
 
@@ -32,6 +32,7 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 - **Kontrakt før kode.** En ny komponent får sin kontrakt i `specs/`, accepteret af ejeren, før den første kodelinje.
 - **Færdig betyder afprøvet på den installerede pakke**, når trinnet rører rettigheder, AppArmor, systemd eller sessionen (som EIRA-CONSENT-AGENT §0.1 og EIRA-CONTEXT-testplanen N3).
 - **Invarianter har mutanter.** En sikkerhedstest tæller først, når en realistisk fejl i koden får den til at fejle (EIRA-CONTEXT-testplan §2).
+- **Den trygge handling skal være den letteste.** En funktion er først færdig, når en person, der ikke kender EiraOS, kan bruge den (spor U); teknisk korrekthed alene er ikke nok.
 - **Hvert PR opdaterer** statustabellen i den berørte kontrakt, README's statustabel og CHANGELOG.
 
 ## 3. Rækkefølgen
@@ -45,6 +46,8 @@ F1 Teknisk gæld ────┼──► F1b Hele vejen ──► F2 Kontekster
                     │                                                F5 Web App Manager ──► F6 Livets indbakke
                     │
                     └──► F7 EiraSystemAPI (mellem de store trin)    F8 Sprogmodel    F9 Release 1.0
+
+U Brugerbevis løber ved siden af alle trin fra F1b
 ```
 
 Kontekster kommer før Web App Manager og indbakken, fordi begge bygger på konteksten: en webprofil *er* en kontekst (ADR-0005), og der er én indbakke pr. kontekst (ADR-0006).
@@ -55,7 +58,7 @@ Det, der står tilbage af GATE-KERNEL bilag A og EIRA-CONSENT-AGENT.
 
 | # | Leverance | Færdig når | Afhænger af |
 |---|---|---|---|
-| F0.1 | **R-6.2-patch i `eira-labwc`:** compositoren lægger samtykkeagentens vindue øverst og giver det fokus ud fra klientens effektive GID, og intet andet vindue kan lægge sig over det | Patchen ligger i `packaging/eira-labwc/patches/`; VM-test viser, at et almindeligt vindue ikke kan dække agenten | — |
+| F0.1 | **R-6.2-patch i `eira-labwc`:** compositoren lægger samtykkeagentens vindue øverst og giver det fokus ud fra klientens effektive GID, og intet andet vindue kan lægge sig over det. Patchen foreslås upstream til labwc, så den ikke skal vedligeholdes alene | Patchen ligger i `packaging/eira-labwc/patches/`; VM-test viser, at et almindeligt vindue ikke kan dække agenten | — |
 | F0.2 | **Verifikation i en grafisk VM-session** (EIRA-CONSENT-AGENT V-1; O-6: procestræet under GDM) | `vm-install-acceptance` kører en rigtig labwc-session og afprøver agentens vindue, fokus og registrering | F0.1 |
 | F0.3 | **Login mod en rigtig OIDC-udbyder** (udgivelsesbetingelse) | Login i den installerede VM mod ejerens udbyder; identiteten bliver `did:eira:<provider-id>.<subjekt>` | Ejeren: app-registrering |
 
@@ -66,7 +69,7 @@ Fra gennemgangene 12. november (S-1, S-2, S-3, S-11). Kommer før alt andet, for
 | # | Leverance | Færdig når |
 |---|---|---|
 | F0b.1 | `stated`: `state.append`, `state.sync_push` og `audit.append` kræver en daemon som kalder (UID `eira`), aldrig `eira-clients`. `state.sync_push` afviser hele batchen, hvis én blok er ugyldig, som `fleetd` gør | En test kalder metoderne som en almindelig bruger og får afslag; en VM-check (`user-cannot-write-stated`) gør det samme på den installerede pakke; en blandet batch giver nul skrivninger |
-| F0b.2 | **Adgangsklasse pr. metode** ved registreringen: `public_read`, `session_read`, `daemon_write`, `gate`, `consent_agent`, `fleet_admin`. Serveren håndhæver klassen, før handleren kaldes; en metode uden klasse kan ikke registreres. Et script genererer **JSON-RPC-kataloget** (socket, metode, klasse, fejlkoder) fra registreringerne | En test gennemløber alle registrerede metoder i alle produktionsdaemons og fejler på en skrivende metode, som `eira-clients` kan kalde uden session eller gate; kataloget i `docs/reference/` genereres i CI og må ikke afvige fra koden |
+| F0b.2 | **Adgangsklasse pr. metode** ved registreringen: `public_read`, `session_read`, `daemon_write`, `gate`, `consent_agent`, `fleet_admin`. Serveren håndhæver klassen, før handleren kaldes; en metode uden klasse kan ikke registreres. Et script genererer **JSON-RPC-kataloget** (socket, metode, klasse, fejlkoder) fra registreringerne, og fra samme kilde TypeScript-typerne til UI'et og Rust-typerne til Tauri | En test gennemløber alle registrerede metoder i alle produktionsdaemons og fejler på en skrivende metode, som `eira-clients` kan kalde uden session eller gate; kataloget i `docs/reference/` genereres i CI og må ikke afvige fra koden |
 | F0b.3 | Sikkerhedsmodellen skrives ned (D-3): tillidsgrænser, socket-rettigheder, at IPC-tokenet ikke beskytter mod desktop-brugeren, root uden for trusselsmodellen; `docs/security/socket-permissions.md` rettes eller foldes ind | Dokumentet henviser til klasserne fra F0b.2 og til de tests, der beviser dem |
 
 ### F1 — Teknisk gæld, der skal væk før de store trin
@@ -103,7 +106,7 @@ Det største trin. Kontrakten og testplanen er accepteret, så der skal ikke skr
 
 | # | Leverance | Invarianter (testplan) | Niveau |
 |---|---|---|---|
-| F2.1 | **Lagerformatet** (§6): blokke med AEAD, manifester, Merkle-træ, og referenceværktøjet `eira-context-export`, der læser et hjem uden EiraOS. Scriptet `scripts/check-mutants.sh` | B-1, B-2, B-3, M-1, U-1, X-1 | N1 |
+| F2.1 | **Lagerformatet** (§6): blokke med AEAD, manifester, Merkle-træ, og referenceværktøjet `eira-context-export`, der læser et hjem uden EiraOS. Scriptet `scripts/check-mutants.sh`. Senere en knap i skallen, "Tag dine data med", der bruger værktøjet (exit-garantien som synlig funktion) | B-1, B-2, B-3, M-1, U-1, X-1 | N1 |
 | F2.2 | **Kontekst-hjem over S3 og WebDAV** med opret-hvis-fraværende; nyt CI-job `context-home` | H-1 | N2 |
 | F2.3 | **Enhedens nøgler i TPM** (§5.0): signerings- og ECDH-nøgle dannes i TPM'en og kan ikke eksporteres; Fleet-tilmelding bruger dem (FLEET-RIGHTS-API 1.3) | A-1 | N1, N3 |
 | F2.4 | **`eira-contextd`:** opretter, låser op, låser og glemmer kontekst-brugere; LUKS2 pr. kontekst; `systemd --user` pr. kontekst; `/proc` med `hidepid=invisible` | I-1, O-1, F-1 | N3 |
@@ -137,7 +140,7 @@ Selve tjenesten drives af Eira og hører formentlig hjemme i et andet repo; det 
 
 | # | Leverance | Afhænger af |
 |---|---|---|
-| F5.1 | Kontrakt: app-manifest, motor-grænsesnit, profil = kontekst, links mellem apps (O-5), filer fra webapps ind i objektmodellen (O-6) | ADR-0004 accepteret |
+| F5.1 | Kontrakt: app-manifest, motor-grænsesnit, profil = kontekst, links mellem apps (O-5), filer fra webapps ind i objektmodellen (O-6). **Tilladelse ved handlingen:** når personen vælger eller trækker en fil ind, får appen netop den fil og intet andet (powerbox-mønstret, som xdg-desktop-portal bruger) | ADR-0004 accepteret |
 | F5.2 | Valg af Chromium-distribution (O-1) ud fra kontraktens sikkerhedskrav | F5.1 |
 | F5.3 | Compositorens snævre vinduesgrænseflade efter GID (D6) | F0.1 |
 | F5.4 | Første motor (Chromium) og de første webapps | F2.4, F5.2, F5.3 |
@@ -166,6 +169,19 @@ Rækkefølge: netværksstatus (læs, NetworkManager), skift netværk, lyd, skær
 ### F9 — Release 1.0
 
 Opgradering og rollback, backup og genopretning, licenser, tilgængelighed og lokalisering, supportmatrix og en ærlig liste over kendte begrænsninger (MASTER-PLAN §6 og WS-11). Forudsætter F0, F2 og F3.
+
+### U — Brugerbevis
+
+Fra rådene om intuitivt design (se [vurderingen](reviews/RAAD-UX-2026-11-12.md)). GUI-planen §5.1 siger allerede, *hvad* der er intuitivt; dette spor sørger for, at det bliver *bevist*. Det begynder med F1b, fordi der først da findes en hel vej at teste.
+
+| # | Leverance | Færdig når |
+|---|---|---|
+| U.1 | **10–15 hverdagsrejser** skrevet som opgaver, ikke som funktioner (fx "find det, jeg arbejdede på i går", "sluk computeren", "hvorfor kan jeg ikke det her?"), med GUI-planens §5.1 H som de første | Ejeren har accepteret listen; hver rejse har et mål for tid og antal skridt |
+| U.2 | **Rejserne som automatiske tests i VM'en**, målt i tid og antal skridt ved hver PR, sammen med ventetiden pr. trin (GUI-plan §5.1 E) | En rejse, der bliver langsommere eller længere end sit mål, fejler CI |
+| U.3 | **Samtykke-træthed måles:** hvor mange samtykker og afvisninger en dag giver. For mange løses med politik (handlinger, der kan fortrydes og bliver i konteksten, kræver kun bekræftelse), ikke ved at samle flere samtykker til ét | Tallet står i audit-oversigten og i rejsernes rapport |
+| U.4 | **Tilgængelighed automatisk fra nu:** tastaturbetjening, tilgængelige navne, kontrast og reduceret bevægelse tjekkes i UI-testene (WCAG AA som mål), i stedet for til sidst (GUI-8) | `ui-ci` fejler ved brud |
+| U.5 | **Gatens gengivelser læses af rigtige mennesker:** hver handlingstype har en sætning, en ikke-teknisk person forstår, inklusive om den kan fortrydes | Gengivelserne i `app/gate/render.py` og `app/gate/system.py` er gennemgået i en brugertest |
+| U.6 | **Brugertest med mennesker, der ikke kender systemet**, ved hvert større trin (F1b, F2, F5): rigtige opgaver uden instruktion; tøven, fejl og spørgsmål noteres | Fund bliver issues og rettes, før næste trin får nye funktioner |
 
 ## 4. Dokumentation, der mangler
 
@@ -201,3 +217,5 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | Pilot (Arbejde eller Møde) | Prioritering af F6 og F7 |
 | Er `android/` med i 1.0? | F1.8 |
 | Kontakt og svartid for sårbarhedsrapporter | `SECURITY.md` (§4) |
+| Listen over hverdagsrejser og deres mål | U.1–U.2 |
+| Hvem der deltager i brugertests | U.5–U.6 |
