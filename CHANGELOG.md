@@ -4,6 +4,56 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [Unreleased]
 
+Leveret 6.–12. november 2026 (PR #128–#184). Ingen release er tagget siden 0.7.0.
+
+### Gate Kernel og sikkerhed
+- Gate Kernel 1.0: otte lag, samtykke bundet til indholdshash, atomar udførelse og audit (#136); de
+  gamle skriveveje svarer `E_GATE_REQUIRED` og er siden fjernet (#137, #180).
+- Deterministisk renderer: samtykke binder til den tekst, brugeren så (#138).
+- Gate 1.1 med to handlingsfamilier (ADR-0002): EiraSystemAPI-familien og strøm via logind bag gaten (#139).
+- Procesidentitet fra `SO_PEERCRED`; modellen kan aldrig samtykke eller bekræfte (#150).
+- Desktop-brugeren kan ikke skrive gatens database: `eira-clients` adskilt fra `eira` (#142).
+- Samtykke-TTL på `CLOCK_BOOTTIME` (#143); samtykkenøglen kun i RAM og kun for den aktuelle boot (#178).
+- Audit-anker i journald og hos Fleet (#155) og journalens FSS-segl med overdragelse af nøglen (#167).
+- Samtykkeagenten `eira-consent-agent` (Rust, setgid): kun den kan samtykke og bekræfte (#153, #158, #175).
+- Delegation "på vegne af" via den betroede vej, registreret i gatens audit (#157, #164).
+
+### Rettigheder fra Fleet (ADR-0003)
+- EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).
+- Lag 6 autoriserer mod det Fleet-signerede rettighedssæt; et signeret standardsæt ligger i pakken (#144, #145).
+- EIRA Fleet Rights API: grænseflade, rod- og driftsnøgler med tilbagekaldelse, HTTPS + mTLS, enroll
+  og planlagt synkronisering (#146–#149); enhedsnøglen i TPM i kontrakten (#177).
+- `fleetd`: administratorkrav, `device_id` fra nøglen, gamle inventarmetoder fjernet (#176).
+
+### Identitet, model og samtale
+- Installeret desktop-login (RFC 8252) gennem `identityd` (#151, #152); leverandørneutral OIDC,
+  `did:eira:<provider-id>.<subjekt>` uden indbygget udbyder (#169).
+- Modelprocessen `eira-modeld` som egen bruger uden net, med en regelbaseret adapter (#166).
+- Samtalelag og hændelsesstrøm til Explorer (#156).
+
+### Desktop og system
+- Rigtig Linux-terminal (PTY) i Builder Mode (#131); EiraSystemAPI v1 med strøm og batteri (#132).
+- Hændelsesdrevet Explorer uden strømknap og terminal uden for Builder (ADR-0001, #133).
+- Phase 0 IPC & Event Bus som kode og tests i `crates/eira-core` (#134).
+
+### Pakning, installation og CI
+- Installerbart EiraOS-ISO på Ubuntu Desktop 26.04 med installationstest i VM (#130).
+- `eira-labwc`: labwc 0.20.3 uden privilegerede Wayland-protokoller (#163).
+- Rent sessionsmiljø uden arvede `EIRA_*`- og loader-variabler (#159).
+- VM-testen installerer offline fra et lokalt pakkearkiv (#160); eksplicit modulliste i `.deb` (#183);
+  apt-fallback til spejle uden for ubuntu.com og robusthed mod DNS- og keyserver-fejl (#175, #184).
+
+### Beslutninger og kontrakter
+- ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
+  ADR-0005 (kontekster), ADR-0006 (livets indbakke) (#137, #140, #168, #170, #171).
+- Kontrakter: EIRA-CONTEXT 1.0 v0.3 og testplan (#172, #173), EIRA-CONSENT-AGENT (#158), EIRA-IDENTITY (#169),
+  forslag om et menneske- og fællesskabscentreret fundament (#165).
+- Dokumentation: sprintdokumenter og den gamle `docs/specs/` arkiveret, ny README (#181, #182);
+  udviklingsplan, statusrettelser og arkivering af `contracts/` og `docs/audit/` (dette PR).
+
+### Rettelser
+- Fleet auth-bypass, OIDC JWKS-URL, en flaky Rust-test og UI-tegnkodning (#129).
+
 ### Oprydning
 - Fjernede `ui/node_modules`, `__pycache__`-filer, `data/run/*.port` og løse filer (`jid`, `rid`)
   fra git og udvidede `.gitignore` (node_modules, Rust `target/`, `data/run/`, SQLite WAL-filer).

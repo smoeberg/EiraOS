@@ -7,6 +7,18 @@
 
 > **Fundamental rule: AI'en foreslår. Gaten afgør. Systemet udfører.**
 
+> **Update, 12 November 2026.** The invariants in section 2 still hold. Decisions since this baseline extend or change several sections; where they differ, the ADR or contract governs:
+>
+> | Section | Changed by | What changed |
+> |---|---|---|
+> | 4.3 Gate Kernel | [ADR-0002](../decisions/ADR-0002-gate-to-handlingsfamilier.md), [GATE-KERNEL](../../specs/GATE-KERNEL-1.0.md) bilag A/B | Two action families (EDP and EiraSystemAPI) through one gate; caller identity from `SO_PEERCRED`; the model runs as its own user and can never consent; audit sealed in the journal |
+> | 4.3, 6 Consent | [EIRA-CONSENT-AGENT](../../specs/EIRA-CONSENT-AGENT-0.1.md) | Consent and confirmation come only from a setgid agent on a trusted path, not from the app |
+> | 4.8 Identity | [ADR-0004](../decisions/ADR-0004-gui-arkitektur-vendor-neutral.md) D1, [EIRA-IDENTITY](../../specs/EIRA-IDENTITY-1.0.md) | Any OIDC provider; no built-in vendor |
+> | 4.8 Context | [ADR-0005](../decisions/ADR-0005-kontekster-og-datas-hjem.md), [EIRA-CONTEXT](../../specs/EIRA-CONTEXT-1.0.md) | A context is one Linux user with its own keys and home; no sharing between contexts; the device is neutral |
+> | 4.1, 4.7 Experience and communication | ADR-0004 D2–D6, [ADR-0006](../decisions/ADR-0006-livets-indbakke.md) | Web apps run in an isolated Web App Manager, never in the Eira UI webview; all input reaches one inbox per context through adapters |
+> | 4.9 Cross-device, 6 Security | [ADR-0003](../decisions/ADR-0003-rettigheder-fra-fleet.md), [RIGHTS-SET](../../specs/EIRA-RIGHTS-SET-1.0.md) | All rights come from signed Fleet rights sets; the device only enforces |
+> | 9 Roadmap | [Development plan](../UDVIKLINGSPLAN.md) | Current order of work |
+
 This document is the architectural map for EiraOS. The linked specifications define the detailed contracts; this baseline explains how they fit together, which boundaries are mandatory, how work should be sequenced, and what evidence is required before a feature may be called implemented.
 
 **Status discipline:** architecture text and schemas are not implementation. A component is not considered implemented merely because a daemon name, UI control, spec, mock, or plan exists. Claims of implementation require code and automated tests; claims of target-platform verification additionally require reproducible integration evidence from Ubuntu 26.04.x.

@@ -1,9 +1,10 @@
 # EiraOS Master Plan 1.0
 
-**Status:** Draft — governing implementation plan; requires repository audit and validation  
-**Date:** 2026-10-21  
-**Target platform:** Ubuntu Desktop 26.04 LTS, with exact 26.04.x image pinned for integration testing  
-**Branch:** `feature/system-api-terminal-foundation`
+**Status:** Draft — governing principles, status vocabulary and definition of done  
+**Date:** 2026-10-21 (note added 2026-11-12)  
+**Target platform:** Ubuntu Desktop 26.04 LTS, with exact 26.04.x image pinned for integration testing
+
+> **Note, 12 November 2026.** Sections 2, 3, 6 and 7 (principles, status vocabulary, definition of done, artifacts) still apply. The sequencing in sections 4, 5 and 8 predates ADR-0002–0006 and the work merged since (Gate 1.1, Fleet rights, process identity, audit seal, consent agent, vendor-neutral identity). The current order of work is the [development plan](UDVIKLINGSPLAN.md). Where the two differ, the development plan and the ADRs govern.
 
 > **Fundamental rule: AI'en foreslår. Gaten afgør. Systemet udfører.**
 
@@ -207,7 +208,8 @@ A feature is not done until all applicable criteria are met:
 ## 7. Required project artifacts
 
 - This master plan: scope, dependencies, phases, and exit gates.
-- Architecture baseline: component boundaries and invariants.\n- [GUI Product and Implementation Plan 1.0](architecture/eiraos-gui-product-and-implementation-plan-1.0.md): shell, screens, settings, interaction states, design system, frontend boundaries, accessibility, and GUI acceptance criteria.
+- Architecture baseline: component boundaries and invariants.
+- [GUI Product and Implementation Plan 1.0](architecture/eiraos-gui-product-and-implementation-plan-1.0.md): shell, screens, settings, interaction states, design system, frontend boundaries, accessibility, and GUI acceptance criteria.
 - [Intuitive 3D Desktop prototype](architecture/prototypes/eiraos-intuitive-3d-desktop.html): agreed visual baseline for the spatial workspace and application-object experience; a concept prototype, not production functionality.
 - GUI plan section 5.1 defines UX resilience, intent repair, discoverability, Gate denial explanations, hybrid desktop integration, latency targets, undo/recovery, identity context, and priority failure-path tests.
 - Gate Kernel, AI Interface, EDP specification and schema: normative contracts.
@@ -228,7 +230,7 @@ A feature is not done until all applicable criteria are met:
 6. Choose and implement the first bounded end-to-end vertical only after the Gate and contract prerequisites pass.
 7. Before broad GUI expansion, prototype and test the priority UX failure paths: ambiguous intent repair, understandable Gate denial with no bypass, and a normal file/browser/app workflow crossing the spatial workspace.
 8. Measure interaction and intent latency by stage; treat initial UX budgets as targets to validate, not assumed performance.
-7. Keep the PR open and unmerged until review and required checks are complete.
+9. Keep the PR open and unmerged until review and required checks are complete.
 
 ## 9. Open decisions — must be resolved with evidence
 
