@@ -37,11 +37,13 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 ## 3. Rækkefølgen
 
 ```
-F0 Luk bilag A ──┐
-F1 Teknisk gæld ─┼─► F2 Kontekster ──► F3 Identitet og rettigheder pr. kontekst ──► F5 Web App Manager ──► F6 Livets indbakke
-                 │        │                                                              ▲
-                 │        └──► F4 ID-hjemmet ─────────────────────────────────────────────┘
-                 └─► F7 EiraSystemAPI (kan køre mellem de store trin)      F8 Sprogmodel      F9 Release 1.0
+F0 Luk bilag A ─────┐
+F1 Teknisk gæld ────┼──► F1b Hele vejen ──► F2 Kontekster ──► F3 Identitet og rettigheder pr. kontekst
+                    │                            │                         │
+                    │                            └──► F4 ID-hjemmet        ▼
+                    │                                                F5 Web App Manager ──► F6 Livets indbakke
+                    │
+                    └──► F7 EiraSystemAPI (mellem de store trin)    F8 Sprogmodel    F9 Release 1.0
 ```
 
 Kontekster kommer før Web App Manager og indbakken, fordi begge bygger på konteksten: en webprofil *er* en kontekst (ADR-0005), og der er én indbakke pr. kontekst (ADR-0006).
@@ -66,6 +68,19 @@ Små PR'er, der kan tages i vilkårlig rækkefølge.
 | F1.2 | **Fjern `walletd`, `presenced` og `contextd`** fra `runner.py`, `app/daemons/` og deres tests | De er ikke i målbilledet; `contextd` modsiger EIRA-CONTEXT. Beløbsgrænsen i `contextd` hører under gaten og rettighedssættet. AI-INTERFACE §3 og §6 henter samtalekonteksten fra `contextd` og skal rettes til samtalelaget (EIRA-CONVERSATION) i samme PR |
 | F1.3 | **Versioner og pakke-changelog:** `packaging/debian/changelog` siger `noble` og "Ubuntu 24.04"; Tauri-appen er 0.7.0, `ui/package.json` og `Cargo.toml` 0.3.0, pakken 1.0~rc1 | Én version for hele EiraOS, og pakken skal sige 26.04 (`resolute`) |
 | F1.4 | **CI-robusthed:** upload af artefakter prøves igen ved fejl i GitHubs artefakttjeneste | Den fejlede 11. november, efter at bygget var grønt |
+| F1.5 | **Sessioner uden påstået identitet:** Tauri-backenden husker den autentificerede session efter login og sender den med alle IPC-kald; `ensure_session` opretter aldrig en session ud fra et klientleveret `actor_id`; `presentation.mode_set` kræver en autentificeret session bundet til kalderens UID | Ekstern audit 12. november (P1 og P2): `presentation.mode_get` kaldes uden `session_id`, så hvert kald opretter en ny anonym session i tilstanden `normal`, og terminalen afvises derfor altid, også når Builder er tilladt. Samme mekanisme lader `dashboard.get` hilse med et påstået navn (udviklingsbroen sender `mette@kommune.dk`). Gaten er upåvirket, fordi den kun godtager autentificerede sessioner bundet til UID'en |
+| F1.6 | **Udviklingsbroen uden skriveruter:** `app/routers/wallet.py`, `presence.py` og `context.py` fjernes sammen med prototyperne i F1.2 | Ekstern audit (P2): ruterne skriver uden session eller gate, og `presence` godtager en klientleveret forfatter. Broen er ikke i pakken (`scripts/app_modules.py`, `tests/test_no_http_bridge_prod.py`), så det gælder kun udviklingsmiljøet |
+
+### F1b — Første hele vej: fra intention til udført handling
+
+IntentBar kalder i dag kun `intent.execute`, som svarer `E_GATE_REQUIRED` (ekstern audit, P1). Brugeren kan derfor ikke få udført noget fra den centrale indtastning. Alle dele findes, men er ikke koblet sammen: modelprocessen, `gate.propose`, samtykkeagenten og executorerne.
+
+| # | Leverance | Færdig når |
+|---|---|---|
+| F1b.1 | IntentBar sender teksten til `eira-modeld`, som foreslår en handling på vegne af brugerens session (`gate.propose`, `origin: model`). Afstår modellen, siger UI'et det og tilbyder den manuelle vej (MASTER-PLAN princip 13–14) | En kendt kommando giver et forslag; en ukendt giver et ærligt "forstod ikke" |
+| F1b.2 | Samtykke og bekræftelse går gennem samtykkeagenten, som viser gatens gengivelse. **Eira UI viser aldrig selv gengivelsen som samtykkeflade**: det ville genåbne den vej, EIRA-CONSENT-AGENT lukker | En VM-test kører hele vejen for strøm (`system:power.request_action`) og for en `utterance`, og UI'et viser den reelle tilstand (`requested`, `pending`, afvist) |
+
+Trinnet forudsætter F1.5 (sessionen) og bør komme før F2, fordi det er første gang, hele kæden afprøves sammen (MASTER-PLAN WS-7).
 
 ### F2 — Kontekster (EIRA-CONTEXT 1.0)
 
@@ -139,11 +154,11 @@ Opgradering og rollback, backup og genopretning, licenser, tilgængelighed og lo
 
 ## 4. De næste tre PR'er
 
-1. **F0.1** R-6.2-patch i `eira-labwc`, da den lukker bilag A og er forudsætningen for F5.3.
-2. **F1.1** clippy og fmt på alle crates, så fejl i Tauri-koden og agenten fanges i CI.
-3. **F2.1** lagerformatet og `eira-context-export`, da det er rene funktioner uden root og første skridt i kontekster.
+1. **F1.5** sessioner uden påstået identitet. Det er en reel fejl: terminalen virker ikke i dag.
+2. **F0.1** R-6.2-patch i `eira-labwc`, da den lukker bilag A og er forudsætningen for F5.3.
+3. **F1b** første hele vej fra IntentBar gennem modellen, gaten og samtykkeagenten.
 
-F1.2–F1.4 kan lægges ind mellem dem.
+F1.1–F1.4 og F1.6 kan lægges ind mellem dem. Derefter F2.1 (lagerformatet).
 
 ## 5. Ejerens beslutninger
 
