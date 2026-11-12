@@ -287,6 +287,13 @@ Universet (graphd), samtaler og andre strukturerede data er Automerge-dokumenter
   - for `personal`: en af personens eksisterende enheder (første enhed signerer sig selv ved oprettelse; genoprettelse (ADR-0005 K5) kan starte en ny liste).
 - **Tilbagekaldelse:** enheden fjernes fra listen, dens `keys/devices/<device_id>` slettes, og CMK roteres (§5.5). Næste gang den tilbagekaldte enhed er online, ser den, at den ikke er på listen, og fjerner konteksten (§4). Er den offline, låses konteksten senest, når `max_offline_days` udløber.
 
+### 8.1 Udmelding (en enhed fjerner sig selv)
+
+- En enhed må signere en enhedsliste, hvis den eneste ændring er, at den selv er fjernet. Kontekstens hjem og de øvrige enheder godtager en sådan liste, selv om enheden ikke ellers må ændre listen. Den kan kun formindske adgangen.
+- Udmelding sker, når Fleet sender *tilbagekald enhed* (ADR-0005 K6, "Aflevering"), og når personen selv vælger at fjerne enheden. Enheden melder sig ud af alle sine kontekster, organisationens og de private, og går derefter til tilstanden *fjernet* (§4).
+- CMK roteres af den næste af kontekstens øvrige enheder, der er online (§5.5). Den udmeldte enhed roterer ikke selv.
+- Fleet får ikke oplyst, hvilke private kontekster enheden meldte sig ud af; kvitteringen til Fleet siger kun, at udmeldingen er gennemført.
+
 ## 9. ID-hjemmet (K11)
 
 Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fastlægger kun, hvad det må indeholde:

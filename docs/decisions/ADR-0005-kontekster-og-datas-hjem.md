@@ -85,6 +85,15 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 - Uden sudo: et privat Eira ID på en organisations-enhed får ingen administratorrettigheder på enheden (ADR-0003, managed mode).
 - Rettigheder for private kontekster på en åben organisations-enhed: se O-9 (besluttet). Åbent punkt: O-8.
 
+**Aflevering af en organisations-enhed (besluttet af ejer, 12. november 2026).** Når en medarbejder stopper, lukker organisationen medarbejderens login, og enheden afleveres. Når Fleet-administratoren lukker enheden i Fleet, opdateres **alle** kontekster, der er tilknyttet enheden, også de private:
+
+1. Fleet fjerner enheden fra organisationskonteksternes enhedslister og roterer deres CMK (EIRA-CONTEXT §8).
+2. Fleet sender kommandoen *tilbagekald enhed* til enheden. Enheden melder sig selv ud af hver privat kontekst, den kender: den signerer en enhedsliste uden sig selv og sender den til kontekstens hjem (EIRA-CONTEXT §8.1). Fleet ser ikke, hvilke private kontekster det drejer sig om.
+3. Enheden sletter alle lokale kopier og nøgler (tilstand *fjernet*, EIRA-CONTEXT §4). Derefter kan administratoren køre *slet disk*.
+4. Personen logger ind med sit Eira ID på en ny maskine og henter sine private kontekster fra deres hjem. Intet er tabt, fordi originalen aldrig lå på maskinen; den lokale kopi var kun krypteret cache.
+
+Er enheden offline eller væk, når Fleet lukker den, kan den ikke melde sig ud. Så låses dens private kontekster senest efter `max_offline_days`, og personen kan fjerne den fra en anden enhed.
+
 ### K7 — Isolation: én Linux-bruger pr. kontekst bag én samlet oplevelse (besluttet)
 
 Hver kontekst kører som sin egen Linux-bruger, så kernen holder filer og processer adskilt (K2). Brugeren ser én EiraOS. Grænserne, der opstår, er netop dem, der alligevel skal kontrolleres:
