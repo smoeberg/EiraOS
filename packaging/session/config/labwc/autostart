@@ -1,2 +1,5 @@
 # EiraOS: shell-only Wayland-session. Ingen skrivebord, ingen startmenu.
+# EIRA-CONSENT-AGENT §5.1: the consent agent first (it registers with
+# identityd on this compositor), then the app, which can only ask it.
+/usr/lib/eira-os/eira-consent-agent &
 /usr/bin/eira-spatial-desktop &

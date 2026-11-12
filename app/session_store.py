@@ -78,6 +78,9 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             # Kept only so old databases open; never written. Consent keys
             # live in RAM (app/consent_keys.py).
             ("consent_key", "TEXT"),
+            # The logind session the login came from: the agent claims the key
+            # of its own logind session, never one the app names.
+            ("logind_session", "TEXT"),
         ):
             if column not in columns:
                 conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} {kind}")
@@ -134,7 +137,8 @@ def ensure_session(
     return sid
 
 def create_session_from_claims(
-    claims: dict, *, session_id: str | None = None, os_uid: int | None = None
+    claims: dict, *, session_id: str | None = None, os_uid: int | None = None,
+    logind_session: str | None = None,
 ) -> str:
     """The only way to a session the gate accepts: claims the caller has
     verified, bound to the OS user who logged in (`os_uid`). Without
@@ -160,11 +164,12 @@ def create_session_from_claims(
                 INSERT INTO sessions (
                     session_id, actor_id, actor_name, org_unit, assurance_level,
                     delegated_for, presentation_mode, created_at, updated_at,
-                    os_uid, authenticated_at, identity, groups_json, expires_at
-                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?)
+                    os_uid, authenticated_at, identity, groups_json, expires_at, logind_session
+                ) VALUES (?, ?, ?, ?, 'idp_authenticated', 'Self', 'normal', ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO NOTHING
                 """,
-                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires),
+                (sid, actor_id, actor_name, org_unit, now, now, os_uid, now, identity, groups_json, expires,
+                 logind_session),
             )
             if cursor.rowcount == 1:
                 # The key is made in RAM, never in this database. If it cannot

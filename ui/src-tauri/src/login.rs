@@ -30,10 +30,12 @@ use tokio::net::TcpListener;
 pub const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 const CONSENT_DOMAIN: &str = "EIRA-CONSENT-V1";
 
-/// The logged-in session and its consent key: process memory only.
+/// The logged-in session and, on a development machine, its consent key
+/// (process memory only). On an installed system identityd never gives the
+/// app the key: the consent agent holds it (EIRA-CONSENT-AGENT §5.3).
 struct Held {
     session_id: String,
-    consent_key: Vec<u8>,
+    consent_key: Option<Vec<u8>>,
 }
 
 static HELD: Mutex<Option<Held>> = Mutex::new(None);
@@ -240,9 +242,14 @@ pub async fn desktop_login() -> Result<LoginResult, String> {
     )
     .await?;
     let session_id = field(&done, "session_id")?.to_owned();
-    let consent_key = decode_hex(field(&done, "consent_key")?)
-        .filter(|key| key.len() == 32)
-        .ok_or("identityd returned a malformed consent key")?;
+    let consent_key = match done.get("consent_key").and_then(Value::as_str) {
+        None => None, // installed system: decisions go through the consent agent
+        Some(hex) => Some(
+            decode_hex(hex)
+                .filter(|key| key.len() == 32)
+                .ok_or("identityd returned a malformed consent key")?,
+        ),
+    };
     *HELD.lock().map_err(|_| "consent key store poisoned")? = Some(Held {
         session_id: session_id.clone(),
         consent_key,
@@ -312,13 +319,17 @@ fn sign(
 ) -> Result<(String, String), String> {
     let held = HELD.lock().map_err(|_| "consent key store poisoned")?;
     let held = held.as_ref().ok_or("not logged in")?;
+    let key = held
+        .consent_key
+        .as_ref()
+        .ok_or("decisions go through the consent agent")?;
     #[cfg(unix)]
     // SAFETY: getuid has no preconditions and cannot fail.
     let uid = unsafe { libc::getuid() };
     #[cfg(not(unix))]
     let uid: u32 = return Err("the trusted consent path needs a Unix user id".into());
     let proof = consent_proof(
-        &held.consent_key,
+        key,
         verb,
         uid,
         &held.session_id,
@@ -329,6 +340,50 @@ fn sign(
     Ok((held.session_id.clone(), proof))
 }
 
+/// Whether this app holds the key (development machine) or the consent
+/// agent decides (installed system).
+fn agent_decides() -> Result<bool, String> {
+    let held = HELD.lock().map_err(|_| "consent key store poisoned")?;
+    Ok(held.as_ref().ok_or("not logged in")?.consent_key.is_none())
+}
+
+/// Asks the consent agent to show a decision. The app passes only the id:
+/// the agent reads the text from the gate or delegationd, shows it on its
+/// own window and signs only what the user approves there.
+#[cfg(unix)]
+async fn ask_agent(method: &str, params: Value) -> Result<Value, String> {
+    use tokio::io::AsyncBufReadExt;
+    let dir = std::env::var("XDG_RUNTIME_DIR").map_err(|_| "XDG_RUNTIME_DIR is not set")?;
+    let path = std::path::Path::new(&dir).join("eira-consent.sock");
+    let mut stream = tokio::net::UnixStream::connect(&path)
+        .await
+        .map_err(|_| "E_CONSENT_AGENT_UNAVAILABLE: samtykkevinduet kører ikke")?;
+    let request = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+    stream
+        .write_all(format!("{request}\n").as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut line = String::new();
+    // The user decides in the agent's window; give them time.
+    tokio::time::timeout(
+        Duration::from_secs(600),
+        tokio::io::BufReader::new(stream).read_line(&mut line),
+    )
+    .await
+    .map_err(|_| "the consent agent did not answer")?
+    .map_err(|e| e.to_string())?;
+    let reply: Value = serde_json::from_str(&line).map_err(|e| e.to_string())?;
+    reply
+        .get("result")
+        .cloned()
+        .ok_or_else(|| "no result from the consent agent".into())
+}
+
+#[cfg(not(unix))]
+async fn ask_agent(_method: &str, _params: Value) -> Result<Value, String> {
+    Err("the consent agent needs Unix".into())
+}
+
 /// One decision from the user, signed with the held key and sent to the gate.
 async fn decide(
     verb: &str,
@@ -336,6 +391,12 @@ async fn decide(
     content_hash: String,
     rendering_hash: String,
 ) -> Result<Value, String> {
+    if agent_decides()? {
+        // The agent shows the gate's own text and decides consent and the
+        // confirmation together, so both commands go to the same place.
+        let _ = (content_hash, rendering_hash);
+        return ask_agent("agent.show", json!({ "action_id": action_id })).await;
+    }
     let (session_id, proof) = sign(verb, &action_id, &content_hash, &rendering_hash)?;
     crate::ipc::send_ipc_request(
         "intentd".into(),
@@ -360,6 +421,13 @@ pub async fn delegation_create(
     content_hash: String,
     rendering_hash: String,
 ) -> Result<Value, String> {
+    if agent_decides()? {
+        return ask_agent(
+            "agent.show_delegation",
+            json!({ "proposal_id": proposal_id }),
+        )
+        .await;
+    }
     let (session_id, proof) = sign("delegate", &proposal_id, &content_hash, &rendering_hash)?;
     crate::ipc::send_ipc_request(
         "delegationd".into(),

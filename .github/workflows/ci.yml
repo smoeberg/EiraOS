@@ -41,8 +41,7 @@ jobs:
 
     - name: Install AppArmor parser for packaging validation
       run: |
-        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y apparmor-utils xorriso
+        scripts/ci/apt-install.sh apparmor-utils xorriso
 
     - name: Run database migrations (Alembic)
       run: |
@@ -65,6 +64,19 @@ jobs:
         run: cargo check --workspace
       - name: Cargo test workspace
         run: cargo test --workspace -- --nocapture
+      # EIRA-CONSENT-AGENT: the agent's window against a real (headless)
+      # compositor, and its binary links nothing but libc (R-5.5).
+      - name: Consent agent window and linkage
+        timeout-minutes: 25
+        run: |
+          scripts/ci/apt-install.sh weston
+          cargo build -p eira-consent-agent --release
+          ! ldd target/release/eira-consent-agent | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
+          cargo build -p eira-consent-agent --features smoke --example window_smoke
+          export XDG_RUNTIME_DIR=$(mktemp -d) && chmod 700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless --renderer=pixman --socket=wayland-ci --width=1280 --height=800 &
+          for i in $(seq 1 20); do [ -S "$XDG_RUNTIME_DIR/wayland-ci" ] && break; sleep 0.5; done
+          WAYLAND_DISPLAY=wayland-ci timeout 60 target/debug/examples/window_smoke
       # Phase 0 IPC & Event Bus contract (specs/PHASE-0-IPC-EVENT-BUS.md).
       # Behind a feature so the Android/WASM state core stays syscall-free.
       - name: Phase 0 contract tests (eira-core --features ipc-tokio)
@@ -94,8 +106,7 @@ jobs:
           restore-keys: tauri-${{ runner.os }}-cargo-
       - name: Install Tauri system dependencies (Linux)
         run: |
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 update
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          scripts/ci/apt-install.sh libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
           # NB: no --locked here: ui/src-tauri/Cargo.lock is gitignored, so
           # --locked would fail with "cannot create the lock file". The root
           # workspace lock does not apply (src-tauri is excluded from it).

@@ -136,10 +136,15 @@ token = ""
 for line in open("/etc/eira/eira.conf", encoding="utf-8"):
     if line.startswith("EIRA_IPC_TOKEN="):
         token = line.split("=", 1)[1].strip()
-for method, params in (
-    ("delegation.propose", {"session_id": "forged", "delegee_id": "model:x", "scope": {"actions": ["prepare"]}}),
+# propose: a forged session is refused (-32003). proposal/create: only the
+# consent agent may decide, refused before the session is looked at
+# (EIRA-CONSENT-AGENT §5.4a: -32004 E_CONSENT_PATH).
+for method, params, code, message in (
+    ("delegation.propose", {"session_id": "forged", "delegee_id": "model:x", "scope": {"actions": ["prepare"]}},
+     -32003, None),
+    ("delegation.proposal", {"session_id": "forged", "proposal_id": "p"}, -32004, "E_CONSENT_PATH"),
     ("delegation.create", {"session_id": "forged", "proposal_id": "p", "content_hash": "c",
-                           "rendering_hash": "r", "proof": "0" * 64}),
+                           "rendering_hash": "r", "proof": "0" * 64}, -32004, "E_CONSENT_PATH"),
 ):
     s = socket.socket(socket.AF_UNIX)
     s.settimeout(5)
@@ -147,7 +152,9 @@ for method, params in (
     s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
                            "params": {**params, "_eira": {"ipc_token": token}}}) + "\n").encode())
     reply = json.loads(s.makefile().readline())
-    assert reply.get("error", {}).get("code") == -32003, (method, reply)
+    error = reply.get("error", {})
+    assert error.get("code") == code, (method, reply)
+    assert message is None or error.get("message") == message, (method, reply)
 PY
 # The packaged model process (GATE-KERNEL bilag A): its own user, confined,
 # and it reaches the gate, which refuses it without a human's delegation.
@@ -187,6 +194,60 @@ s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "model.prepare", "pa
 reply = json.loads(s.makefile().readline())
 gate = reply["result"]["gate"]
 assert gate["decision"] == "REJECT", reply
+PY
+# EIRA-CONSENT-AGENT V-2: the setgid chain on the installed package.
+AGENT=/usr/lib/eira-os/eira-consent-agent
+check consent-agent-setgid sh -c '[ "$(stat -c "%U:%G %a" '"$AGENT"')" = "root:eira-consent 2755" ]'
+check consent-group-system-gid sh -c '[ "$(getent group eira-consent | cut -d: -f3)" -lt 1000 ]'
+check consent-group-no-members sh -c '[ -z "$(getent group eira-consent | cut -d: -f4)" ] && ! awk -F: -v g="$(getent group eira-consent | cut -d: -f3)" "\$4 == g" /etc/passwd | grep -q .'
+check consent-group-no-password sh -c 'getent gshadow eira-consent | cut -d: -f2 | grep -Eqx "!|\*|!\*|!!"'
+check consent-agent-links-only-libc sh -c '! ldd '"$AGENT"' | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"'
+check consent-agent-version runuser -u "$USER_NAME" -- "$AGENT" --version
+# AT_SECURE: the loader ignores LD_DEBUG (and LD_PRELOAD) for the setgid
+# agent, but not for a plain copy (the control shows the test can see it).
+consent_agent_secure() {
+    cp "$AGENT" /tmp/agent-plain && chmod 0755 /tmp/agent-plain
+    control=$(runuser -u "$USER_NAME" -- env LD_DEBUG=libs /tmp/agent-plain --version 2>&1 | grep -c "calling init")
+    agent=$(runuser -u "$USER_NAME" -- env LD_DEBUG=libs "$AGENT" --version 2>&1 | grep -c "calling init")
+    rm -f /tmp/agent-plain
+    say "diag consent-agent-ld-debug: control=$control agent=$agent"
+    [ "$control" -gt 0 ] && [ "$agent" -eq 0 ]
+}
+check consent-agent-secure-exec consent_agent_secure
+# A program running as the user cannot become the agent: newgrp/sg fail.
+check consent-gid-not-obtainable sh -c '! runuser -u "'"$USER_NAME"'" -- sg eira-consent -c true </dev/null'
+# §7: the gate takes no consent from anyone but the agent, session or not.
+check consent-path-enforced python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(15)
+s.connect("/run/eira/intentd.sock")
+params = {"action_id": "x", "content_hash": "c", "rendering_hash": "r", "session_id": "forged",
+          "proof": "0" * 64, "_eira": {"ipc_token": token}}
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "gate.consent", "params": params}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+assert reply["result"]["error"] == "E_CONSENT_PATH", reply
+PY
+# The app never gets a key from identityd on an installed system, and the
+# agent's methods refuse anyone without its GID.
+check consent-key-only-to-agent python3 - <<'PY'
+import json, socket
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+for method, params in (("identity.consent_key_claim", {}), ("identity.consent_agent_register", {"compositor_pid": 2})):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(15)
+    s.connect("/run/eira/identityd.sock")
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
+                           "params": {**params, "_eira": {"ipc_token": token}}}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    assert reply["error"]["message"] == "E_CONSENT_AGENT", (method, reply)
 PY
 check model-user-exists getent passwd eira-model
 check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"
@@ -287,7 +348,19 @@ seal_owner_handover() {
     # No forced rotation here: rotating twice within one sealing interval
     # makes journald write two tags with the same epoch, which
     # journalctl --verify reports as corruption (seen in this VM).
-    if ! journalctl --system --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+    # The online system.journal is appended to while it is read; a hash
+    # entry can point at an object not yet written ("Invalid data object",
+    # seen in this VM while the archived files passed). Sync and retry; a
+    # real seal break fails every attempt.
+    ok=
+    for attempt in 1 2 3; do
+        journalctl --sync >/dev/null 2>&1 || true
+        if journalctl --system --verify --verify-key="$key" >/tmp/seal-verify.txt 2>&1; then
+            ok=1; break
+        fi
+        sleep 3
+    done
+    if [ -z "$ok" ]; then
         say "diag seal-verify: $(tr '\n' ' ' </tmp/seal-verify.txt | cut -c1-1500)"
         return 1
     fi

@@ -26,6 +26,16 @@ case "${1:-configure}" in
                 --disabled-password --shell /usr/sbin/nologin eira-model
         fi
         adduser --quiet eira-model eira-clients
+        # EIRA-CONSENT-AGENT §3: a system group nobody is a member of and
+        # without a password. The setgid agent is the only way to its GID;
+        # intentd and identityd refuse to start if that stops being true.
+        if ! getent group eira-consent >/dev/null; then
+            addgroup --system eira-consent
+        fi
+        gpasswd -R eira-consent >/dev/null 2>&1 || true
+        if ! dpkg-statoverride --list /usr/lib/eira-os/eira-consent-agent >/dev/null 2>&1; then
+            dpkg-statoverride --update --add root eira-consent 2755 /usr/lib/eira-os/eira-consent-agent
+        fi
         # Fleet administrators create pairing codes and revoke devices
         # (eira-fleetd checks SO_PEERCRED). The group starts empty: no desktop
         # user, not eira and never eira-model. An administrator is added

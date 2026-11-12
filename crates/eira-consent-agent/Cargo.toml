@@ -1,0 +1,27 @@
+[package]
+name = "eira-consent-agent"
+version = "0.1.0"
+description = "EiraOS consent agent: the only process that may consent (EIRA-CONSENT-AGENT)"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+
+# R-5.5: Wayland only (pure Rust client, no libwayland, no xkbcommon), a font
+# that ships with the package, no GTK, fontconfig, D-Bus or webview.
+[features]
+# Only for examples/window_smoke.rs (CI against a headless compositor).
+smoke = []
+
+[[example]]
+name = "window_smoke"
+required-features = ["smoke"]
+
+[dependencies]
+smithay-client-toolkit = { version = "0.21", default-features = false }
+wayland-client = "0.31"
+fontdue = "0.9"
+hmac = "0.12"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"

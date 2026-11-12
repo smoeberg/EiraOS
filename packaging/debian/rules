@@ -10,6 +10,8 @@ override_dh_auto_build:
 	npm ci --prefix ui --ignore-scripts
 	npm run build --prefix ui
 	cd ui && npm run tauri -- build --no-bundle
+	# EIRA-CONSENT-AGENT: the only process the gate takes decisions from.
+	cargo build --release -p eira-consent-agent
 
 override_dh_auto_test:
 	python3 -m venv debian/.test-venv
@@ -73,6 +75,10 @@ override_dh_auto_install:
 	install -m 0755 packaging/bin/eira-modeld debian/eira-os-core/usr/bin/eira-modeld
 	install -m 0644 packaging/model/eira-modeld.service debian/eira-os-core/usr/lib/systemd/system/
 	install -m 0644 packaging/model/usr.bin.eira-modeld debian/eira-os-core/etc/apparmor.d/usr.bin.eira-modeld
+	# The consent agent; postinst makes it root:eira-consent 2755 (dpkg-statoverride).
+	install -m 0755 target/release/eira-consent-agent debian/eira-os-core/usr/lib/eira-os/eira-consent-agent
+	install -m 0644 packaging/consent/usr.lib.eira-os.eira-consent-agent \
+		debian/eira-os-core/etc/apparmor.d/usr.lib.eira-os.eira-consent-agent
 	# The journal's Forward Secure Sealing, set up once at first boot.
 	install -m 0755 packaging/bin/eira-audit-seal debian/eira-os-core/usr/bin/eira-audit-seal
 	install -m 0644 packaging/audit/eira-audit-seal.service debian/eira-os-core/usr/lib/systemd/system/

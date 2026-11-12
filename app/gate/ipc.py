@@ -45,6 +45,9 @@ def default_gate() -> Gate:
     if _GATE is None:
         if installed():
             require_model_identity()  # bilag A pkt. 1: never fail open
+            from app.gate.consent_path import require_consent_path
+
+            require_consent_path()  # EIRA-CONSENT-AGENT §3: never fail open
         _GATE = Gate()
     return _GATE
 
@@ -137,6 +140,12 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
             raise JsonRpcError(-32004, "unknown action")
         return found
 
+    def rendering(params: dict[str, Any], caller: Caller | None) -> dict[str, Any]:
+        found = active.rendering_for(_text(params, "action_id"), params.get("session_id"))
+        if found is None:
+            raise JsonRpcError(-32004, "unknown action")
+        return found
+
     def capabilities(_params: dict[str, Any], _caller: Caller | None) -> dict[str, Any]:
         """Read-only: which families and system operations the gate accepts,
         and whether logind would allow each power action right now."""
@@ -159,6 +168,8 @@ def register_gate_handlers(server, gate: Gate | None = None) -> Gate:
 
     server.register("gate.capabilities", _with_caller(capabilities))
     server.register("gate.propose", _with_caller(propose))
+    # The consent agent reads what it shows from here (EIRA-CONSENT-AGENT §5.4).
+    server.register("gate.rendering", _with_caller(rendering))
     server.register("gate.consent", _with_caller(consent))
     server.register("gate.confirm", _with_caller(confirm))
     server.register("gate.status", _with_caller(status))

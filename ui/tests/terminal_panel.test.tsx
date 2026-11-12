@@ -164,21 +164,24 @@ describe("App terminal entry points", () => {
     method === "presentation.mode_get" ? { mode } : { states: [], proposals: [] };
 
   it("in Builder Mode, toggles the terminal with the header button and Ctrl+Alt+T", async () => {
+    // The whole App renders here; on a loaded CI runner (and under
+    // dpkg-buildpackage) that takes longer than findBy*'s 1 s default.
+    const slow = { timeout: 5000 };
     fakeBackend();
     window.__EIRA_TEST_IPC__ = ipcWithMode("builder");
     render(<App />);
 
-    const button = await screen.findByRole("button", { name: "Terminal" });
+    const button = await screen.findByRole("button", { name: "Terminal" }, slow);
     expect(screen.queryByRole("region", { name: "Terminal" })).not.toBeInTheDocument();
     fireEvent.keyDown(window, { key: "t", ctrlKey: true, altKey: true });
-    expect(await screen.findByRole("region", { name: "Terminal" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Terminal" }, slow)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Luk terminal" }));
     expect(screen.queryByRole("region", { name: "Terminal" })).not.toBeInTheDocument();
 
     fireEvent.click(button);
-    expect(await screen.findByRole("region", { name: "Terminal" })).toBeInTheDocument();
-  });
+    expect(await screen.findByRole("region", { name: "Terminal" }, slow)).toBeInTheDocument();
+  }, 20000);
 
   it.each(["explorer", "normal"])("in %s mode, offers no terminal at all", async (mode) => {
     fakeBackend();

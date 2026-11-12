@@ -217,6 +217,16 @@ def register_identity_handlers(
 
     database.init_db()  # creates/migrates oidc_auth_states on an installed system
 
+    from app.auth import consent_agent
+    from app.gate.caller import installed
+
+    if installed():
+        from app.gate.consent_path import require_consent_path
+
+        require_consent_path()  # EIRA-CONSENT-AGENT §3: the key must only reach the agent
+    register_agent, claim_key = consent_agent.handlers()
+    server.register("identity.consent_agent_register", register_agent)
+    server.register("identity.consent_key_claim", claim_key)
     server.register("identity.login_start", login.wants_peer(login.login_start))
     server.register("identity.login_complete", login.wants_peer(login.login_complete))
     server.register("identity.step_up", identity_step_up)

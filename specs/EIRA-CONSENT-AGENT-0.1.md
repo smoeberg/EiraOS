@@ -1,7 +1,7 @@
-# EIRA Consent Agent 0.2 — betroet vej til samtykke mod programmer, der kører som brugeren
+# EIRA Consent Agent 0.3 — betroet vej til samtykke mod programmer, der kører som brugeren
 
-**Status:** Udkast til ejerens accept. **Ikke normativ**, før ejeren har accepteret det. Testplanen er et separat trin efter accept.
-**Version:** 0.2 (10. november 2026: 0.2 beslutninger om compositor, toolkit, FIDO2 og `hidepid`, §6, §10)
+**Status:** Accepteret af ejeren 11. november 2026 og normativ. Implementeret undtagen R-6.2 (labwc-patch); se §0.
+**Version:** 0.3 (11. november 2026: implementering, nøglen bindes til logind-sessionen, delegation går også gennem agenten, §0, §5.3, §5.5, §12). 0.2: beslutninger om compositor, toolkit, FIDO2 og `hidepid`, §6, §10.
 **Lukker:** "Rest" under GATE-KERNEL bilag A pkt. 1, *Betroet vej til samtykke*
 **Erstatter:** Agent 3-opgaven "LD_PRELOAD Consent Path" i `docs/AGENT_WORK_ASSIGNMENTS.md` (se §2)
 **Berører:** `identityd`, Gate (`intentd`, lag 5), Tauri-appen (`ui/src-tauri`), sessionen (`eira-session`, labwc-konfiguration), pakken (`eira-os-core`), ADR-0003
@@ -15,18 +15,18 @@ Intet i denne kontrakt er en opnået sikkerhedsegenskab. Alle punkter nedenfor e
 | Egenskab | Krav | Implementeret | Verificeret |
 |---|---|---|---|
 | Ingen privilegerede Wayland-protokoller til klienter | R-6.1 | `eira-labwc` + tom `<privilegedInterfaces>` (#163) | Kun lokalt (headless, mutationstjek). Ikke i VM-session |
-| Intet vindue over agenten; agenten har fokus | R-6.2 | Nej (labwc-patch mangler) | Nej |
-| Beslutning tidligst efter 750 ms fokus | R-6.3 | Nej | Nej |
-| setgid-installation `root:eira-consent 2755` og gruppe uden medlemmer/adgangskode, fail-closed ved start | §3 | Nej | Nej |
-| Effektiv GID via `SO_PEERCRED` identificerer agenten | §3 pkt. 3 | Nej | Nej. Holder kun, hvis installationskæden ovenfor er fail-closed |
-| `LD_PRELOAD`/ptrace/`/proc/<pid>/mem` mod agenten afvist af kernen | §3 pkt. 1–2 | Nej | Nej |
-| Agentregistrering mod sessionens compositor | §5.2 | Nej | Nej (forudsætning O-6 ikke verificeret) |
-| Nøgleudlevering kun til registreret agent; appen får ingen nøgle | §5.3 | Nej (appen har i dag nøglen) | Nej |
-| Gaten afviser samtykke uden agentens GID (`E_CONSENT_PATH`) | §7 | Nej | Nej |
+| Intet vindue over agenten; agenten har fokus | R-6.2 | **Nej** (labwc-patch mangler) | Nej |
+| Beslutning tidligst efter 750 ms fokus | R-6.3 | Ja (`ui.rs`, `FocusGate`; fokus = compositorens `activated`) | Enhedstest; vinduet tegnet mod headless weston i CI. Ikke i VM-session |
+| setgid-installation `root:eira-consent 2755` og gruppe uden medlemmer/adgangskode, fail-closed ved start | §3 | Ja (`dpkg-statoverride`, `addgroup --system`, `gpasswd -R`; `app/gate/consent_path.py`) | Test pr. betingelse med mutationstjek; VM (`consent-agent-setgid`, `consent-group-*`) |
+| Effektiv GID via `SO_PEERCRED` identificerer agenten | §3 pkt. 3 | Ja (`Caller.gid`, `consent_agent`) | Test; VM: gaten afviser alle andre (`consent-path-enforced`) |
+| `LD_PRELOAD`/ptrace/`/proc/<pid>/mem` mod agenten afvist af kernen | §3 pkt. 1–2 | Kernen (`AT_SECURE`) + `PR_SET_DUMPABLE 0` | VM: loaderen ignorerer `LD_DEBUG` for agenten, men ikke for en kopi uden setgid (`consent-agent-secure-exec`). ptrace ikke testet direkte |
+| Agentregistrering mod sessionens compositor | §5.2 | Ja (`app/auth/consent_agent.py`) | Test med falsk `/proc` (indlejret, anden session, anden bruger, genbrugt PID); **O-6 ikke verificeret i VM** |
+| Nøgleudlevering kun til registreret agent; appen får ingen nøgle | §5.3 | Ja | Test; VM: kald uden agentens GID afvises (`consent-key-only-to-agent`) |
+| Gaten afviser samtykke uden agentens GID (`E_CONSENT_PATH`) | §7 | Ja, også uden session | Test; VM (`consent-path-enforced`) |
 | Samtykkenøglen skrives aldrig til disk og er ugyldig efter genstart | §5.3 | Ja, med tmpfs og boot-id (#178) | Kun enhedstests. Ikke i VM |
-| Agentens miljø-, fd- og argumentkrav | R-5.1–R-5.5 | Nej | Nej |
+| Agentens miljø-, fd- og argumentkrav | R-5.1–R-5.5 | Ja (`hygiene.rs`; binæren linker kun libc) | Enhedstest; VM og CI: `ldd` (`consent-agent-links-only-libc`) |
 
-Indtil alle rækker er verificeret, gælder den nuværende formulering i ADR-0003 og GATE-KERNEL bilag A pkt. 1 ("Rest") uændret: et program, der kører som brugeren, kan i dag stadig få fat i samtykkenøglen.
+**Det, der står tilbage:** R-6.2 (labwc-patchen) og verifikation i en rigtig grafisk session (O-6, R-6.1–R-6.3). Indtil da kan et program, der kører som brugeren, ikke få fat i samtykkenøglen eller samtykke selv, men det kan i princippet lægge et almindeligt vindue over agentens og narre brugerens klik (clickjacking); R-6.3 dæmper det. ADR-0003's sætning (§8) gælder først, når R-6.2 er lavet.
 
 ### 0.1 Verifikationskrav (testplanen)
 
@@ -121,9 +121,11 @@ Agenten forbinder til sin compositor (`WAYLAND_DISPLAY` under `XDG_RUNTIME_DIR`)
 
 ### 5.3 Login
 
-Uændret OIDC-flow i appen (`identity.login_start` / `identity.login_complete`). Ændringen er, at `login_complete` **ikke** returnerer `consent_key`. Agenten henter den med `identity.consent_key_claim(session_id)`. `identityd` udleverer den kun til en registreret agent (§5.2) i samme logind-session og med samme uid som Eira-sessionen. Log ud glemmer nøglen i både agent og `identityd`.
+Uændret OIDC-flow i appen (`identity.login_start` / `identity.login_complete`). Ændringen er, at `login_complete` **ikke** returnerer `consent_key` på et installeret system.
 
-**Nøglen skrives aldrig til disk** (11. november 2026, fra invariant A-1 i EIRA-CONTEXT). Den findes kun i hukommelsen hos `identityd` og agenten og er bundet til sessionens logind-session og boot-id. Efter genstart findes der ingen gyldig samtykkenøgle, og en kopi af disken indeholder ingen. Indtil agenten findes, deler `identityd`, gaten og `delegationd` nøglen gennem en fil på tmpfs (`/run/eira/consent-keys.db`, `app/consent_keys.py`), bundet til boot-id; den afviser en sti, der ikke er tmpfs.
+**Besluttet i 0.3:** Agenten får ikke session-id'et fra appen. Ved login gemmer `identityd` den logind-session, appen kørte i (`/proc/<pid>/sessionid`). `identity.consent_key_claim` (uden parametre) giver nøglen til den nyeste gyldige Eira-session for agentens uid i agentens egen logind-session, og kun til en registreret agent (§5.2). Agenten henter nøglen for hver beslutning og sletter den fra hukommelsen bagefter.
+
+**Nøglen skrives aldrig til disk** (11. november 2026, fra invariant A-1 i EIRA-CONTEXT). Den findes kun i hukommelsen hos `identityd` og agenten og er bundet til sessionens logind-session og boot-id. Efter genstart findes der ingen gyldig samtykkenøgle, og en kopi af disken indeholder ingen. `identityd`, gaten og `delegationd` deler nøglen gennem en fil på tmpfs (`/run/eira/consent-keys.db`, `app/consent_keys.py`), bundet til boot-id; den afviser en sti, der ikke er tmpfs. `identity.consent_key_claim` læser nøglen derfra.
 
 ### 5.4 Samtykke og bekræftelse
 
@@ -140,6 +142,10 @@ App ◄── resultat (kun status, aldrig nøgle eller bevis)
 - Agentens socket (`$XDG_RUNTIME_DIR/eira-consent.sock`) tager kun imod `agent.show(action_id)` og `agent.status`. Den tager aldrig imod tekst, hashes eller beviser fra appen.
 - Agenten viser kun vinduer på den compositor, den blev registreret med i §5.2. Mister den forbindelsen, skal den registreres igen.
 - `gate.confirm` følger samme vej.
+
+### 5.4a Delegation (0.3)
+
+Delegationen til modellen (EIRA Delegation v1.1) er også en beslutning. På et installeret system tager `delegationd` kun `delegation.create` fra agenten (`E_CONSENT_PATH` ellers). Appen kalder `agent.show_delegation(proposal_id)`; agenten læser teksten med `delegation.proposal`, viser den og signerer verbet `delegate`.
 
 ### 5.5 Udviklingsmaskiner
 
@@ -217,3 +223,16 @@ Hver kode har sin egen audit-post, så SIEM og Fleet kan alarmere på dem. `E_CO
 1. Ejeren accepterer, retter eller afviser denne kontrakt (v0.2). O-6 verificeres i VM.
 2. Testplan som separat dokument: én test pr. krav i §3, §5.2 (inkl. R-5.1–R-5.4), §5.3, §6 og §7, med mutationstjek som i bilag A, plus VM-tests for setgid- og ptrace-garantierne.
 3. Implementering i tre PR'er: (a) gruppe, forudsætningstjek og `E_CONSENT_PATH` i gaten, (b) `identityd`-registrering og nøgleudlevering, (c) `eira-labwc` med konfiguration og patch, (d) agenten og flytning af beviset ud af appen. (c) kan begynde straks, fordi R-6.1 er ren konfiguration og gør systemet bedre også uden agenten.
+
+## 12. Implementering (0.3)
+
+| Del | Hvor |
+|---|---|
+| Agenten (Rust, `smithay-client-toolkit` uden xkbcommon, `fontdue`, DejaVu Sans i binæren) | `crates/eira-consent-agent/` |
+| Forudsætninger og agentens identitet | `app/gate/consent_path.py`, `Caller.gid` |
+| Gatens lag 5 og `gate.rendering` | `app/gate/kernel.py`, `app/gate/ipc.py` |
+| Registrering og nøgleudlevering | `app/auth/consent_agent.py`, `identity.consent_agent_register`, `identity.consent_key_claim` |
+| Appen | `ui/src-tauri/src/login.rs`: uden nøgle sendes `agent.show` / `agent.show_delegation` |
+| Pakken | gruppe, `dpkg-statoverride`, AppArmor (`packaging/consent/`), labwc-autostart |
+
+**Afvigelser fra 0.2:** Én beslutning i agentvinduet dækker både samtykke og bekræftelse (agenten læser gatens `next` før hvert trin og afbryder, hvis teksten har ændret sig). Fokus (R-6.3) måles på compositorens `activated`-tilstand, ikke på tastaturfokus, fordi agenten ikke bruger xkbcommon. Agenten har kun museinput; tastatur (Enter/Esc) følger.
