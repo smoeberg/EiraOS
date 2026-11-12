@@ -39,8 +39,11 @@ export interface Dashboard {
   trust_items: TrustItem[];
   active_journeys: Journey[];
   mistral_available: boolean;
-  session_id?: string;
-  actor_id?: string;
+  /** The caller's own logged-in session, or null; the dashboard never creates one. */
+  session_id?: string | null;
+  actor_id?: string | null;
+  authenticated?: boolean;
+  /** The OS user's mode (F1.5): the same one the terminal check sees. */
   presentation_mode?: string;
 }
 

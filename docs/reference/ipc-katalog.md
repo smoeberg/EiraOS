@@ -38,7 +38,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `identity.login_complete` | `caller` |  |
 | `identity.login_start` | `caller` |  |
 | `identity.providers` | `read` |  |
-| `identity.session` | `open_write` | Lukkes af F1.5 |
+| `identity.session` | `caller` |  |
 | `identity.step_up` | `refused` |  |
 | `identity.verify_production_certificate` | `open_write` | Lukkes af F0b.4 |
 
@@ -71,7 +71,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `conversation.events` | `caller` |  |
 | `conversation.list` | `caller` |  |
 | `conversation.members` | `caller` |  |
-| `dashboard.get` | `open_write` | Lukkes af F1.5 |
+| `dashboard.get` | `caller` |  |
 | `events.since` | `caller` |  |
 | `gate.capabilities` | `caller` |  |
 | `gate.confirm` | `caller` |  |
@@ -87,8 +87,8 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `journey.advance` | `refused` |  |
 | `journey.get` | `read` |  |
 | `journey.list` | `read` |  |
-| `presentation.mode_get` | `open_write` | Lukkes af F1.5 |
-| `presentation.mode_set` | `open_write` | Lukkes af F1.5 |
+| `presentation.mode_get` | `caller` |  |
+| `presentation.mode_set` | `caller` |  |
 
 ## `graphd` — `/run/eira/graphd.sock`
 

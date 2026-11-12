@@ -29,7 +29,8 @@ def main() -> int:
         graph = IpcClient("graph")
         identity = IpcClient("identity")
 
-        dash = intent.call("dashboard.get", {"actor_id": "mette@kommune.dk"})
+        # No claimed identity: the dashboard is for the OS user on the socket.
+        dash = intent.call("dashboard.get", {})
         print("dashboard.get:", dash["greeting"], f"({len(dash['trust_items'])} trust items)")
 
         planned = intent.call(
@@ -49,7 +50,7 @@ def main() -> int:
         print("graph.temporal_query:", len(temporal["relations"]), "relation(s)")
 
         session = identity.call("identity.session")
-        print("identity.session:", session["assurance_level"])
+        print("identity.session: authenticated =", session["authenticated"])
 
         try:
             identity.call(

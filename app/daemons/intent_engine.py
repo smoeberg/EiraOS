@@ -4,37 +4,53 @@ import os
 
 from app.capability import list_manifests
 from app.intent_parser import list_trust_items, parse_intent_request, plan_intent
-from app.ipc.access import open_write, read
+from app.ipc.access import caller, open_write, read
+from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 from app.journey import get_journey, list_journeys
 from app.mistral import is_mistral_available
 from app.models import ParseIntentRequest
 from app.pending_intents import save_pending
-from app.session_store import (
-    ensure_session,
-    get_presentation_mode,
-    get_session,
-    set_presentation_mode,
-)
+from app.session_store import ensure_session, mode_for_uid, session_of_caller, set_mode_for_uid
+
+
+def _caller_uid(params: dict) -> int | None:
+    """The OS user on the socket (SO_PEERCRED). None outside a socket."""
+    peer = params.pop(PEER_KEY, None)
+    uid = getattr(peer, "uid", None)
+    return uid if isinstance(uid, int) else None
+
+
+def _with_peer(handler):
+    handler.wants_peer = True
+    return handler
 
 
 def _session_id(params: dict) -> str:
-    return ensure_session(params.get("session_id"), params.get("actor_id"))
+    # A client-named actor is never stored (fundregister S-5). Which session
+    # a pending intent belongs to is decided by the caller's UID in F1.2,
+    # when the IntentBar goes through modeld and the gate.
+    return ensure_session(params.get("session_id"))
 
 
+@_with_peer
 def dashboard_get(params: dict) -> dict:
-    sid = _session_id(params)
-    session = get_session(sid)
+    """The dashboard for the OS user on the socket. Never creates a session
+    and never echoes an identity the client claims (fundregister S-5): the
+    greeting comes from the caller's own authenticated session, if any."""
+    uid = _caller_uid(params)
+    session = session_of_caller(uid, params.get("session_id")) if uid is not None else None
     return {
         "greeting": f"Hej {session['actor_name'] if session else 'bruger'}",
         "focus": "Kommunepilot",
         "state": "Arbejde",
-        "session_id": sid,
-        "actor_id": session["actor_id"] if session else params.get("actor_id"),
+        "session_id": session["session_id"] if session else None,
+        "actor_id": session["actor_id"] if session else None,
+        "authenticated": session is not None,
         "trust_items": [t.model_dump(mode="json") for t in list_trust_items()],
         "active_journeys": [j.model_dump(mode="json") for j in list_journeys()],
         "mistral_available": is_mistral_available(),
-        "presentation_mode": get_presentation_mode(sid),
+        "presentation_mode": _mode(uid),
     }
 
 
@@ -85,33 +101,45 @@ def builder_mode_allowed() -> bool:
     return value.strip().lower() in {"1", "true", "yes"}
 
 
-def presentation_mode_get(params: dict) -> dict:
-    sid = _session_id(params)
-    mode = get_presentation_mode(sid)
+def _mode(uid: int | None) -> str:
+    """Explorer unless this OS user chose Builder and policy still allows it."""
+    if uid is None:
+        return "explorer"
+    mode = mode_for_uid(uid)
     if mode == "builder" and not builder_mode_allowed():
         # Policy revoked after the switch: fall back to Explorer.
-        mode = "explorer"
-        set_presentation_mode(sid, mode)
-    return {"mode": mode, "session_id": sid, "builder_allowed": builder_mode_allowed()}
+        mode = set_mode_for_uid(uid, "explorer")
+    return mode
 
 
+@_with_peer
+def presentation_mode_get(params: dict) -> dict:
+    """The mode belongs to the OS user on the socket, so the terminal's own
+    check (ui/src-tauri) sees the same mode the UI switched to (F1.5)."""
+    uid = _caller_uid(params)
+    return {"mode": _mode(uid), "builder_allowed": builder_mode_allowed()}
+
+
+@_with_peer
 def presentation_mode_set(params: dict) -> dict:
-    sid = _session_id(params)
+    uid = _caller_uid(params)
     mode = params.get("mode", "explorer")
     if mode not in ("explorer", "builder"):
         raise JsonRpcError(-32602, "mode must be explorer or builder")
+    if uid is None:
+        raise JsonRpcError(-32003, "caller_required", {"user_message": "Tilstanden kan kun skiftes fra skrivebordet"})
     # Builder access is device/IT policy, never a client-supplied flag.
     # Fail closed: Builder stays off unless the installed policy enables it.
     if mode == "builder" and not builder_mode_allowed():
         raise JsonRpcError(-32003, "builder_not_allowed", {"user_message": "Builder Mode er ikke tilladt"})
-    set_presentation_mode(sid, mode)
-    return {"mode": mode, "session_id": sid}
+    return {"mode": set_mode_for_uid(uid, mode)}
 
 
 def register_intent_handlers(server) -> None:
-    # Creates sessions from a claimed actor_id (fundregister S-5) and keeps
-    # pending intents: open writes until F1.5 and F1.2 close them.
-    server.register("dashboard.get", open_write(dashboard_get, "F1.5"))
+    # The caller is the OS user on the socket (F1.5); no session is created.
+    server.register("dashboard.get", caller(dashboard_get))
+    # Old parse/plan keep pending intents for a claimed session: open writes
+    # until F1.2 removes them.
     server.register("intent.parse", open_write(intent_parse, "F1.2"))
     server.register("intent.plan", open_write(intent_plan, "F1.2"))
     # Protected writes go through Gate Kernel only (specs/GATE-KERNEL-1.0.md §2).
@@ -122,6 +150,6 @@ def register_intent_handlers(server) -> None:
     server.register("journey.get", read(journey_get))
     server.register("journey.advance", gate_required("journey.advance"))
     server.register("capability.list", read(capability_list))
-    server.register("presentation.mode_get", open_write(presentation_mode_get, "F1.5"))
-    server.register("presentation.mode_set", open_write(presentation_mode_set, "F1.5"))
+    server.register("presentation.mode_get", caller(presentation_mode_get))
+    server.register("presentation.mode_set", caller(presentation_mode_set))
     server.register("health", read(lambda _: {"daemon": "eira-intent-engine", "ok": True}))

@@ -11,6 +11,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   kræver EiraOS' egen tjenestebruger, og `state.sync_push` afviser en blandet batch helt (fundregister
   S-1, S-2); JSON-RPC-katalog genereret fra koden (`docs/reference/ipc-katalog.md`) og VM-check
   `user-cannot-write-stated`.
+- Præsentationstilstanden hører til OS-brugeren på socketen, ikke til en session: terminalens eget
+  Builder-tjek ser nu den tilstand, brugeren har valgt (fundregister S-4). `dashboard.get`,
+  `identity.session` og tilstandsmetoderne opretter aldrig sessioner og viser aldrig en identitet, klienten
+  påstår (S-5); VM-check `user-mode-without-session`.
 - Gate Kernel 1.0: otte lag, samtykke bundet til indholdshash, atomar udførelse og audit (#136); de
   gamle skriveveje svarer `E_GATE_REQUIRED` og er siden fjernet (#137, #180).
 - Deterministisk renderer: samtykke binder til den tekst, brugeren så (#138).
