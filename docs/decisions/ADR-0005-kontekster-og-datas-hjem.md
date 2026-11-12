@@ -101,6 +101,12 @@ Fleet registrerer ved enroll, hvem der ejer den fysiske maskine: `owner` = `orga
 3. Enheden sletter alle lokale kopier og nøgler (tilstand *fjernet*, EIRA-CONTEXT §4). Derefter kan administratoren køre *slet disk*.
 4. Personen logger ind med sit Eira ID på en ny maskine og henter sine private kontekster fra deres hjem. Intet er tabt, fordi originalen aldrig lå på maskinen; den lokale kopi var kun krypteret cache.
 
+**Husstands-Fleet (besluttet af ejer, 12. november 2026).** Private brugere kan vælge at tilknytte husstandens maskiner til Fleet som en tenant af typen `household`, hvor en forælder (eller anden voksen) er administrator. Det er samme Fleet og samme kodebase som for organisationer, og det er et tilvalg.
+
+- Husstands-Fleet styrer kun de **fysiske maskiner**: push af opdateringer, overblik over hvilke maskiner der er online og opdaterede, lås eller slet en bortkommen maskine, og børns maskiner uden sudo, så reglerne ikke kan omgås.
+- **Forældrestyring af tid, apps og indhold forbliver i familiens kontekst** (K12): regler signeret af værgerne, gemt krypteret i familiens hjem og læst i værgens egen browser. Husstands-Fleet ser hverken reglerne eller brugsoversigten.
+- Maskiner uden Fleet (hverken organisation eller husstand) opdateres ved træk: de henter hver time og ved opstart en lille signeret fil fra Eira, der siger, om der er en ny version, og hvornår de skal tjekke igen. Ved kritiske rettelser kan filen bede om et nyt tjek efter få minutter. Maskinen sender intet ID, og Eira holder ingen åben forbindelse til den (K11, minimal logning). Udrulning i ringe sker ved, at maskinen selv trækker lod om sin ring lokalt.
+
 Er enheden offline eller væk, når Fleet lukker den, kan den ikke melde sig ud. Så låses dens private kontekster senest efter `max_offline_days`, og personen kan fjerne den fra en anden enhed.
 
 ### K7 — Isolation: én Linux-bruger pr. kontekst bag én samlet oplevelse (besluttet)
