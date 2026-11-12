@@ -85,6 +85,15 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 - Uden sudo: et privat Eira ID på en organisations-enhed får ingen administratorrettigheder på enheden (ADR-0003, managed mode).
 - Rettigheder for private kontekster på en åben organisations-enhed: se O-9 (besluttet). Åbent punkt: O-8.
 
+**Fysisk maskine og kontekster holdes adskilt (besluttet af ejer, 12. november 2026).** Fleet styrer den fysiske maskine: opdateringer, diskkryptering, `device_mode` og om den er tilknyttet. Konteksterne er software og styres hver for sig af deres egen ejer (organisation, person eller værge). At en maskine forlader Fleet, og at en kontekst forlader en maskine, er to forskellige handlinger.
+
+Fleet registrerer ved enroll, hvem der ejer den fysiske maskine: `owner` = `organisation` | `employee`. Det afgør, hvad der sker ved fratrædelse:
+
+| Ejer | Ved fratrædelse | `slet disk` |
+|---|---|---|
+| `organisation` | *Aflevering* (nedenfor): enheden melder sig ud af alle kontekster, afleveres, og disken slettes | Tilladt |
+| `employee` | *Frigiv enhed*: Fleet fjerner maskinen fra organisationskonteksternes enhedslister, maskinen sletter sine kopier af dem og forlader Fleet. Den går tilbage til at være privat (pakkens standardsæt, personen styrer). Private kontekster røres ikke | Aldrig |
+
 **Aflevering af en organisations-enhed (besluttet af ejer, 12. november 2026).** Når en medarbejder stopper, lukker organisationen medarbejderens login, og enheden afleveres. Når Fleet-administratoren lukker enheden i Fleet, opdateres **alle** kontekster, der er tilknyttet enheden, også de private:
 
 1. Fleet fjerner enheden fra organisationskonteksternes enhedslister og roterer deres CMK (EIRA-CONTEXT §8).

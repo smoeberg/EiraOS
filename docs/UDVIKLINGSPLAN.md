@@ -129,7 +129,7 @@ Kontraktrevisioner, som EIRA-CONTEXT og ADR-0005 kræver. De skrives, mens F2 by
 | F3.1 | **EIRA-IDENTITY 1.1:** udbyder pr. kontekst og flere samtidige identiteter; tenant-migrering som nyt provider-id |
 | F3.2 | **RIGHTS-SET-revision:** et rettighedssæt bindes til (`tenant_id`, `context_id`) og ikke kun til en enhed; værgesignerede regler (`governance.source = guardian`); private kontekster på en åben organisations-enhed får standardsættet uden `system:`-handlinger (ADR-0005 O-9) |
 | F3.3 | **Sessioner pr. kontekst** i `identityd` og gaten; samtykkeagenten viser altid, i hvilken kontekst et samtykke gives |
-| F3.4 | **Enroll ved installation:** installeren spørger "Tilknyt en organisation" eller "Opret eller brug et Eira ID" (ADR-0005 K6); organisationsvejen enroller med en kort kode (ADR-0005 O-8). `device_mode` (lukket/åben, ét flueben i Fleet) føjes til desired state i FLEET-RIGHTS-API og OpenAPI-filen; skallen viser "Log ind i en anden kontekst" kun på en åben enhed |
+| F3.4 | **Enroll ved installation:** installeren spørger "Tilknyt en organisation" eller "Opret eller brug et Eira ID" (ADR-0005 K6); organisationsvejen enroller med en kort kode (ADR-0005 O-8). `device_mode` (lukket/åben, ét flueben i Fleet) føjes til desired state i FLEET-RIGHTS-API og OpenAPI-filen; skallen viser "Log ind i en anden kontekst" kun på en åben enhed. Enroll registrerer `owner` (`organisation`/`employee`); kommandoen *frigiv enhed* for medarbejder-ejede maskiner (ADR-0005 K6) |
 
 ### F4 — ID-hjemmet
 
