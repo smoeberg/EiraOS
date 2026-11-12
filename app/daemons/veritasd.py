@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.ipc.access import read
 from app.ipc.jsonrpc import INVALID_PARAMS, JsonRpcError
 from app.veritas.c2pa_engine import C2PAEngine
 from app.veritas.layer1_rules import Layer1RulesEngine
@@ -324,9 +325,9 @@ def register_veritas_handlers(
     server, daemon: VeritasDaemon | None = None
 ) -> VeritasDaemon:
     service = daemon or VeritasDaemon()
-    server.register("veritas.evaluate", service.evaluate)
-    server.register("veritas.process_evidence", service.process_evidence)
-    server.register("health", lambda _: {"daemon": service.name, "ok": True})
+    server.register("veritas.evaluate", read(service.evaluate))
+    server.register("veritas.process_evidence", read(service.process_evidence))
+    server.register("health", read(lambda _: {"daemon": service.name, "ok": True}))
     return service
 
 

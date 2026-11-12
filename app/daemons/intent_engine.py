@@ -4,6 +4,7 @@ import os
 
 from app.capability import list_manifests
 from app.intent_parser import list_trust_items, parse_intent_request, plan_intent
+from app.ipc.access import open_write, read
 from app.ipc.jsonrpc import JsonRpcError
 from app.journey import get_journey, list_journeys
 from app.mistral import is_mistral_available
@@ -108,17 +109,19 @@ def presentation_mode_set(params: dict) -> dict:
 
 
 def register_intent_handlers(server) -> None:
-    server.register("dashboard.get", dashboard_get)
-    server.register("intent.parse", intent_parse)
-    server.register("intent.plan", intent_plan)
+    # Creates sessions from a claimed actor_id (fundregister S-5) and keeps
+    # pending intents: open writes until F1.5 and F1.2 close them.
+    server.register("dashboard.get", open_write(dashboard_get, "F1.5"))
+    server.register("intent.parse", open_write(intent_parse, "F1.2"))
+    server.register("intent.plan", open_write(intent_plan, "F1.2"))
     # Protected writes go through Gate Kernel only (specs/GATE-KERNEL-1.0.md §2).
     from app.gate.ipc import gate_required
 
     server.register("intent.confirm", gate_required("intent.confirm"))
-    server.register("journey.list", journey_list)
-    server.register("journey.get", journey_get)
+    server.register("journey.list", read(journey_list))
+    server.register("journey.get", read(journey_get))
     server.register("journey.advance", gate_required("journey.advance"))
-    server.register("capability.list", capability_list)
-    server.register("presentation.mode_get", presentation_mode_get)
-    server.register("presentation.mode_set", presentation_mode_set)
-    server.register("health", lambda _: {"daemon": "eira-intent-engine", "ok": True})
+    server.register("capability.list", read(capability_list))
+    server.register("presentation.mode_get", open_write(presentation_mode_get, "F1.5"))
+    server.register("presentation.mode_set", open_write(presentation_mode_set, "F1.5"))
+    server.register("health", read(lambda _: {"daemon": "eira-intent-engine", "ok": True}))

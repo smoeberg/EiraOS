@@ -26,6 +26,7 @@ from app.auth.delegation import (
 )
 from app.gate import consent_proof
 from app.gate.caller import Caller, from_peer, model_identity
+from app.ipc.access import caller, read
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 
@@ -178,10 +179,10 @@ def register_delegation_handlers(server, service: DelegationService | None = Non
 
     for handler in (propose, proposal, create, revoke, check, listing):
         handler.wants_peer = True
-    server.register("delegation.propose", propose)
-    server.register("delegation.proposal", proposal)
-    server.register("delegation.create", create)
-    server.register("delegation.revoke", revoke)
-    server.register("delegation.check", check)
-    server.register("delegation.list", listing)
-    server.register("health", lambda _: {"daemon": "eira-delegationd", "ok": True})
+    server.register("delegation.propose", caller(propose))
+    server.register("delegation.proposal", caller(proposal))
+    server.register("delegation.create", caller(create))
+    server.register("delegation.revoke", caller(revoke))
+    server.register("delegation.check", caller(check))
+    server.register("delegation.list", caller(listing))
+    server.register("health", read(lambda _: {"daemon": "eira-delegationd", "ok": True}))

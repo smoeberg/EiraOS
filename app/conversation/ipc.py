@@ -15,6 +15,7 @@ from typing import Any
 from app.conversation import feed
 from app.gate.caller import Caller, acting_as, from_peer
 from app.gate.kernel import Gate
+from app.ipc.access import caller
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 
@@ -62,7 +63,7 @@ def register_conversation_handlers(server, gate: Gate) -> None:
             return handler(params, actor["identity"])
 
         wrapped.wants_peer = True
-        return wrapped
+        return caller(wrapped)
 
     def since(params: dict[str, Any], identity: str) -> dict[str, Any]:
         cursor = _int(params, "cursor", 0)

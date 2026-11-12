@@ -6,6 +6,7 @@ import pytest
 
 from app.daemons.base import JsonRpcServer
 from app.daemons.runner import DAEMON_NAMES, REGISTRARS
+from app.ipc.access import read
 from app.ipc.paths import canonical_daemon, socket_path
 from app.ipc.socket_security import socket_access_allowed
 
@@ -13,7 +14,7 @@ from app.ipc.socket_security import socket_access_allowed
 @pytest.fixture
 def server() -> JsonRpcServer:
     instance = JsonRpcServer(name="test-jsonrpc", daemon="stated")
-    instance.register("test.echo", lambda params: params)
+    instance.register("test.echo", read(lambda params: params))
     return instance
 
 

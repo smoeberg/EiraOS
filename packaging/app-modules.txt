@@ -62,6 +62,7 @@ app/gate/system.py
 app/graph_context.py
 app/intent_parser.py
 app/ipc/__init__.py
+app/ipc/access.py
 app/ipc/auth.py
 app/ipc/client.py
 app/ipc/jsonrpc.py

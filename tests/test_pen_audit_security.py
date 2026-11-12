@@ -12,6 +12,7 @@ from app.core.store import StateStore
 from app.daemons import stated
 from app.daemons.base import MAX_REQUEST_BYTES, JsonRpcServer
 from app.ipc import auth
+from app.ipc.access import read
 from app.ipc.jsonrpc import JsonRpcError
 from app.ipc.socket_security import (
     PeerCredentialError,
@@ -64,7 +65,7 @@ def test_unapproved_peer_credentials_are_rejected(monkeypatch: pytest.MonkeyPatc
 
 def test_json_rpc_rejects_oversized_and_non_object_requests() -> None:
     server = JsonRpcServer("security-test", "stated")
-    server.register("health", lambda _: {"ok": True})
+    server.register("health", read(lambda _: {"ok": True}))
     oversized = server.handle_line("x" * (MAX_REQUEST_BYTES + 1))
     assert json.loads(oversized)["error"]["message"] == "Request too large"
     non_object = server.handle_line("[]")

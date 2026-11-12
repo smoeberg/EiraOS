@@ -19,6 +19,7 @@ from app.gate import caller as caller_module
 from app.gate.caller import acting_as
 from app.gate.ipc import register_gate_handlers
 from app.gate.policy import Origin
+from app.ipc.access import caller, read
 from tests.callers import HUMAN, MODEL, OTHER_HUMAN, Peer
 from tests.test_gate_ipc import FakeServer
 from tests.test_gate_kernel import envelope, propose_and_consent, raw, rh
@@ -129,7 +130,10 @@ def test_model_is_recognised_by_uid(monkeypatch):
 
 def _server_with(handler):
     server = JsonRpcServer("test", "intent")
-    server.register("probe", handler)
+    # The probe is classified like the handler: a peer-taking handler is a
+    # "caller" method, any other only reads.
+    kind = caller if getattr(handler, "wants_peer", False) else read
+    server.register("probe", kind(handler))
     return server
 
 

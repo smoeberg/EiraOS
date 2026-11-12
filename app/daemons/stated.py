@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from app.core.audit import StateAuditTrail
 from app.core.state import State
 from app.core.store import StateStore
+from app.ipc.access import daemon_write, read
 from app.ipc.jsonrpc import JsonRpcError
 
 
@@ -105,34 +106,60 @@ def state_list(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _sync_state(item: Any) -> State:
+    if not isinstance(item, dict):
+        raise ValueError("a synced state must be an object")
+    return State(
+        id=UUID(item["id"]),
+        version=item["version"],
+        timestamp_ns=item.get("timestamp_ns", 0),
+        type=item["type"],
+        payload=item["payload"],
+        previous_state_id=(
+            UUID(item["previous_state_id"]) if item.get("previous_state_id") else None
+        ),
+        hash=item.get("hash", ""),
+    )
+
+
 def state_sync_push(params: dict[str, Any]) -> dict[str, Any]:
-    accepted = 0
-    skipped = 0
-    for item in params.get("states", []):
+    """All or nothing before the first write (fundregister S-2), like
+    fleetd's push_blocks: one invalid state rejects the whole batch."""
+    items = params.get("states", [])
+    if not isinstance(items, list):
+        raise JsonRpcError(-32602, "states must be a list")
+    pending: list[State] = []
+    invalid = 0
+    for item in items:
         try:
-            state = State(
-                id=UUID(item["id"]),
-                version=item["version"],
-                timestamp_ns=item.get("timestamp_ns", 0),
-                type=item["type"],
-                payload=item["payload"],
-                previous_state_id=(
-                    UUID(item["previous_state_id"])
-                    if item.get("previous_state_id")
-                    else None
-                ),
-                hash=item.get("hash", ""),
-            )
-            if not state.is_hash_valid():
-                raise ValueError("State hash does not match canonical state content")
-            if _store.get_by_id(state.id):
+            state = _sync_state(item)
+        except (KeyError, TypeError, ValueError):
+            invalid += 1
+            continue
+        if not state.is_hash_valid():
+            invalid += 1
+            continue
+        pending.append(state)
+
+    batch: dict[UUID, State] = {}
+    new: list[State] = []
+    skipped = 0
+    for state in pending:
+        seen = batch.get(state.id) or _store.get_by_id(state.id)
+        if seen is not None:
+            if seen.hash != state.hash:
+                invalid += 1  # same id, different content: a conflict, never a write
+            else:
                 skipped += 1
-                continue
-            _store.append(state)
-            accepted += 1
-        except Exception:
-            skipped += 1
-    return {"status": "synced", "accepted": accepted, "skipped": skipped}
+            continue
+        batch[state.id] = state
+        new.append(state)
+
+    if invalid:
+        return {"status": "rejected", "accepted": 0, "skipped": 0, "invalid": invalid}
+    for state in new:
+        _store.append(state)
+    return {"status": "synced", "accepted": len(new), "skipped": skipped, "invalid": 0}
 
 
 def state_sync_pull(params: dict[str, Any]) -> dict[str, Any]:
@@ -172,13 +199,15 @@ def audit_verify(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def register_state_handlers(server: Any) -> None:
-    server.register("state.append", state_append)
-    server.register("state.get", state_get)
-    server.register("state.get_by_hash", state_get_by_hash)
-    server.register("state.get_history", state_get_history)
-    server.register("state.list", state_list)
-    server.register("state.sync_push", state_sync_push)
-    server.register("state.sync_pull", state_sync_pull)
-    server.register("audit.append", audit_append)
-    server.register("audit.verify", audit_verify)
-    server.register("health", lambda _: {"daemon": "eira-stated", "ok": True})
+    # Writes only from the daemons' own service user (fundregister S-1): the
+    # desktop user is in eira-clients and may reach this socket.
+    server.register("state.append", daemon_write(state_append))
+    server.register("state.get", read(state_get))
+    server.register("state.get_by_hash", read(state_get_by_hash))
+    server.register("state.get_history", read(state_get_history))
+    server.register("state.list", read(state_list))
+    server.register("state.sync_push", daemon_write(state_sync_push))
+    server.register("state.sync_pull", read(state_sync_pull))
+    server.register("audit.append", daemon_write(audit_append))
+    server.register("audit.verify", read(audit_verify))
+    server.register("health", read(lambda _: {"daemon": "eira-stated", "ok": True}))
