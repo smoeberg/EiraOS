@@ -312,7 +312,7 @@ Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§
 
 **Revision krævet af RIGHTS-SET:** et rettighedssæt bindes i dag til (`tenant_id`, `device_id`). Med kontekster skal det kunne bindes til (`tenant_id`, `context_id`) og gælde på enhver enhed på kontekstens enhedsliste. Gaten vælger sæt efter den kontekst, kaldet kommer fra: peer-UID'en fra `SO_PEERCRED` slås op i `eira-contextd`s lokale tabel (§1), og sættet vælges på `context_id`. UID'en bruges aldrig selv som nøgle i et rettighedssæt. Revisionen af RIGHTS-SET er et separat dokument.
 
-**Private kontekster på en åben organisationsenhed** (ADR-0005 O-9): organisationens sæt gælder kun organisationens kontekster, og pakkens standardsæt gælder ikke på en enrolled enhed (EIRA-FLEET-RIGHTS-API §3.3, `awaiting_managed_set`). Indtil revisionen findes, har en privat kontekst på en åben organisationsenhed ingen rettigheder til gate-handlinger. Revisionen skal afgøre, hvem der udsteder sættet for den. Fleet må ikke få oplyst, hvilke private kontekster der findes på enheden; det ser kun `device_mode`.
+**Private kontekster på en åben organisationsenhed** (ADR-0005 O-9): organisationens sæt gælder kun organisationens kontekster, og pakkens standardsæt gælder ikke på en enrolled enhed (EIRA-FLEET-RIGHTS-API §3.3, `awaiting_managed_set`). Besluttet (ADR-0005 O-9): den får pakkens standardsæt uden `system:`-handlinger på `device:local`. Fleet udsteder intet for private kontekster og må ikke få oplyst, hvilke der findes på enheden; det ser kun `device_mode`. Indtil revisionen findes, har en privat kontekst på en enrolled enhed ingen rettigheder til gate-handlinger.
 
 ## 11. Glimt (ADR-0006 L5)
 

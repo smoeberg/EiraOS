@@ -79,11 +79,11 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 | **Tilknyt en organisation** | Enheden enrolles hos organisationens Fleet (EIRA-FLEET-RIGHTS-API §8) | Organisationens Fleet | Organisationens rettighedssæt |
 | **Opret eller brug et Eira ID** | Personen opretter eller logger ind med sit Eira ID (ID-hjemmet, K11). Ingen Fleet | Personen | Pakkens standardsæt (RIGHTS-SET §5) |
 
-- På en organisations-enhed bestemmer Fleet-administratoren, om enheden er lukket eller åben (ovenfor). Er den åben, kan personer tilknytte deres private Eira ID ved siden af organisationens kontekster.
+- På en organisations-enhed bestemmer Fleet-administratoren, om enheden er lukket eller åben (ovenfor). Det er ét flueben pr. enhed i Fleet (`device_mode`). Er det slået til, viser skallen menupunktet **"Log ind i en anden kontekst"**, og personer kan tilknytte deres private Eira ID ved siden af organisationens kontekster. Er det slået fra, findes menupunktet ikke.
 - Et privat Eira ID på en organisations-enhed giver ingen særstilling: dets kontekster får hver sin Linux-bruger efter K7, som alle andre kontekster. Et Eira ID med to kontekster (fx fritid og familie) giver altså to Linux-brugere.
 - Organisationen styrer enheden, ikke de private kontekster. Fleet ved, *at* enheden er åben, men aldrig, hvilke private Eira ID'er eller kontekster der bruger den (K2).
 - Uden sudo: et privat Eira ID på en organisations-enhed får ingen administratorrettigheder på enheden (ADR-0003, managed mode).
-- Åbne punkter, se O-8 og O-9.
+- Rettigheder for private kontekster på en åben organisations-enhed: se O-9 (besluttet). Åbent punkt: O-8.
 
 ### K7 — Isolation: én Linux-bruger pr. kontekst bag én samlet oplevelse (besluttet)
 
@@ -187,7 +187,7 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 ## Åbne spørgsmål
 
 - **O-8 Enroll ved installation.** I dag enrolles en enhed efter installationen: IT kører `eira-enroll` som root med en invitationsfil, der indeholder Fleets CA (EIRA-FLEET-RIGHTS-API §8). Vejen "Tilknyt en organisation" i installeren kræver, at personen kan indtaste en kort kode, og at enheden kan hente invitationen ud fra koden. Åbent: hvilket endpoint der slår koden op, og hvilket tillidsanker enheden bruger, før den kender organisationens CA (fx en Eira-CA indbygget i installeren).
-- **O-9 Rettigheder for private kontekster på en åben organisations-enhed.** En enrolled enhed bruger ikke pakkens standardsæt (`awaiting_managed_set`, EIRA-FLEET-RIGHTS-API §3.3), og organisationens sæt må ikke styre private kontekster (K2). En privat kontekst på en åben organisations-enhed har derfor i dag ingen rettigheder. Løses i RIGHTS-SET-revisionen, der binder sæt til (`tenant_id`, `context_id`) i stedet for til enheden (EIRA-CONTEXT §10). Åbent: hvem der udsteder sættet for en privat kontekst der (pakkens standardsæt pr. kontekst eller personen selv).
+- ~~**O-9 Rettigheder for private kontekster på en åben organisations-enhed.**~~ Besluttet af ejer 12. november 2026: Fleet-administratorens eneste valg er fluebenet (K6). En privat kontekst på en åben organisations-enhed får pakkens standardsæt (RIGHTS-SET §5.2), som på en privat maskine, men **uden `system:`-handlinger på `device:local`**, fordi maskinen tilhører organisationen. Organisationens sæt gælder kun organisationens kontekster. Fleet udsteder intet for private kontekster og får ikke oplyst, hvilke der findes. Kræver RIGHTS-SET-revisionen (sæt pr. kontekst, F3.2); indtil da har private kontekster på en enrolled enhed ingen rettigheder (`awaiting_managed_set`).
 
 - ~~**O-7 Arbejds-pc'er uden ID-hjem.**~~ Besluttet: en lukket enhed kan køre helt uden ID-hjemmet (K11).
 
