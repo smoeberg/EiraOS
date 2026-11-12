@@ -56,6 +56,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   udviklingsplan, statusrettelser og arkivering af `contracts/` og `docs/audit/` (dette PR).
 
 ### Rettelser
+- `identityd`s AppArmor-profil manglede de `/proc`- og logind-filer, som login og samtykkeagentens
+  registrering læser; på en rigtig maskine ville AppArmor have afvist begge (fundet af VM-checket
+  `identityd-no-apparmor-denials` på #186).
 - Fleet auth-bypass, OIDC JWKS-URL, en flaky Rust-test og UI-tegnkodning (#129).
 
 ### Oprydning

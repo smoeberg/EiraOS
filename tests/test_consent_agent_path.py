@@ -272,3 +272,32 @@ def test_without_a_session_a_bypass_still_gets_e_consent_path(world):
     digest, rhash = proposed(world)
     result = world.gate.grant_consent("dlg-0001", digest, rhash, "no-such-session")
     assert result.code is GateCode.E_CONSENT_PATH
+
+
+def test_identityd_apparmor_profile_allows_every_file_registration_reads(tree, monkeypatch):
+    """identityd is confined: every /proc and logind file that registration
+    and claiming read must be allowed in its profile, or AppArmor refuses the
+    agent on a real machine (found by identityd-no-apparmor-denials, #186)."""
+    import re
+    from pathlib import Path
+
+    read: set[str] = set()
+    original = Path.read_text
+
+    def recording(self, *args, **kwargs):
+        if self.is_relative_to(tree.proc):
+            read.add("@{PROC}/[0-9]*/" + self.name)
+        elif self.is_relative_to(consent_agent.LOGIND_SESSIONS):
+            read.add("/run/systemd/sessions/*")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", recording)
+    consent_agent.register(peer(), COMPOSITOR, tree.db)
+    consent_agent.claim_key(peer(), tree.db)
+    consent_agent.logind_session(AGENT_PID)
+    assert read, "registration read nothing; the test no longer sees the files"
+
+    root = Path(__file__).resolve().parents[1]
+    profile = (root / "packaging" / "apparmor" / "usr.bin.eira-identityd").read_text()
+    rules = {m.group(1) for m in re.finditer(r"^\s*(\S+)\s+r,\s*$", profile, re.M)}
+    assert read <= rules, sorted(read - rules)

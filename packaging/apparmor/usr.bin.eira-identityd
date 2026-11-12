@@ -24,6 +24,14 @@
   /data/eira-app.db-{journal,shm,wal} rwk,
   # Login: the caller's loginuid, cross-checked with SO_PEERCRED.
   @{PROC}/[0-9]*/loginuid r,
+  # Login and the consent agent (EIRA-CONSENT-AGENT §5.3): the caller's
+  # logind session, and the agent's compositor checked in /proc (owner,
+  # parent chain, start time). app/auth/consent_agent.py reads exactly these.
+  @{PROC}/[0-9]*/sessionid r,
+  @{PROC}/[0-9]*/stat r,
+  @{PROC}/[0-9]*/status r,
+  /run/systemd/sessions/ r,
+  /run/systemd/sessions/* r,
   /run/eira/ rw,
   /run/eira/*.sock rwk,
   /run/eira/consent-keys.db rwk,
