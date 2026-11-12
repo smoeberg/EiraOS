@@ -289,7 +289,7 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
 **Status (11. november 2026):** Alle tekniske punkter er lavet og verificeret i VM, undtagen to rester, som ikke er kode i denne repo alene:
 
 - **Samtykkeagenten:** bygget (EIRA-CONSENT-AGENT 0.3). Tilbage er R-6.2 (labwc-patch mod clickjacking) og verifikation i en grafisk VM-session.
-- **Login mod et rigtigt Entra-tenant** (pkt. 1, udgivelsesbetingelse): kræver ejerens app-registrering. Ingen udgivelse med procesidentitet før da.
+- **Login mod en rigtig OIDC-udbyder** (pkt. 1, udgivelsesbetingelse): kræver en app-registrering hos installationens udbyder (fx ejerens Entra-tenant; udbyderen er konfiguration, [EIRA-IDENTITY](EIRA-IDENTITY-1.0.md)). Ingen udgivelse med procesidentitet før da.
 
 Desuden kendte, dokumenterede grænser: audit-ankeret beskytter ikke mod en kompromitteret `intentd`; FSS-nøglen ligger på disken indtil overdragelsen; brugerjournaler er ikke dækket af seglet; modelprocessen kan ikke selv se, hvem der spørger.
 
@@ -349,7 +349,7 @@ Desuden kendte, dokumenterede grænser: audit-ankeret beskytter ikke mod en komp
 5. Lav procesidentitet. Identitet og grupper kommer fra `identityd`, rettigheder fra Fleet via `eira-governance-agent` (ADR-0003).
 6. Lav audit-ankeret (journald FSS og fleet-vidne).
 
-**Executor-status:** Den eneste executor er conversation-outboxen for `utterance` og `commitment_*`. Den skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret".
+**Executor-status (12. november 2026):** Der er to executors. Conversation-outboxen for `utterance` og `commitment_*` skriver hændelsen varigt, før noget leveres (Phase 1-beslutningen), og rapporterer `delivery: pending`, aldrig "leveret". `PowerExecutor` (`system:power.request_action`, bilag B) beder logind om at slukke, genstarte eller sætte i dvale og rapporterer `requested`, ikke at maskinen er slukket.
 
 
 ---

@@ -1,6 +1,6 @@
 # Specifications
 
-This directory contains protocol and interface specifications for EiraOS. The integrated architecture map is [EiraOS Architecture Baseline 1.0](../docs/architecture/eiraos-architecture-baseline-1.0.md).
+This directory contains protocol and interface specifications for EiraOS. The integrated architecture map is [EiraOS Architecture Baseline 1.0](../docs/architecture/eiraos-architecture-baseline-1.0.md); the order in which contracts are implemented is the [development plan](../docs/UDVIKLINGSPLAN.md).
 
 ## Identity
 

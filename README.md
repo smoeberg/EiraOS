@@ -28,11 +28,11 @@ Hvert princip er besluttet i en ADR og gjort konkret i en kontrakt under [`specs
 │  intentd (Gate Kernel) · identityd · stated · graphd · delegationd   │
 │  fleetd · veritasd · eira-modeld (modellen, egen bruger, ingen net)  │
 ├──────────────────────────────────────────────────────────────────────┤
-│  Ubuntu 26.04 LTS: kernel, systemd, AppArmor, greetd                 │
+│  Ubuntu 26.04 LTS: kernel, systemd, AppArmor, GDM                    │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/architecture/eiraos-architecture-baseline-1.0.md).
+Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/architecture/eiraos-architecture-baseline-1.0.md). Login-skærmen er i dag GDM; ADR-0005 K9 flytter den til greetd med en neutral skal-bruger, når kontekster implementeres.
 
 ## Status
 
@@ -40,13 +40,15 @@ Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/ar
 
 | Komponent | Status | Pakket |
 |---|---|---|
-| `intentd` med Gate Kernel | Implementeret: otte lag, audit-kæde med segl i journalen, rettighedssæt fra Fleet | Ja |
-| `identityd` | Implementeret: OIDC-login, sessioner, samtykkenøgle | Ja |
+| `intentd` med Gate Kernel | Implementeret: Gate 1.1 med begge handlingsfamilier (EDP og EiraSystemAPI), otte lag, kalderidentitet fra `SO_PEERCRED`, audit-kæde med FSS-segl i journalen, rettighedssæt fra Fleet | Ja |
+| `identityd` | Implementeret: leverandørneutralt OIDC-login ([EIRA-IDENTITY](specs/EIRA-IDENTITY-1.0.md)), sessioner, samtykkenøgle kun i RAM. Login mod en rigtig udbyder er endnu ikke afprøvet | Ja |
 | `stated`, `graphd`, `delegationd`, `veritasd` | Implementeret | Ja |
 | `fleetd` | Implementeret: tilmelding af enheder, synkronisering. Synkroniseringen må ikke bære brugerdata (EIRA-CONTEXT §10) | Ja |
-| `eira-modeld` | Implementeret: modellen kører som egen bruger, uden net, og gaten afviser den uden en menneskelig delegation | Ja |
-| `eira-labwc` | labwc 0.20.3 med en hærdet konfiguration | Egen pakke, afprøvet i CI |
-| Samtykkeagenten | Kontrakt [EIRA-CONSENT-AGENT](specs/EIRA-CONSENT-AGENT-0.1.md); implementering under review | Nej |
+| `eira-modeld` | Implementeret: modelprocessen kører som egen bruger, uden net, og gaten afviser den uden en menneskelig delegation. Adapteren er regelbaseret (få danske kommandoer, afstår ellers); der er endnu ingen sprogmodel bag kontrakten | Ja |
+| `eira-labwc` | labwc 0.20.3 uden privilegerede Wayland-protokoller (R-6.1). Patchen mod clickjacking (R-6.2) mangler | Egen pakke, afprøvet i CI |
+| Samtykkeagenten (`eira-consent-agent`) | Implementeret ([EIRA-CONSENT-AGENT](specs/EIRA-CONSENT-AGENT-0.1.md) 0.3): kun agenten kan samtykke og bekræfte. Tilbage er R-6.2 og verifikation i en grafisk VM-session | Ja |
+| EiraSystemAPI | Kun strøm (`power.request_action`) bag gaten, via logind. Øvrige systemflader (netværk, lyd, indstillinger) mangler | Ja |
+| Terminal | Rigtig PTY i Builder Mode, kun når IT har slået Builder til | Ja |
 | Kontekster (`eira-contextd`) | Kontrakt og testplan accepteret; ikke implementeret. `app/daemons/contextd.py` er en gammel prototype, der skal erstattes | Nej |
 | Web App Manager, livets indbakke | Besluttet i ADR-0004 og ADR-0006; ingen kontrakt endnu | Nej |
 | `walletd`, `presenced` | Prototyper, som altid afviser eller kun lever i hukommelsen | Nej |
@@ -55,6 +57,7 @@ Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verifi
 
 ## Dokumentation
 
+- **Udviklingsplan:** [`docs/UDVIKLINGSPLAN.md`](docs/UDVIKLINGSPLAN.md) (hvad der bygges i hvilken rækkefølge)
 - **Kontrakter:** [`specs/`](specs/README.md)
 - **Beslutninger:** [`docs/decisions/`](docs/decisions/) (ADR-0001–0006)
 - **Arkitektur og GUI:** [`docs/architecture/`](docs/architecture/)

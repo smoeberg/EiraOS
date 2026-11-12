@@ -5,7 +5,7 @@ EiraOS installeres fra et ISO, der er bygget på Ubuntu Desktop 26.04 LTS' offic
 ## Krav
 
 - amd64-pc med UEFI eller BIOS, mindst 8 GB RAM og 40 GB disk
-- Internetforbindelse under installationen (opdateringer og labwc hentes fra Ubuntus arkiv)
+- Internetforbindelse under installationen (opdateringer og pakkernes afhængigheder hentes fra Ubuntus arkiv; `eira-labwc` ligger på ISO'et)
 - USB-nøgle på mindst 8 GB
 
 ## 1. Hent eller byg ISO'et
@@ -45,10 +45,12 @@ Terminal, filer og andre klassiske værktøjer ligger i **Builder Mode** i EiraO
 
 ## Sådan testes installationen automatisk
 
-CI installerer testbilledet i en virtuel maskine (QEMU/KVM, UEFI), booter den installerede disk og logger automatisk ind. Derefter tjekker `eira-ci-report` daemons, sockets, IPC, første boot, standard-session, at EiraOS er den eneste session, login-skærmen, labwc og EiraOS-shellen. Resultatet står i artefaktet `vm-acceptance-logs`.
+CI installerer testbilledet i en virtuel maskine (QEMU/KVM, UEFI), booter den installerede disk og logger automatisk ind. Derefter tjekker `eira-ci-report` daemons, sockets, IPC, første boot, standard-session, at EiraOS er den eneste session, login-skærmen, labwc og EiraOS-shellen. Den tjekker også sikkerhedsgrænserne på den installerede pakke: gaten, modelprocessen, journalens segl og samtykkeagenten (setgid, gruppe, at kun agenten kan samtykke). Testbilledet installerer uden net fra et lokalt pakkearkiv. Resultatet står i artefaktet `vm-acceptance-logs`.
 
 ## Kendte begrænsninger i 1.0 RC1
 
-- EiraOS-shellen har endnu ikke egne flader til netværk, lyd, strøm og indstillinger; de kommer gennem EiraSystemAPI i de næste PR'er.
+- EiraOS-shellen har kun strøm (sluk, genstart, dvale) gennem EiraSystemAPI. Netværk, lyd og indstillinger mangler (se [udviklingsplanen](UDVIKLINGSPLAN.md)).
+- Login går gennem GDM med en almindelig Ubuntu-bruger. Kontekster med én Linux-bruger pr. kontekst ([ADR-0005](decisions/ADR-0005-kontekster-og-datas-hjem.md)) er ikke implementeret endnu.
+- Samtykkeagentens beskyttelse mod clickjacking (R-6.2) mangler i `eira-labwc`.
 - Installationen kræver netværk.
 - Fejler installationen, pakkes logs i `/var/log/installer/eira-error-logs.tgz` i installer-miljøet. Hent dem før genstart.
