@@ -53,10 +53,11 @@ Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/ar
 | Web App Manager, livets indbakke | Besluttet i ADR-0004 og ADR-0006; ingen kontrakt endnu | Nej |
 | `walletd`, `presenced` | Prototyper, som altid afviser eller kun lever i hukommelsen | Nej |
 
-Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verificeret.
+Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verificeret. Kendte fund fra de eksterne gennemgange, herunder at desktop-brugeren i dag kan skrive i `stated` (S-1), står i [fundregistret](docs/reviews/GENNEMGANG-2026-11-12.md) med plan for rettelse.
 
 ## Dokumentation
 
+- **Fundregister fra eksterne gennemgange:** [`docs/reviews/`](docs/reviews/GENNEMGANG-2026-11-12.md)
 - **Udviklingsplan:** [`docs/UDVIKLINGSPLAN.md`](docs/UDVIKLINGSPLAN.md) (hvad der bygges i hvilken rækkefølge)
 - **Kontrakter:** [`specs/`](specs/README.md)
 - **Beslutninger:** [`docs/decisions/`](docs/decisions/) (ADR-0001–0006)

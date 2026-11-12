@@ -2,7 +2,7 @@
 
 **Status:** Forslag til ejerens accept, 12. november 2026
 **Afløser:** rækkefølgen i [MASTER-PLAN-1.0](MASTER-PLAN-1.0.md) §4, §5 og §8 (principperne, statusordene og definition of done dér gælder fortsat)
-**Bygger på:** [ADR-0001–0006](decisions/), kontrakterne i [`specs/`](../specs/README.md) og koden på `main` efter #184
+**Bygger på:** [ADR-0001–0006](decisions/), kontrakterne i [`specs/`](../specs/README.md), koden på `main` efter #184 og [fundregistret fra de eksterne gennemgange](reviews/GENNEMGANG-2026-11-12.md)
 
 > **AI'en foreslår. Gaten afgør. Systemet udfører.**
 
@@ -37,7 +37,8 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 ## 3. Rækkefølgen
 
 ```
-F0 Luk bilag A ─────┐
+F0b IPC-adgang ─────┐
+F0 Luk bilag A ─────┤
 F1 Teknisk gæld ────┼──► F1b Hele vejen ──► F2 Kontekster ──► F3 Identitet og rettigheder pr. kontekst
                     │                            │                         │
                     │                            └──► F4 ID-hjemmet        ▼
@@ -58,6 +59,16 @@ Det, der står tilbage af GATE-KERNEL bilag A og EIRA-CONSENT-AGENT.
 | F0.2 | **Verifikation i en grafisk VM-session** (EIRA-CONSENT-AGENT V-1; O-6: procestræet under GDM) | `vm-install-acceptance` kører en rigtig labwc-session og afprøver agentens vindue, fokus og registrering | F0.1 |
 | F0.3 | **Login mod en rigtig OIDC-udbyder** (udgivelsesbetingelse) | Login i den installerede VM mod ejerens udbyder; identiteten bliver `did:eira:<provider-id>.<subjekt>` | Ejeren: app-registrering |
 
+### F0b — Adgangskontrol pr. IPC-metode
+
+Fra gennemgangene 12. november (S-1, S-2, S-3, S-11). Kommer før alt andet, fordi S-1 er et integritetshul på den installerede pakke: desktop-brugeren kan skrive i `stated`.
+
+| # | Leverance | Færdig når |
+|---|---|---|
+| F0b.1 | `stated`: `state.append`, `state.sync_push` og `audit.append` kræver en daemon som kalder (UID `eira`), aldrig `eira-clients`. `state.sync_push` afviser hele batchen, hvis én blok er ugyldig, som `fleetd` gør | En test kalder metoderne som en almindelig bruger og får afslag; en VM-check (`user-cannot-write-stated`) gør det samme på den installerede pakke; en blandet batch giver nul skrivninger |
+| F0b.2 | **Adgangsklasse pr. metode** ved registreringen: `public_read`, `session_read`, `daemon_write`, `gate`, `consent_agent`, `fleet_admin`. Serveren håndhæver klassen, før handleren kaldes; en metode uden klasse kan ikke registreres. Et script genererer **JSON-RPC-kataloget** (socket, metode, klasse, fejlkoder) fra registreringerne | En test gennemløber alle registrerede metoder i alle produktionsdaemons og fejler på en skrivende metode, som `eira-clients` kan kalde uden session eller gate; kataloget i `docs/reference/` genereres i CI og må ikke afvige fra koden |
+| F0b.3 | Sikkerhedsmodellen skrives ned (D-3): tillidsgrænser, socket-rettigheder, at IPC-tokenet ikke beskytter mod desktop-brugeren, root uden for trusselsmodellen; `docs/security/socket-permissions.md` rettes eller foldes ind | Dokumentet henviser til klasserne fra F0b.2 og til de tests, der beviser dem |
+
 ### F1 — Teknisk gæld, der skal væk før de store trin
 
 Små PR'er, der kan tages i vilkårlig rækkefølge.
@@ -65,11 +76,15 @@ Små PR'er, der kan tages i vilkårlig rækkefølge.
 | # | Leverance | Hvorfor |
 |---|---|---|
 | F1.1 | **Clippy og `cargo fmt` på alle Rust-crates i CI**, også `ui/src-tauri` og `eira-consent-agent` | CI kører clippy kun på `eira-core`, og fmt-tjekket dækker ikke `ui/src-tauri`. Clippy finder i dag tre ting i `ui/src-tauri/src/ipc.rs` (én løkke-indeksering i produktionskoden og to bevidste låse i testene, der skal markeres eksplicit), og `system_api/mod.rs` er ikke formateret |
-| F1.2 | **Fjern `walletd`, `presenced` og `contextd`** fra `runner.py`, `app/daemons/` og deres tests | De er ikke i målbilledet; `contextd` modsiger EIRA-CONTEXT. Beløbsgrænsen i `contextd` hører under gaten og rettighedssættet. AI-INTERFACE §3 og §6 henter samtalekonteksten fra `contextd` og skal rettes til samtalelaget (EIRA-CONVERSATION) i samme PR |
+| F1.2 | **Fjern `walletd`, `presenced` og `contextd`** fra `runner.py`, `app/daemons/` og deres tests. **Gate-processen indeholder kun gaten:** `app/mistral.py`, den gamle `intent.parse`/`intent.plan` med `build_agency` og den døde `IntentDaemonService` ud af `intentd` (S-7, S-8, S-9) | De er ikke i målbilledet; `contextd` modsiger EIRA-CONTEXT. Beløbsgrænsen i `contextd` hører under gaten og rettighedssættet. AI-INTERFACE §3 og §6 henter samtalekonteksten fra `contextd` og skal rettes til samtalelaget (EIRA-CONVERSATION) i samme PR |
 | F1.3 | **Versioner og pakke-changelog:** `packaging/debian/changelog` siger `noble` og "Ubuntu 24.04"; Tauri-appen er 0.7.0, `ui/package.json` og `Cargo.toml` 0.3.0, pakken 1.0~rc1 | Én version for hele EiraOS, og pakken skal sige 26.04 (`resolute`) |
 | F1.4 | **CI-robusthed:** upload af artefakter prøves igen ved fejl i GitHubs artefakttjeneste | Den fejlede 11. november, efter at bygget var grønt |
 | F1.5 | **Sessioner uden påstået identitet:** Tauri-backenden husker den autentificerede session efter login og sender den med alle IPC-kald; `ensure_session` opretter aldrig en session ud fra et klientleveret `actor_id`; `presentation.mode_set` kræver en autentificeret session bundet til kalderens UID | Ekstern audit 12. november (P1 og P2): `presentation.mode_get` kaldes uden `session_id`, så hvert kald opretter en ny anonym session i tilstanden `normal`, og terminalen afvises derfor altid, også når Builder er tilladt. Samme mekanisme lader `dashboard.get` hilse med et påstået navn (udviklingsbroen sender `mette@kommune.dk`). Gaten er upåvirket, fordi den kun godtager autentificerede sessioner bundet til UID'en |
-| F1.6 | **Udviklingsbroen uden skriveruter:** `app/routers/wallet.py`, `presence.py` og `context.py` fjernes sammen med prototyperne i F1.2 | Ekstern audit (P2): ruterne skriver uden session eller gate, og `presence` godtager en klientleveret forfatter. Broen er ikke i pakken (`scripts/app_modules.py`, `tests/test_no_http_bridge_prod.py`), så det gælder kun udviklingsmiljøet |
+| F1.6 | **Udviklingsbroen uden skriveruter:** `app/routers/wallet.py`, `presence.py` og `context.py` fjernes sammen med prototyperne i F1.2; `req.dict()` erstattes (S-22); den ubrugte `ui/veritas-hud/index.html` fjernes (D-10) | Ekstern audit (P2): ruterne skriver uden session eller gate, og `presence` godtager en klientleveret forfatter. Broen er ikke i pakken (`scripts/app_modules.py`, `tests/test_no_http_bridge_prod.py`), så det gælder kun udviklingsmiljøet |
+| F1.7 | **Små rettelser fra gennemgangene:** gatens audit-lyttere logger, når Fleet-ankeret fejler, i stedet for at sluge fejlen (S-13); docstringen i `app/gate/consent_proof.py` beskriver agent-modellen (D-8); test af samtidig aktivering af politik (S-23) | Fundregistret |
+| F1.8 | **Android:** ejeren afgør, om `android/` er med i 1.0. Hvis ja: et CI-job, der bygger den og tester hash-paritet Kotlin↔Rust med de samme vektorer som Python (S-16), og en README (D-9). Hvis nej: arkivér | Telefonen er uden for EIRA-CONTEXT 1.0 (§13) |
+| F1.9 | **Fleet-interoperabilitet:** rettighedssættets testvektorer køres også i `eira-fleet-control`, og et fælles vektorsæt versioneres (S-20) | Endpointets kode alene beviser ikke, at Fleet signerer det samme |
+| F1.10 | **Én vej til databaseskemaet:** Alembic eller `init_db()`, ikke begge; skrevet ned (S-21, D-12) | Skema-drift |
 
 ### F1b — Første hele vej: fra intention til udført handling
 
@@ -152,15 +167,27 @@ Rækkefølge: netværksstatus (læs, NetworkManager), skift netværk, lyd, skær
 
 Opgradering og rollback, backup og genopretning, licenser, tilgængelighed og lokalisering, supportmatrix og en ærlig liste over kendte begrænsninger (MASTER-PLAN §6 og WS-11). Forudsætter F0, F2 og F3.
 
-## 4. De næste tre PR'er
+## 4. Dokumentation, der mangler
 
-1. **F1.5** sessioner uden påstået identitet. Det er en reel fejl: terminalen virker ikke i dag.
-2. **F0.1** R-6.2-patch i `eira-labwc`, da den lukker bilag A og er forudsætningen for F5.3.
-3. **F1b** første hele vej fra IntentBar gennem modellen, gaten og samtykkeagenten.
+Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal genereres, så det ikke forældes.
 
-F1.1–F1.4 og F1.6 kan lægges ind mellem dem. Derefter F2.1 (lagerformatet).
+| # | Dokument | Hvordan |
+|---|---|---|
+| 1 | `docs/security/` som samlet sikkerhedsmodel | F0b.3 |
+| 2 | `SECURITY.md`: hvordan en sårbarhed rapporteres, og hvad der svares | Ejeren afgør kontakt og svartid |
+| 3 | `docs/reference/implementeringsmatrix.md`: krav → kode → test → VM-check → status | Genereres af kontrakternes statustabeller og VM-checkenes navne; README's statustabel peger herhen |
+| 4 | `docs/reference/miljoevariabler.md` | Genereres ved at søge efter `os.environ`/`getenv` i den pakkede kode |
+| 5 | `CONTRIBUTING.md` med "ny beskyttet handling fra ende til anden" (skema → policy-post → executor → test → VM-check → audit), plus PR- og issue-skabeloner | Skrives efter F1b, så den beskriver en vej, der virker |
 
-## 5. Ejerens beslutninger
+## 5. De næste tre PR'er
+
+1. **F0b.1 og F0b.2** adgangskontrol pr. IPC-metode, begyndende med `stated`. Det er det alvorligste fund.
+2. **F1.5** sessioner uden påstået identitet. Terminalen virker ikke i dag.
+3. **F0.1** R-6.2-patch i `eira-labwc`, som lukker bilag A.
+
+Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges ind mellem de store trin.
+
+## 6. Ejerens beslutninger
 
 | Beslutning | Blokerer |
 |---|---|
@@ -172,3 +199,5 @@ F1.1–F1.4 og F1.6 kan lægges ind mellem dem. Derefter F2.1 (lagerformatet).
 | Hvor ID-hjemmets tjeneste og genoprettelsen bor (repo og drift) | F4 |
 | Én versionsplan for EiraOS (F1.3) | F9 |
 | Pilot (Arbejde eller Møde) | Prioritering af F6 og F7 |
+| Er `android/` med i 1.0? | F1.8 |
+| Kontakt og svartid for sårbarhedsrapporter | `SECURITY.md` (§4) |
