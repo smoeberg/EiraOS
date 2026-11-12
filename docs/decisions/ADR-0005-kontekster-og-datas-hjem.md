@@ -72,6 +72,19 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 - Fleet-administratoren bestemmer, om enheden er **lukket** (kun organisationens kontekster) eller **åben** for flere identiteter og kontekster (fx fritid på en arbejds-pc).
 - En enhed uden Fleet styres af personen.
 
+**To veje ved første opstart (besluttet af ejer, 12. november 2026).** Installationen spørger én gang, hvem enheden tilhører:
+
+| Vej | Hvad sker der | Hvem styrer enheden | Rettigheder |
+|---|---|---|---|
+| **Tilknyt en organisation** | Enheden enrolles hos organisationens Fleet (EIRA-FLEET-RIGHTS-API §8) | Organisationens Fleet | Organisationens rettighedssæt |
+| **Opret eller brug et Eira ID** | Personen opretter eller logger ind med sit Eira ID (ID-hjemmet, K11). Ingen Fleet | Personen | Pakkens standardsæt (RIGHTS-SET §5) |
+
+- På en organisations-enhed bestemmer Fleet-administratoren, om enheden er lukket eller åben (ovenfor). Er den åben, kan personer tilknytte deres private Eira ID ved siden af organisationens kontekster.
+- Et privat Eira ID på en organisations-enhed giver ingen særstilling: dets kontekster får hver sin Linux-bruger efter K7, som alle andre kontekster. Et Eira ID med to kontekster (fx fritid og familie) giver altså to Linux-brugere.
+- Organisationen styrer enheden, ikke de private kontekster. Fleet ved, *at* enheden er åben, men aldrig, hvilke private Eira ID'er eller kontekster der bruger den (K2).
+- Uden sudo: et privat Eira ID på en organisations-enhed får ingen administratorrettigheder på enheden (ADR-0003, managed mode).
+- Åbne punkter, se O-8 og O-9.
+
 ### K7 — Isolation: én Linux-bruger pr. kontekst bag én samlet oplevelse (besluttet)
 
 Hver kontekst kører som sin egen Linux-bruger, så kernen holder filer og processer adskilt (K2). Brugeren ser én EiraOS. Grænserne, der opstår, er netop dem, der alligevel skal kontrolleres:
@@ -172,6 +185,9 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 **Rækkefølge (forslag):** ADR-0005 accepteres → kontrakt for kontekster og lagring → EIRA-IDENTITY 1.1 (identitet pr. kontekst) → Web App Manager. Web App Manager bygges ikke før konteksten, fordi dens profiler er konteksterne.
 
 ## Åbne spørgsmål
+
+- **O-8 Enroll ved installation.** I dag enrolles en enhed efter installationen: IT kører `eira-enroll` som root med en invitationsfil, der indeholder Fleets CA (EIRA-FLEET-RIGHTS-API §8). Vejen "Tilknyt en organisation" i installeren kræver, at personen kan indtaste en kort kode, og at enheden kan hente invitationen ud fra koden. Åbent: hvilket endpoint der slår koden op, og hvilket tillidsanker enheden bruger, før den kender organisationens CA (fx en Eira-CA indbygget i installeren).
+- **O-9 Rettigheder for private kontekster på en åben organisations-enhed.** En enrolled enhed bruger ikke pakkens standardsæt (`awaiting_managed_set`, EIRA-FLEET-RIGHTS-API §3.3), og organisationens sæt må ikke styre private kontekster (K2). En privat kontekst på en åben organisations-enhed har derfor i dag ingen rettigheder. Løses i RIGHTS-SET-revisionen, der binder sæt til (`tenant_id`, `context_id`) i stedet for til enheden (EIRA-CONTEXT §10). Åbent: hvem der udsteder sættet for en privat kontekst der (pakkens standardsæt pr. kontekst eller personen selv).
 
 - ~~**O-7 Arbejds-pc'er uden ID-hjem.**~~ Besluttet: en lukket enhed kan køre helt uden ID-hjemmet (K11).
 

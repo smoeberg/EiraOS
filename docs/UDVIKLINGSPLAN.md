@@ -127,8 +127,9 @@ Kontraktrevisioner, som EIRA-CONTEXT og ADR-0005 kræver. De skrives, mens F2 by
 | # | Leverance |
 |---|---|
 | F3.1 | **EIRA-IDENTITY 1.1:** udbyder pr. kontekst og flere samtidige identiteter; tenant-migrering som nyt provider-id |
-| F3.2 | **RIGHTS-SET-revision:** et rettighedssæt bindes til (`tenant_id`, `context_id`) og ikke kun til en enhed; værgesignerede regler (`governance.source = guardian`) |
+| F3.2 | **RIGHTS-SET-revision:** et rettighedssæt bindes til (`tenant_id`, `context_id`) og ikke kun til en enhed; værgesignerede regler (`governance.source = guardian`); rettigheder for private kontekster på en åben organisations-enhed (ADR-0005 O-9) |
 | F3.3 | **Sessioner pr. kontekst** i `identityd` og gaten; samtykkeagenten viser altid, i hvilken kontekst et samtykke gives |
+| F3.4 | **Enroll ved installation:** installeren spørger "Tilknyt en organisation" eller "Opret eller brug et Eira ID" (ADR-0005 K6); organisationsvejen enroller med en kort kode (ADR-0005 O-8). `device_mode` (lukket/åben) føjes til desired state i FLEET-RIGHTS-API og OpenAPI-filen |
 
 ### F4 — ID-hjemmet
 
@@ -237,6 +238,7 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | ADR-0006 O-1–O-3 | F6 |
 | Forslaget om et menneske- og fællesskabscentreret fundament (#165) | Formuleringer i F4–F6 |
 | Hvor ID-hjemmets tjeneste og genoprettelsen bor (repo og drift) | F4 |
+| ADR-0005 O-8 (tillidsanker for enroll ved installation) og O-9 (hvem udsteder rettigheder for private kontekster på en organisations-enhed) | F3.2, F3.4 |
 | Én versionsplan for EiraOS (F1.3) | F9 |
 | Pilot (Arbejde eller Møde) | Prioritering af F6 og F7 |
 | Er `android/` med i 1.0? | F1.8 |

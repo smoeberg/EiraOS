@@ -118,8 +118,9 @@ ukendt ──────────────► til stede ─────�
 
 ### 4.1 Første login på en enhed
 
+0. Ved første opstart er enheden enten tilknyttet en organisation (enrolled hos Fleet) eller oprettet med et Eira ID (ADR-0005 K6, "To veje ved første opstart"). På en åben organisationsenhed kan personer desuden tilknytte deres private Eira ID.
 1. Personen logger ind i skallen med en identitet (EIRA-IDENTITY).
-2. Skallen finder personens kontekster: fra ID-hjemmet (§9) eller, på en lukket organisationsenhed, fra Fleet (K11).
+2. Skallen finder personens kontekster: fra ID-hjemmet (§9) eller, på en lukket organisationsenhed, fra Fleet (K11). På en åben organisationsenhed kommer organisationens kontekster fra Fleet og personens private kontekster fra ID-hjemmet.
 3. For hver kontekst, personen vælger at åbne: `eira-contextd` opretter kontekst-brugeren, henter den krypterede post og kontekstens nøgle **pakket til denne enhed** (§5.1), forsegler nøglen i TPM'en og starter synkronisering.
 4. Kræver konteksten en anden identitet end den, der blev brugt ved log ind (fx arbejde), logger personen ind med den, før konteksten åbnes.
 
@@ -310,6 +311,8 @@ Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fas
 Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§8), politik (`max_offline_days`, `glimt_allowed`, `devices`) og hjemmet (K3), samt for enheder: `device_mode` = `closed` | `open` (K6).
 
 **Revision krævet af RIGHTS-SET:** et rettighedssæt bindes i dag til (`tenant_id`, `device_id`). Med kontekster skal det kunne bindes til (`tenant_id`, `context_id`) og gælde på enhver enhed på kontekstens enhedsliste. Gaten vælger sæt efter den kontekst, kaldet kommer fra: peer-UID'en fra `SO_PEERCRED` slås op i `eira-contextd`s lokale tabel (§1), og sættet vælges på `context_id`. UID'en bruges aldrig selv som nøgle i et rettighedssæt. Revisionen af RIGHTS-SET er et separat dokument.
+
+**Private kontekster på en åben organisationsenhed** (ADR-0005 O-9): organisationens sæt gælder kun organisationens kontekster, og pakkens standardsæt gælder ikke på en enrolled enhed (EIRA-FLEET-RIGHTS-API §3.3, `awaiting_managed_set`). Indtil revisionen findes, har en privat kontekst på en åben organisationsenhed ingen rettigheder til gate-handlinger. Revisionen skal afgøre, hvem der udsteder sættet for den. Fleet må ikke få oplyst, hvilke private kontekster der findes på enheden; det ser kun `device_mode`.
 
 ## 11. Glimt (ADR-0006 L5)
 
