@@ -16,6 +16,7 @@ from app.auth.production_cert_verifier import (
     ProductionCertificateError,
     ProductionCertificateVerifier,
 )
+from app.ipc.access import caller, open_write, read, refused
 from app.ipc.client import IpcClient
 from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
 from app.session_store import ensure_session, get_session
@@ -210,7 +211,8 @@ def register_identity_handlers(
     server: Any, daemon: IdentityDaemon | None = None
 ) -> IdentityDaemon:
     service = daemon or IdentityDaemon()
-    server.register("identity.session", identity_session)
+    # Creates a session from a claimed actor_id (fundregister S-5).
+    server.register("identity.session", open_write(identity_session, "F1.5"))
     # Desktop login (bilag A pkt. 1): the only way to a session the gate accepts.
     from app import database
     from app.auth import login
@@ -225,24 +227,27 @@ def register_identity_handlers(
 
         require_consent_path()  # EIRA-CONSENT-AGENT §3: the key must only reach the agent
     register_agent, claim_key = consent_agent.handlers()
-    server.register("identity.consent_agent_register", register_agent)
-    server.register("identity.consent_key_claim", claim_key)
-    server.register("identity.login_start", login.wants_peer(login.login_start))
-    server.register("identity.login_complete", login.wants_peer(login.login_complete))
-    server.register("identity.step_up", identity_step_up)
-    server.register("identity.providers", service.providers)
+    server.register("identity.consent_agent_register", caller(register_agent))
+    server.register("identity.consent_key_claim", caller(claim_key))
+    server.register("identity.login_start", caller(login.wants_peer(login.login_start)))
+    server.register("identity.login_complete", caller(login.wants_peer(login.login_complete)))
+    server.register("identity.step_up", refused(identity_step_up))
+    server.register("identity.providers", read(service.providers))
+    # Writes an audit event per attempt; any client can trigger one.
     server.register(
         "identity.verify_production_certificate",
-        service.verify_production_certificate,
+        open_write(service.verify_production_certificate, "F0b.4"),
     )
     server.register(
         "health",
-        lambda _: {
-            "daemon": "eira-identityd",
-            "ok": True,
-            "production_identity_configured": bool(
-                service.policies and service.trust_anchors
-            ),
-        },
+        read(
+            lambda _: {
+                "daemon": "eira-identityd",
+                "ok": True,
+                "production_identity_configured": bool(
+                    service.policies and service.trust_anchors
+                ),
+            }
+        ),
     )
     return service

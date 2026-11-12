@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from app.ipc.access import read
 from app.ipc.jsonrpc import JsonRpcError
 
 
@@ -180,8 +181,8 @@ def graph_spatial_snapshot(params: dict) -> dict:
 
 
 def register_graph_handlers(server) -> None:
-    server.register("graph.temporal_query", graph_temporal_query)
-    server.register("graph.context", graph_context_query)
-    server.register("graph.provenance.trace", graph_provenance_trace)
-    server.register("graph.spatial_snapshot", graph_spatial_snapshot)
-    server.register("health", lambda _: {"daemon": "eira-object-graphd", "ok": True})
+    server.register("graph.temporal_query", read(graph_temporal_query))
+    server.register("graph.context", read(graph_context_query))
+    server.register("graph.provenance.trace", read(graph_provenance_trace))
+    server.register("graph.spatial_snapshot", read(graph_spatial_snapshot))
+    server.register("health", read(lambda _: {"daemon": "eira-object-graphd", "ok": True}))

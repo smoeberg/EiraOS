@@ -292,6 +292,10 @@ identity_reply_has() {
 check identityd-has-database identity_reply_has identity.session '"session_id"'
 check login-needs-login-session identity_reply_has identity.login_start caller_not_in_a_login_session
 check identityd-no-apparmor-denials sh -c "! journalctl -k -b --no-pager | grep 'apparmor=\"DENIED\"' | grep -q 'eira-identityd'"
+# The general apparmor diag shows only the last five denials of any profile;
+# name identityd's own, or a failure here cannot be read from the job log.
+identityd_denials=$(journalctl -k -b --no-pager 2>&1 | grep 'apparmor="DENIED"' | grep 'eira-identityd' | tail -n 5 | tr '\n' ' ' | cut -c1-2000)
+[ -z "$identityd_denials" ] || say "diag identityd-apparmor: $identityd_denials"
 # GATE-KERNEL bilag A pkt. 2: intentd anchors the audit chain in its
 # journal; the chain agrees with the anchors; a whole-chain rewrite of a copy
 # (triggers dropped, hashes recomputed) is caught.
@@ -409,10 +413,29 @@ s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "health",
 reply = json.loads(s.makefile().readline())
 assert reply["result"]["ok"] is True, reply'
 check user-can-reach-intentd runuser -u "$USER_NAME" -- python3 -c "$REACH_PY"
+# The user reaches every socket, so stated's writes must refuse the user by
+# access class, with the token (UDVIKLINGSPLAN F0b.1, fundregister S-1).
+STATED_WRITE_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+for method in ("state.append", "state.sync_push", "audit.append"):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(10)
+    s.connect("/run/eira/stated.sock")
+    params = {"type": "Forged", "payload": {}, "event_type": "forged", "states": [],
+              "_eira": {"ipc_token": token}}
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    if reply.get("error", {}).get("message") != "E_ACCESS_DAEMON_ONLY":
+        sys.exit(f"{method}: {reply}")'
+check user-cannot-write-stated runuser -u "$USER_NAME" -- python3 -c "$STATED_WRITE_PY"
 if [ "$failed" -ne 0 ]; then
     say "diag run-eira: $(ls -ln /run/eira 2>&1 | tr '\n' ' ')"
     say "diag user-ids: $(id "$USER_NAME" 2>&1)"
     say "diag reach: $(runuser -u "$USER_NAME" -- python3 -c "$REACH_PY" 2>&1 | tail -n 2 | tr '\n' ' ')"
+    say "diag stated-write: $(runuser -u "$USER_NAME" -- python3 -c "$STATED_WRITE_PY" 2>&1 | tail -n 2 | tr '\n' ' ' | cut -c1-800)"
     say "diag intentd-log: $(journalctl -u eira-intentd.service -b --no-pager -n 15 2>&1 | tr '\n' ' ' | cut -c1-1500)"
     say "diag apparmor: $(journalctl -k -b --no-pager 2>&1 | grep -i 'apparmor=\"DENIED\"' | tail -n 5 | tr '\n' ' ' | cut -c1-1500)"
 fi

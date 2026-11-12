@@ -12,6 +12,7 @@ from app.core.policy_store import PolicyStore
 from app.core.state import State
 from app.core.transformation import ConstraintViolation, IntegratedEngine
 from app.intent_parser import IntentParser
+from app.ipc.access import read
 from app.ipc.jsonrpc import CONSTRAINT_VIOLATION, JsonRpcError
 
 
@@ -236,7 +237,7 @@ def register_intent_handlers(
     # Read-only: the event stream for Explorer (EIRA-CONVERSATION-1.0 §5).
     register_conversation_handlers(server, gate)
     _start_audit_anchor(server)
-    server.register("health", lambda _: {"daemon": "eira-intentd", "ok": True})
+    server.register("health", read(lambda _: {"daemon": "eira-intentd", "ok": True}))
     return active
 
 

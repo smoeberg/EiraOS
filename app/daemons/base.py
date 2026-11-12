@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from app.ipc.access import ACCESS_DENIED, Access, access_of, daemon_write_allowed
 from app.ipc.auth import PEER_KEY, strip_and_validate_ipc_auth
 from app.ipc.jsonrpc import (
     INTERNAL_ERROR,
@@ -29,6 +30,7 @@ class JsonRpcServer:
         self.name = name
         self.daemon = daemon
         self._handlers: dict[str, Handler] = {}
+        self._access: dict[str, Access] = {}
         # Methods that receive the caller (SO_PEERCRED) as params["_peer"].
         self._peer_methods: set[str] = set()
         self._stop = threading.Event()
@@ -42,11 +44,19 @@ class JsonRpcServer:
         self._stop_callbacks: list[Callable[[], None]] = []
 
     def register(self, method: str, handler: Handler) -> None:
+        kind = access_of(handler)
+        if kind is None:
+            # app/ipc/access.py: no method without an access class (F0b).
+            raise ValueError(f"{self.daemon}: method {method!r} has no access class")
         self._handlers[method] = handler
+        self._access[method] = kind
         if getattr(handler, "wants_peer", False):
             self._peer_methods.add(method)
         else:
             self._peer_methods.discard(method)
+
+    def access_classes(self) -> dict[str, Access]:
+        return dict(self._access)
 
     def add_cleanup(self, callback: Callable[[], None]) -> None:
         self._stop_callbacks.append(callback)
@@ -102,6 +112,12 @@ class JsonRpcServer:
             # The caller comes from the kernel (SO_PEERCRED), never from the
             # request: a client-supplied "_peer" is dropped (bilag A pkt. 1).
             params.pop(PEER_KEY, None)
+            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(peer):
+                raise JsonRpcError(
+                    ACCESS_DENIED,
+                    "E_ACCESS_DAEMON_ONLY",
+                    {"user_message": "Kun EiraOS' egne tjenester må skrive her."},
+                )
             if method in self._peer_methods:
                 params[PEER_KEY] = peer
             result = self._handlers[method](params)

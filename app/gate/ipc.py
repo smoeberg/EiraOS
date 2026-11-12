@@ -12,6 +12,8 @@ from typing import Any
 from app.gate.caller import Caller, acting_as, from_peer, installed, require_model_identity
 from app.gate.kernel import Gate
 from app.gate.policy import Origin
+from app.ipc.access import caller as caller_checked
+from app.ipc.access import refused
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 
@@ -37,7 +39,7 @@ def gate_required(method: str):
             },
         )
 
-    return handler
+    return refused(handler)
 
 
 def default_gate() -> Gate:
@@ -104,7 +106,7 @@ def _with_caller(handler):
             return handler(params, caller)
 
     wrapped.wants_peer = True  # the daemon server passes SO_PEERCRED only to these
-    return wrapped
+    return caller_checked(wrapped)
 
 
 def register_gate_handlers(server, gate: Gate | None = None) -> Gate:

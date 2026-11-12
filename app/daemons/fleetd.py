@@ -22,6 +22,7 @@ from app.fleet.device_registry import (
 )
 from app.fleet.e2ee import PayloadIntegrityError, StatePayloadEncryptor
 from app.fleet.merkle_sync import MerkleSyncEngine, StateHeader
+from app.ipc.access import caller, read, signed
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 from app.ipc.socket_security import resolve_group_gid
@@ -497,30 +498,36 @@ def register_fleet_handlers(server: Any) -> None:
     # second device table next to the registry. The registry is the only one.
     server.register(
         "fleet.pairing.create",
-        _require_fleet_admin(
-            _rpc_guard(
-                lambda params: service.registry.create_pairing_token(
-                    int(params.get("ttl_seconds", 300))
+        caller(
+            _require_fleet_admin(
+                _rpc_guard(
+                    lambda params: service.registry.create_pairing_token(
+                        int(params.get("ttl_seconds", 300))
+                    )
                 )
             )
         ),
     )
     server.register(
         "fleet.device.enroll",
-        _rpc_guard(lambda params: service.registry.enroll(**params).as_dict()),
+        # The pairing token and the device's key proof decide.
+        signed(_rpc_guard(lambda params: service.registry.enroll(**params).as_dict())),
     )
     server.register(
         "fleet.device.revoke",
-        _require_fleet_admin(
-            _rpc_guard(
-                lambda params: service.registry.revoke(str(params["device_id"])).as_dict()
+        caller(
+            _require_fleet_admin(
+                _rpc_guard(
+                    lambda params: service.registry.revoke(str(params["device_id"])).as_dict()
+                )
             )
         ),
     )
-    server.register("sync.handshake", _rpc_guard(service.handshake))
-    server.register("sync.request_blocks", _rpc_guard(service.request_blocks))
-    server.register("sync.push_blocks", _rpc_guard(service.push_blocks))
-    server.register("health", lambda _: {"daemon": "eira-fleetd", "ok": True})
+    # Each sync call is authorized by the device's signature (_authorize).
+    server.register("sync.handshake", signed(_rpc_guard(service.handshake)))
+    server.register("sync.request_blocks", signed(_rpc_guard(service.request_blocks)))
+    server.register("sync.push_blocks", signed(_rpc_guard(service.push_blocks)))
+    server.register("health", read(lambda _: {"daemon": "eira-fleetd", "ok": True}))
 
     if os.environ.get("EIRA_FLEET_WS_ENABLED", "0") == "1":
         runtime = FleetWebSocketRuntime(

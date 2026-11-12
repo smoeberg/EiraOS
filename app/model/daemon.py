@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.gate.caller import from_peer, model_uid
+from app.ipc.access import caller, read
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 from app.model.contract import (
@@ -126,9 +127,9 @@ def register_model_handlers(server, adapter: ModelAdapter | None = None, propose
         return {"gate": result, "model": {**about, "intent": intent.intent, "confidence": intent.confidence}}
 
     prepare.wants_peer = True
-    server.register("model.prepare", prepare)
-    server.register("health", lambda _: {"daemon": "eira-modeld", "ok": bool(active.health().get("ok")),
-                                         "adapter": active.name})
+    server.register("model.prepare", caller(prepare))
+    server.register("health", read(lambda _: {"daemon": "eira-modeld", "ok": bool(active.health().get("ok")),
+                                              "adapter": active.name}))
 
 
 def main() -> int:

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.daemons.base import JsonRpcServer
+from app.ipc.access import open_write, read
 from app.ipc.paths import run_dir
 
 DAEMON_NAMES = (
@@ -90,9 +91,9 @@ def _register_walletd(server: JsonRpcServer) -> None:
             raise JsonRpcError(INVALID_PARAMS, "supported_rails must be a list of strings")
         return wallet.optimize_and_pay(float(amount), merchant, rails)
 
-    server.register("wallet.optimize_and_pay", optimize_and_pay)
-    server.register("wallet.list_credentials", lambda _: wallet.list_credentials())
-    server.register("health", lambda _: {"daemon": "eira-walletd", "ok": True})
+    server.register("wallet.optimize_and_pay", open_write(optimize_and_pay, "F1.2"))
+    server.register("wallet.list_credentials", read(lambda _: wallet.list_credentials()))
+    server.register("health", read(lambda _: {"daemon": "eira-walletd", "ok": True}))
 
 
 def _register_presenced(server: JsonRpcServer) -> None:
@@ -118,9 +119,9 @@ def _register_presenced(server: JsonRpcServer) -> None:
             raise JsonRpcError(INVALID_PARAMS, "object_id is required")
         return presence.get_object_presence(object_id)
 
-    server.register("presence.annotate_object", annotate)
-    server.register("presence.get_object", get_presence)
-    server.register("health", lambda _: {"daemon": "eira-presenced", "ok": True})
+    server.register("presence.annotate_object", open_write(annotate, "F1.2"))
+    server.register("presence.get_object", read(get_presence))
+    server.register("health", read(lambda _: {"daemon": "eira-presenced", "ok": True}))
 
 
 def _register_contextd(server: JsonRpcServer) -> None:
@@ -138,9 +139,9 @@ def _register_contextd(server: JsonRpcServer) -> None:
             raise JsonRpcError(INVALID_PARAMS, result["message"])
         return result
 
-    server.register("context.get", lambda _: context.get_context())
-    server.register("context.set", set_context)
-    server.register("health", lambda _: {"daemon": "eira-contextd", "ok": True})
+    server.register("context.get", read(lambda _: context.get_context()))
+    server.register("context.set", open_write(set_context, "F1.2"))
+    server.register("health", read(lambda _: {"daemon": "eira-contextd", "ok": True}))
 
 
 def _register_delegationd(server: JsonRpcServer) -> None:

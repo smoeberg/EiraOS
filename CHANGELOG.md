@@ -4,9 +4,13 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [Unreleased]
 
-Leveret 6.–12. november 2026 (PR #128–#184). Ingen release er tagget siden 0.7.0.
+Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
 ### Gate Kernel og sikkerhed
+- Adgangsklasse pr. IPC-metode: en metode uden klasse kan ikke registreres; `stated`s skrivemetoder
+  kræver EiraOS' egen tjenestebruger, og `state.sync_push` afviser en blandet batch helt (fundregister
+  S-1, S-2); JSON-RPC-katalog genereret fra koden (`docs/reference/ipc-katalog.md`) og VM-check
+  `user-cannot-write-stated`.
 - Gate Kernel 1.0: otte lag, samtykke bundet til indholdshash, atomar udførelse og audit (#136); de
   gamle skriveveje svarer `E_GATE_REQUIRED` og er siden fjernet (#137, #180).
 - Deterministisk renderer: samtykke binder til den tekst, brugeren så (#138).
@@ -52,6 +56,9 @@ Leveret 6.–12. november 2026 (PR #128–#184). Ingen release er tagget siden 0
   udviklingsplan, statusrettelser og arkivering af `contracts/` og `docs/audit/` (dette PR).
 
 ### Rettelser
+- `identityd`s AppArmor-profil manglede de `/proc`- og logind-filer, som login og samtykkeagentens
+  registrering læser; på en rigtig maskine ville AppArmor have afvist begge (fundet af VM-checket
+  `identityd-no-apparmor-denials` på #186).
 - Fleet auth-bypass, OIDC JWKS-URL, en flaky Rust-test og UI-tegnkodning (#129).
 
 ### Oprydning
