@@ -79,6 +79,15 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   som `.deb`-pakken og `scripts/deploy_systemd.sh` installerer.
 - README: rettede stier og links, opstartsvejledning fra repoets rod, korrekte socket-navne og en
   statustabel over alle ni daemons i stedet for de modstridende tal (6/7).
+- Prototyperne `walletd`, `presenced` og `contextd` er fjernet fra `runner.py`, `app/daemons/`, IPC-navnene,
+  Tauri-broen og testene; `contextd` modsagde EIRA-CONTEXT. Gate-processen indeholder kun gaten: `app/mistral.py`,
+  `app/intent_parser.py`, `intent.parse`/`intent.plan` med `build_agency` og ventende intentioner, og den døde
+  `IntentDaemonService` er væk (fundregister S-7, S-8, S-9); en test afviser, at `intentd` indlæser en
+  LLM-klient, parseren eller CEL-executoren. AI-INTERFACE §3 og §6 henter samtalekonteksten fra samtalelaget
+  (udviklingsplan F1.2).
+- Udviklingsbroen har ikke længere `wallet`-, `presence`- og `context`-ruterne, der skrev uden session eller gate,
+  eller `/v1/intent/parse` og `/plan`; `req.dict()` er erstattet af `model_dump()` (S-22), og den ubrugte
+  `ui/veritas-hud/index.html` er fjernet (D-10) (udviklingsplan F1.6).
 
 ## [0.7.0] — released 2026-10-20
 

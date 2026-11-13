@@ -1,17 +1,18 @@
+"""The read side of the gate process: dashboard, journeys, capabilities and
+the OS user's presentation mode. No free-text parser and no language model
+(UDVIKLINGSPLAN F1.2): a sentence in the IntentBar goes to eira-modeld."""
+
 from __future__ import annotations
 
 import os
 
 from app.capability import list_manifests
-from app.intent_parser import list_trust_items, parse_intent_request, plan_intent
-from app.ipc.access import caller, open_write, read
+from app.ipc.access import caller, read
 from app.ipc.auth import PEER_KEY
 from app.ipc.jsonrpc import JsonRpcError
 from app.journey import get_journey, list_journeys
-from app.mistral import is_mistral_available
-from app.models import ParseIntentRequest
-from app.pending_intents import save_pending
-from app.session_store import ensure_session, mode_for_uid, session_of_caller, set_mode_for_uid
+from app.session_store import mode_for_uid, session_of_caller, set_mode_for_uid
+from app.trust_items import list_trust_items
 
 
 def _caller_uid(params: dict) -> int | None:
@@ -24,13 +25,6 @@ def _caller_uid(params: dict) -> int | None:
 def _with_peer(handler):
     handler.wants_peer = True
     return handler
-
-
-def _session_id(params: dict) -> str:
-    # A client-named actor is never stored (fundregister S-5). Which session
-    # a pending intent belongs to is decided by the caller's UID in F1.2,
-    # when the IntentBar goes through modeld and the gate.
-    return ensure_session(params.get("session_id"))
 
 
 @_with_peer
@@ -49,27 +43,8 @@ def dashboard_get(params: dict) -> dict:
         "authenticated": session is not None,
         "trust_items": [t.model_dump(mode="json") for t in list_trust_items()],
         "active_journeys": [j.model_dump(mode="json") for j in list_journeys()],
-        "mistral_available": is_mistral_available(),
         "presentation_mode": _mode(uid),
     }
-
-
-def intent_parse(params: dict) -> dict:
-    sid = _session_id(params)
-    body = ParseIntentRequest.model_validate(params)
-    intent = parse_intent_request(body)
-    payload = intent.model_dump(mode="json")
-    save_pending(sid, intent.intent_id, payload)
-    return payload
-
-
-def intent_plan(params: dict) -> dict:
-    sid = _session_id(params)
-    body = ParseIntentRequest.model_validate(params)
-    planned = plan_intent(body)
-    payload = planned.model_dump(mode="json")
-    save_pending(sid, planned.intent_id, payload)
-    return payload
 
 
 def journey_list(_params: dict) -> list:
@@ -138,10 +113,6 @@ def presentation_mode_set(params: dict) -> dict:
 def register_intent_handlers(server) -> None:
     # The caller is the OS user on the socket (F1.5); no session is created.
     server.register("dashboard.get", caller(dashboard_get))
-    # Old parse/plan keep pending intents for a claimed session: open writes
-    # until F1.2 removes them.
-    server.register("intent.parse", open_write(intent_parse, "F1.2"))
-    server.register("intent.plan", open_write(intent_plan, "F1.2"))
     # Protected writes go through Gate Kernel only (specs/GATE-KERNEL-1.0.md §2).
     from app.gate.ipc import gate_required
 

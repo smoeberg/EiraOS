@@ -9,10 +9,6 @@
     "graphd",
     "delegationd"
   ],
-  "prototype_daemons": [
-    "walletd",
-    "presenced",
-    "contextd"
-  ],
-  "policy": "Only production_daemons are installed and enabled by the Ubuntu package. Prototype daemons remain available to development/test tooling and must not be represented as production services."
+  "prototype_daemons": [],
+  "policy": "Only production_daemons are installed and enabled by the Ubuntu package. The former prototype daemons (walletd, presenced, contextd) were removed in UDVIKLINGSPLAN F1.2; a new prototype daemon must be listed here and must not be represented as a production service."
 }

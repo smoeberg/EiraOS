@@ -15,9 +15,6 @@ DAEMON_PORTS = {
     "graphd": 18768,
     "fleetd": 18769,
     "veritasd": 18770,
-    "walletd": 18771,
-    "presenced": 18772,
-    "contextd": 18773,
 }
 
 

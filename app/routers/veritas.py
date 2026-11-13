@@ -24,17 +24,17 @@ class UniversalEvidenceRequest(BaseModel):
 
 @router.post("/evidence")
 def validate_evidence(req: UniversalEvidenceRequest):
-    data = req.dict()
+    data = req.model_dump()
     return veritas_daemon.process_evidence(data)
 
 @router.post("/validate-text")
 def validate_text(req: UniversalEvidenceRequest):
-    data = req.dict()
+    data = req.model_dump()
     data["type"] = "text"
     return veritas_daemon.process_evidence(data)
 
 @router.post("/validate-image")
 def validate_image(req: UniversalEvidenceRequest):
-    data = req.dict()
+    data = req.model_dump()
     data["type"] = "image"
     return veritas_daemon.process_evidence(data)
