@@ -288,7 +288,7 @@ Ud over §7 dækker testene blandt andet `confidence` og `reversibility` i input
 
 **Status (11. november 2026):** Alle tekniske punkter er lavet og verificeret i VM, undtagen to rester, som ikke er kode i denne repo alene:
 
-- **Samtykkeagenten:** bygget (EIRA-CONSENT-AGENT 0.3). Tilbage er R-6.2 (labwc-patch mod clickjacking) og verifikation i en grafisk VM-session.
+- **Samtykkeagenten:** bygget (EIRA-CONSENT-AGENT 0.3). R-6.2 (labwc-patch mod clickjacking) er lavet og afprøvet headless; tilbage er verifikation i en grafisk VM-session.
 - **Login mod en rigtig OIDC-udbyder** (pkt. 1, udgivelsesbetingelse): kræver en app-registrering hos installationens udbyder (fx ejerens Entra-tenant; udbyderen er konfiguration, [EIRA-IDENTITY](EIRA-IDENTITY-1.0.md)). Ingen udgivelse med procesidentitet før da.
 
 Desuden kendte, dokumenterede grænser: audit-ankeret beskytter ikke mod en kompromitteret `intentd`; FSS-nøglen ligger på disken indtil overdragelsen; brugerjournaler er ikke dækket af seglet; modelprocessen kan ikke selv se, hvem der spørger.

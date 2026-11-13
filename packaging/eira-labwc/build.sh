@@ -99,6 +99,10 @@ install -m 0644 "$HERE/SOURCES" "$PKG/usr/share/doc/eira-labwc/SOURCES"
 if [ -f "$HERE/patches/series" ]; then
     install -m 0644 "$HERE/patches/series" "$PKG/usr/share/doc/eira-labwc/patches.series"
 fi
+# The patches this labwc has, outside /usr/share/doc (which minimal installs
+# may drop). eira-session refuses to start without trusted-group (R-6.2).
+install -d "$PKG/usr/share/eira-labwc"
+grep -v '^#' "$HERE/patches/series" | sed '/^$/d' > "$PKG/usr/share/eira-labwc/patches"
 
 # The built binary must report the pinned version (the session checks it).
 "$PKG/usr/bin/labwc" --version | grep -q "^labwc $LABWC_VERSION" || {
@@ -133,7 +137,9 @@ Description: labwc Wayland compositor for EiraOS (wlroots $WLROOTS_VERSION, stat
  labwc $LABWC_VERSION built for EiraOS with wlroots $WLROOTS_VERSION linked
  statically. Required because EiraOS withholds privileged Wayland protocols
  from all clients with <privilegedInterfaces/> (EIRA-CONSENT-AGENT R-6.1),
- which Ubuntu's labwc 0.9 cannot do. Installs no session entry of its own.
+ which Ubuntu's labwc 0.9 cannot do, and because of the <trustedGroup>
+ patch: the consent agent's window lies above all others and has focus
+ (R-6.2). Installs no session entry of its own.
 EOF
 
 mkdir -p "$OUTPUT_DIR"

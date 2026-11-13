@@ -7,6 +7,10 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
 ### Gate Kernel og sikkerhed
+- R-6.2: `eira-labwc` har `<trustedGroup>`-patchen. Samtykkeagentens vindue ligger over alle andre, også fuldskærm, og har
+  fokus; andre klienter kan ikke tage fokus, starte træk-og-slip, holde input-grabs eller sætte et markørbillede imens.
+  Afprøvet headless i CI med kontrolkørsler (`verify-trusted.sh`); sessionen starter ikke uden patchen; pakken er
+  `0.20.3-1eira2`.
 - Adgangsklasse pr. IPC-metode: en metode uden klasse kan ikke registreres; `stated`s skrivemetoder
   kræver EiraOS' egen tjenestebruger, og `state.sync_push` afviser en blandet batch helt (fundregister
   S-1, S-2); JSON-RPC-katalog genereret fra koden (`docs/reference/ipc-katalog.md`) og VM-check

@@ -46,8 +46,8 @@ Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/ar
 | `stated`, `graphd`, `delegationd`, `veritasd` | Implementeret | Ja |
 | `fleetd` | Implementeret: tilmelding af enheder, synkronisering. Synkroniseringen må ikke bære brugerdata (EIRA-CONTEXT §10) | Ja |
 | `eira-modeld` | Implementeret: modelprocessen kører som egen bruger, uden net, og gaten afviser den uden en menneskelig delegation. Adapteren er regelbaseret (få danske kommandoer, afstår ellers); der er endnu ingen sprogmodel bag kontrakten | Ja |
-| `eira-labwc` | labwc 0.20.3 uden privilegerede Wayland-protokoller (R-6.1). Patchen mod clickjacking (R-6.2) mangler | Egen pakke, afprøvet i CI |
-| Samtykkeagenten (`eira-consent-agent`) | Implementeret ([EIRA-CONSENT-AGENT](specs/EIRA-CONSENT-AGENT-0.1.md) 0.3): kun agenten kan samtykke og bekræfte. Tilbage er R-6.2 og verifikation i en grafisk VM-session | Ja |
+| `eira-labwc` | labwc 0.20.3 uden privilegerede Wayland-protokoller (R-6.1) og med `<trustedGroup>`-patchen, så samtykkeagentens vindue ligger øverst og har fokus (R-6.2) | Egen pakke, afprøvet i CI |
+| Samtykkeagenten (`eira-consent-agent`) | Implementeret ([EIRA-CONSENT-AGENT](specs/EIRA-CONSENT-AGENT-0.1.md) 0.3): kun agenten kan samtykke og bekræfte, og intet vindue kan dække den (R-6.2, afprøvet headless). Tilbage er verifikation i en grafisk VM-session | Ja |
 | EiraSystemAPI | Kun strøm (`power.request_action`) bag gaten, via logind. Øvrige systemflader (netværk, lyd, indstillinger) mangler | Ja |
 | Terminal | Rigtig PTY i Builder Mode, kun når IT har slået Builder til | Ja |
 | Kontekster (`eira-contextd`) | Kontrakt og testplan accepteret; ikke implementeret. `app/daemons/contextd.py` er en gammel prototype, der skal erstattes | Nej |

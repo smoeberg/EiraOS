@@ -1,0 +1,797 @@
+From: EiraOS Maintainers <maintainers@eira-os.invalid>
+Subject: [PATCH] Add <core><trustedGroup>: stack and focus a trusted client's windows
+
+A window of a client whose effective GID at connect() (SO_PEERCRED) is the
+configured group lies above every other window, layer, popup, menu and drag
+icon; only a session lock is above it. While it is mapped it has keyboard
+focus; other windows cannot be focused, raised or activated, drags cannot
+start, input grabs are ended, other clients cannot set a cursor image, and
+it cannot be minimized. A group that does not exist or that labwc runs in
+trusts nobody (fail closed).
+
+Use case: a consent dialog installed setgid to a group with no members, so
+an ordinary program running as the user can neither impersonate it nor
+cover it (clickjacking). EiraOS: EIRA-CONSENT-AGENT R-6.2.
+
+Applies to labwc 0.20.3 (e0a3970b0c70e321814e8004ff7c6dbc7aeaf884).
+Tested by packaging/eira-labwc/verify-trusted.sh (headless, with control
+runs). To be proposed upstream (UDVIKLINGSPLAN F0.1).
+---
+diff --git a/docs/labwc-config.5.scd b/docs/labwc-config.5.scd
+index f8943307b0ba..2721daa736f7 100644
+--- a/docs/labwc-config.5.scd
++++ b/docs/labwc-config.5.scd
+@@ -179,6 +179,7 @@ this is for compatibility with Openbox.
+   <reuseOutputMode>no</reuseOutputMode>
+   <xwaylandPersistence>no</xwaylandPersistence>
+   <primarySelection>yes</primarySelection>
++  <trustedGroup></trustedGroup>
+   <promptCommand>[see details below]</promptCommand>
+   <errorCommand>[see details below]</errorCommand>
+ </core>
+@@ -268,6 +269,22 @@ this is for compatibility with Openbox.
+ 	up/down) in Chromium and electron based clients without inadvertently
+ 	pasting the primary clipboard. Default is yes.
+ 
++*<core><trustedGroup>* [group name]
++	Windows of clients whose effective group ID at connect() is this group
++	(SO_PEERCRED) are stacked above all other windows, layer-shell
++	surfaces, popups, menus and drag icons; only a session lock is above
++	them. While such a window is mapped, it has keyboard focus, other
++	windows cannot be focused, raised or activated, drags cannot start,
++	input grabs are ended, other clients cannot set a cursor image, and
++	the window cannot be minimized.
++
++	Meant for a consent or authorization dialog installed setgid to a
++	group with no members, so that no other program can run with the group
++	(a process cannot gain an effective group it is not in). If the group
++	does not exist, or labwc itself runs in it, no window is trusted and an
++	error is logged. Combine with an empty *<privilegedInterfaces>* block,
++	or a client could still read or synthesize input. Default is unset.
++
+ *<core><promptCommand>*
+ 	Set command to be invoked for an action prompt (*<action><prompt>*)
+ 
+diff --git a/include/config/rcxml.h b/include/config/rcxml.h
+index de2312e7dad8..efc2e1401e48 100644
+--- a/include/config/rcxml.h
++++ b/include/config/rcxml.h
+@@ -3,6 +3,7 @@
+ #define LABWC_RCXML_H
+ 
+ #include <stdbool.h>
++#include <sys/types.h>
+ #include <wayland-server-core.h>
+ #include <wlr/util/box.h>
+ #include <libxml/tree.h>
+@@ -84,6 +85,9 @@ struct rcxml {
+ 	bool auto_enable_outputs;
+ 	bool reuse_output_mode;
+ 	uint32_t allowed_interfaces;
++	/* <core><trustedGroup>: see include/trusted.h */
++	bool trusted_group_valid;
++	gid_t trusted_gid;
+ 	bool xwayland_persistence;
+ 	bool primary_selection;
+ 	char *prompt_command;
+diff --git a/include/labwc.h b/include/labwc.h
+index 87a421984e73..94c60c86b3d9 100644
+--- a/include/labwc.h
++++ b/include/labwc.h
+@@ -251,6 +251,10 @@ struct server {
+ 	struct wlr_scene_tree *cycle_preview_tree;
+ 	/* Tree for built in menu */
+ 	struct wlr_scene_tree *menu_tree;
++	/* Trusted-group windows, above everything but the session lock */
++	struct wlr_scene_tree *trusted_tree;
++	struct wlr_scene_tree *trusted_view_tree;
++	struct wlr_scene_tree *trusted_popup_tree;
+ 
+ 	/* Workspaces */
+ 	struct {
+diff --git a/include/trusted.h b/include/trusted.h
+new file mode 100644
+index 000000000000..3097ab020dd0
+--- /dev/null
++++ b/include/trusted.h
+@@ -0,0 +1,55 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef LABWC_TRUSTED_H
++#define LABWC_TRUSTED_H
++
++#include <stdbool.h>
++#include <sys/types.h>
++
++struct seat;
++struct view;
++struct wl_client;
++struct wlr_surface;
++
++/*
++ * Trusted group (<core><trustedGroup>): windows of clients whose effective
++ * GID at connect() is that group are stacked above every other window,
++ * layer, popup, drag icon and menu, and hold keyboard focus while they are
++ * shown. Meanwhile no other client can take focus, start a drag, keep an
++ * input grab or set a cursor image. Only the session lock is above them.
++ *
++ * Meant for a setgid consent dialog: the group has no members, so only a
++ * program installed setgid to it is trusted. See labwc-config(5).
++ */
++
++/* Creates the scene trees. Call once, after the other server trees. */
++void trusted_init(void);
++void trusted_finish(void);
++
++/* False for a group labwc itself is in (it would trust every client). */
++bool trusted_gid_acceptable(gid_t gid);
++
++bool trusted_client(struct wl_client *client);
++bool trusted_surface(struct wlr_surface *surface);
++
++/* A mapped view of a trusted client, or NULL. */
++struct view *trusted_active_view(void);
++
++/* Parent for a new xdg toplevel: the trusted tree for trusted clients. */
++struct wlr_scene_tree *trusted_view_parent(struct view *view,
++	struct wlr_scene_tree *fallback);
++struct wlr_scene_tree *trusted_popup_parent(struct view *view,
++	struct wlr_scene_tree *fallback);
++
++/* Keep the trusted tree above everything but the session lock. */
++void trusted_restack(void);
++
++/* A trusted view was mapped: focus it and drop input others hold. */
++void trusted_view_mapped(struct view *view);
++
++/* True if focusing @view must be refused (a trusted view is shown). */
++bool trusted_blocks_view(struct view *view);
++
++/* Cursor image from @client must be refused (a trusted view is shown). */
++bool trusted_blocks_cursor(struct wl_client *client);
++
++#endif /* LABWC_TRUSTED_H */
+diff --git a/include/view.h b/include/view.h
+index 46943ab2bdfe..5a0c56fa4834 100644
+--- a/include/view.h
++++ b/include/view.h
+@@ -185,6 +185,8 @@ struct view {
+ 
+ 	bool mapped;
+ 	bool been_mapped;
++	/* Client is in <core><trustedGroup>; set at creation */
++	bool trusted;
+ 	uint64_t creation_id;
+ 	enum lab_ssd_mode ssd_mode;
+ 	enum ssd_preference ssd_preference;
+diff --git a/src/config/rcxml.c b/src/config/rcxml.c
+index 3276124aea35..5732a1a0ef90 100644
+--- a/src/config/rcxml.c
++++ b/src/config/rcxml.c
+@@ -3,6 +3,7 @@
+ #include "config/rcxml.h"
+ #include <assert.h>
+ #include <glib.h>
++#include <grp.h>
+ #include <libxml/parser.h>
+ #include <stdbool.h>
+ #include <stdio.h>
+@@ -28,6 +29,7 @@
+ #include "config/libinput.h"
+ #include "config/mousebind.h"
+ #include "config/tablet.h"
++#include "trusted.h"
+ #include "config/tablet-tool.h"
+ #include "config/touch.h"
+ #include "cycle.h"
+@@ -1090,6 +1092,29 @@ fill_font(xmlNode *node)
+ 	}
+ }
+ 
++/*
++ * <core><trustedGroup>: fails closed. A group that does not exist, or that
++ * labwc itself is in (so every client would have it), trusts no window.
++ */
++static void
++set_trusted_group(const char *name)
++{
++	rc.trusted_group_valid = false;
++	struct group *group = getgrnam(name);
++	if (!group) {
++		wlr_log(WLR_ERROR, "trustedGroup '%s' does not exist; "
++			"no window is trusted", name);
++		return;
++	}
++	if (!trusted_gid_acceptable(group->gr_gid)) {
++		wlr_log(WLR_ERROR, "trustedGroup '%s' is a group labwc runs in; "
++			"no window is trusted", name);
++		return;
++	}
++	rc.trusted_gid = group->gr_gid;
++	rc.trusted_group_valid = true;
++}
++
+ static void
+ set_adaptive_sync_mode(const char *str, enum adaptive_sync_mode *variable)
+ {
+@@ -1207,6 +1232,8 @@ entry(xmlNode *node, char *nodename, char *content)
+ 		set_bool(content, &rc.xwayland_persistence);
+ 	} else if (!strcasecmp(nodename, "primarySelection.core")) {
+ 		set_bool(content, &rc.primary_selection);
++	} else if (!strcasecmp(nodename, "trustedGroup.core")) {
++		set_trusted_group(content);
+ 
+ 	} else if (!strcasecmp(nodename, "promptCommand.core")) {
+ 		xstrdup_replace(rc.prompt_command, content);
+@@ -1586,6 +1613,7 @@ rcxml_init(void)
+ 	rc.auto_enable_outputs = true;
+ 	rc.reuse_output_mode = false;
+ 	rc.allowed_interfaces = UINT32_MAX;
++	rc.trusted_group_valid = false;
+ 	rc.xwayland_persistence = false;
+ 	rc.primary_selection = true;
+ 
+diff --git a/src/desktop.c b/src/desktop.c
+index 57ef9e3cd40d..fcbee2af727c 100644
+--- a/src/desktop.c
++++ b/src/desktop.c
+@@ -12,6 +12,7 @@
+ #include "config/rcxml.h"
+ #include "dnd.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "layers.h"
+ #include "node.h"
+ #include "output.h"
+@@ -121,6 +122,12 @@ desktop_focus_view_internal(struct view *view, bool raise, bool allow_delay)
+ 		return;
+ 	}
+ 
++	/* No raise, workspace switch or focus past a trusted window. */
++	if (trusted_blocks_view(view)) {
++		wlr_log(WLR_DEBUG, "not focusing window: trusted window shown");
++		return;
++	}
++
+ 	if (server.input_mode == LAB_INPUT_STATE_CYCLE) {
+ 		wlr_log(WLR_DEBUG, "not focusing window while window switching");
+ 		return;
+diff --git a/src/dnd.c b/src/dnd.c
+index 5d7d050e46a5..887a5b281222 100644
+--- a/src/dnd.c
++++ b/src/dnd.c
+@@ -8,6 +8,7 @@
+ #include "config/rcxml.h"
+ #include "input/cursor.h"
+ #include "labwc.h"  /* for struct seat */
++#include "trusted.h"
+ #include "view.h"
+ 
+ /* Internal DnD handlers */
+@@ -17,6 +18,12 @@ handle_drag_request(struct wl_listener *listener, void *data)
+ 	struct seat *seat = wl_container_of(listener, seat, drag.events.request);
+ 	struct wlr_seat_request_start_drag_event *event = data;
+ 
++	if (trusted_active_view() && !trusted_surface(event->origin)) {
++		wlr_data_source_destroy(event->drag->source);
++		wlr_log(WLR_INFO, "drag refused while a trusted window is shown");
++		return;
++	}
++
+ 	if (wlr_seat_validate_pointer_grab_serial(
+ 			seat->wlr_seat, event->origin, event->serial)) {
+ 		wlr_seat_start_pointer_drag(seat->wlr_seat, event->drag,
+@@ -40,6 +47,7 @@ handle_drag_start(struct wl_listener *listener, void *data)
+ 		/* Cleans up automatically on drag->icon->events.destroy */
+ 		wlr_scene_drag_icon_create(seat->drag.icons, drag->icon);
+ 		wlr_scene_node_raise_to_top(&seat->drag.icons->node);
++		trusted_restack();
+ 		wlr_scene_node_set_enabled(&seat->drag.icons->node, true);
+ 	}
+ 	wl_signal_add(&drag->events.destroy, &seat->drag.events.destroy);
+diff --git a/src/input/cursor.c b/src/input/cursor.c
+index 5a169bd3a24e..259b19ebaf4f 100644
+--- a/src/input/cursor.c
++++ b/src/input/cursor.c
+@@ -29,6 +29,7 @@
+ #include "input/tablet.h"
+ #include "input/touch.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "layers.h"
+ #include "menu/menu.h"
+ #include "output.h"
+@@ -190,6 +191,13 @@ handle_request_set_cursor(struct wl_listener *listener, void *data)
+ 	 * This can be sent by any client, so we check to make sure this one
+ 	 * actually has pointer focus first.
+ 	 */
++	if (trusted_blocks_cursor(event->seat_client->client)) {
++		/* A client cursor is drawn above every window. */
++		seat->server_cursor = LAB_CURSOR_CLIENT;
++		cursor_set(seat, LAB_CURSOR_DEFAULT);
++		return;
++	}
++
+ 	if (focused_client == event->seat_client) {
+ 		/*
+ 		 * Once we've vetted the client, we can tell the cursor to use
+diff --git a/src/input/ime.c b/src/input/ime.c
+index 1758d1c00594..01b345bb51f0 100644
+--- a/src/input/ime.c
++++ b/src/input/ime.c
+@@ -15,6 +15,7 @@
+ #include "common/scene-helpers.h"
+ #include "input/keyboard.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "node.h"
+ #include "output.h"
+ 
+@@ -584,6 +585,7 @@ input_method_relay_create(struct seat *seat)
+ 	wl_list_init(&relay->text_inputs);
+ 	wl_list_init(&relay->popups);
+ 	relay->popup_tree = lab_wlr_scene_tree_create(&server.scene->tree);
++	trusted_restack();
+ 
+ 	relay->new_text_input.notify = handle_new_text_input;
+ 	wl_signal_add(&server.text_input_manager->events.new_text_input,
+diff --git a/src/input/tablet.c b/src/input/tablet.c
+index 139b456aeddf..70d47b594870 100644
+--- a/src/input/tablet.c
++++ b/src/input/tablet.c
+@@ -18,6 +18,7 @@
+ #include "input/cursor.h"
+ #include "input/tablet-pad.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "idle.h"
+ #include "action.h"
+ #include "view.h"
+@@ -58,6 +59,10 @@ handle_set_cursor(struct wl_listener *listener, void *data)
+ 		return;
+ 	}
+ 
++	if (trusted_blocks_cursor(ev->seat_client->client)) {
++		return;
++	}
++
+ 	wlr_cursor_set_surface(seat->cursor, ev->surface,
+ 		ev->hotspot_x, ev->hotspot_y);
+ }
+diff --git a/src/meson.build b/src/meson.build
+index 05163cfa2705..6792c81b8a3d 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -26,6 +26,7 @@ labwc_sources = files(
+   'snap-constraints.c',
+   'snap.c',
+   'tearing.c',
++  'trusted.c',
+   'theme.c',
+   'view.c',
+   'view-impl-common.c',
+diff --git a/src/output.c b/src/output.c
+index 1308f5634d2f..411bd978e469 100644
+--- a/src/output.c
++++ b/src/output.c
+@@ -30,6 +30,7 @@
+ #include "common/string-helpers.h"
+ #include "config/rcxml.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "layers.h"
+ #include "node.h"
+ #include "output-state.h"
+@@ -746,6 +747,7 @@ handle_new_output(struct wl_listener *listener, void *data)
+ 
+ 	wlr_scene_node_raise_to_top(&output->cycle_osd_tree->node);
+ 	wlr_scene_node_raise_to_top(&output->session_lock_tree->node);
++	trusted_restack();
+ 
+ 	/*
+ 	 * autoEnableOutputs=no only makes sense for outputs that can be
+diff --git a/src/seat.c b/src/seat.c
+index 9cbaae5e3d7e..a2ee40efcbce 100644
+--- a/src/seat.c
++++ b/src/seat.c
+@@ -27,6 +27,7 @@
+ #include "input/keyboard.h"
+ #include "input/key-state.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "output.h"
+ #include "session-lock.h"
+ #include "view.h"
+@@ -853,6 +854,15 @@ seat_focus(struct seat *seat, struct wlr_surface *surface,
+ 		return;
+ 	}
+ 
++	/*
++	 * Trusted group: while a trusted window is shown, keyboard focus is
++	 * on it. Any other target, also "no focus", is redirected to it.
++	 */
++	struct view *trusted_view = trusted_active_view();
++	if (trusted_view && !is_lock_surface && !trusted_surface(surface)) {
++		surface = trusted_view->surface;
++	}
++
+ 	if (!surface) {
+ 		wlr_seat_keyboard_notify_clear_focus(seat->wlr_seat);
+ 		input_method_relay_set_focus(seat->input_method_relay, NULL);
+diff --git a/src/server.c b/src/server.c
+index e1a91eca4c66..c165e9087f26 100644
+--- a/src/server.c
++++ b/src/server.c
+@@ -63,6 +63,7 @@
+ #include "idle.h"
+ #include "input/keyboard.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "layers.h"
+ #include "magnifier.h"
+ #include "menu/menu.h"
+@@ -736,6 +737,7 @@ server_init(void)
+ 	server.text_input_manager = wlr_text_input_manager_v3_create(
+ 		server.wl_display);
+ 	seat_init();
++	trusted_init();
+ 	xdg_shell_init();
+ 	kde_server_decoration_init();
+ 	xdg_server_decoration_init();
+@@ -890,6 +892,7 @@ server_finish(void)
+ 	wl_display_destroy_clients(server.wl_display);
+ 
+ 	nag_finish();
++	trusted_finish();
+ 	seat_finish();
+ 	output_finish();
+ 	xdg_shell_finish();
+diff --git a/src/trusted.c b/src/trusted.c
+new file mode 100644
+index 000000000000..5a1553a83c6a
+--- /dev/null
++++ b/src/trusted.c
+@@ -0,0 +1,218 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Trusted group: see include/trusted.h and labwc-config(5).
++ *
++ * The client's GID comes from wl_client_get_credentials(), i.e. SO_PEERCRED
++ * on the client's socket, which the kernel records at connect(). For a
++ * setgid program it is the effective GID, which a process running as the
++ * user cannot obtain for itself.
++ */
++#define _POSIX_C_SOURCE 200809L
++#include "trusted.h"
++#include <assert.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <wayland-server-core.h>
++#include <wlr/types/wlr_compositor.h>
++#include <wlr/types/wlr_scene.h>
++#include <wlr/types/wlr_seat.h>
++#include <wlr/util/log.h>
++#include "common/scene-helpers.h"
++#include "config/rcxml.h"
++#include "input/cursor.h"
++#include "labwc.h"
++#include "output.h"
++#include "view.h"
++
++static struct {
++	struct wl_listener keyboard_grab_begin;
++	struct wl_listener pointer_grab_begin;
++	struct wl_listener touch_grab_begin;
++	struct wl_event_source *end_grabs;
++} trusted;
++
++bool
++trusted_gid_acceptable(gid_t gid)
++{
++	if (gid == getgid() || gid == getegid()) {
++		return false;
++	}
++	int n = getgroups(0, NULL);
++	if (n < 0) {
++		return false;
++	}
++	gid_t *groups = calloc((size_t)n + 1, sizeof(*groups));
++	if (!groups) {
++		return false;
++	}
++	n = getgroups(n, groups);
++	bool member = n < 0;
++	for (int i = 0; i < n; i++) {
++		if (groups[i] == gid) {
++			member = true;
++		}
++	}
++	free(groups);
++	return !member;
++}
++
++bool
++trusted_client(struct wl_client *client)
++{
++	if (!client || !rc.trusted_group_valid) {
++		return false;
++	}
++	pid_t pid;
++	uid_t uid;
++	gid_t gid;
++	wl_client_get_credentials(client, &pid, &uid, &gid);
++	return gid == rc.trusted_gid;
++}
++
++bool
++trusted_surface(struct wlr_surface *surface)
++{
++	return surface && surface->resource
++		&& trusted_client(wl_resource_get_client(surface->resource));
++}
++
++struct view *
++trusted_active_view(void)
++{
++	struct view *view;
++	wl_list_for_each(view, &server.views, link) {
++		if (view->trusted && view->mapped && view->surface) {
++			return view;
++		}
++	}
++	return NULL;
++}
++
++bool
++trusted_blocks_view(struct view *view)
++{
++	return !view->trusted && trusted_active_view();
++}
++
++bool
++trusted_blocks_cursor(struct wl_client *client)
++{
++	return !trusted_client(client) && trusted_active_view();
++}
++
++struct wlr_scene_tree *
++trusted_view_parent(struct view *view, struct wlr_scene_tree *fallback)
++{
++	return view->trusted ? server.trusted_view_tree : fallback;
++}
++
++struct wlr_scene_tree *
++trusted_popup_parent(struct view *view, struct wlr_scene_tree *fallback)
++{
++	return view && view->trusted ? server.trusted_popup_tree : fallback;
++}
++
++void
++trusted_restack(void)
++{
++	if (!server.trusted_tree) {
++		return;
++	}
++	wlr_scene_node_raise_to_top(&server.trusted_tree->node);
++	struct output *output;
++	wl_list_for_each(output, &server.outputs, link) {
++		if (output->session_lock_tree) {
++			wlr_scene_node_raise_to_top(
++				&output->session_lock_tree->node);
++		}
++	}
++}
++
++static void
++end_grabs(void *data)
++{
++	trusted.end_grabs = NULL;
++	if (!trusted_active_view()) {
++		return;
++	}
++	struct wlr_seat *seat = server.seat.wlr_seat;
++	if (wlr_seat_keyboard_has_grab(seat)) {
++		wlr_log(WLR_INFO, "trusted window shown: ending keyboard grab");
++		wlr_seat_keyboard_end_grab(seat);
++	}
++	if (wlr_seat_pointer_has_grab(seat)) {
++		wlr_log(WLR_INFO, "trusted window shown: ending pointer grab");
++		wlr_seat_pointer_end_grab(seat);
++	}
++	if (wlr_seat_touch_has_grab(seat)) {
++		wlr_log(WLR_INFO, "trusted window shown: ending touch grab");
++		wlr_seat_touch_end_grab(seat);
++	}
++}
++
++/*
++ * A grab started while a trusted window is shown (an xdg_popup grab with an
++ * old serial, say) would route input past keyboard focus. It is ended from
++ * an idle callback, outside the wlroots request that started it.
++ */
++static void
++handle_grab_begin(struct wl_listener *listener, void *data)
++{
++	if (trusted.end_grabs || !trusted_active_view()) {
++		return;
++	}
++	trusted.end_grabs = wl_event_loop_add_idle(server.wl_event_loop,
++		end_grabs, NULL);
++}
++
++void
++trusted_view_mapped(struct view *view)
++{
++	assert(view->trusted);
++	trusted_restack();
++
++	struct seat *seat = &server.seat;
++	end_grabs(NULL);
++
++	/* A client cursor image is drawn above every scene node. */
++	struct wlr_seat_client *pointer_client =
++		seat->wlr_seat->pointer_state.focused_client;
++	if (pointer_client && !trusted_client(pointer_client->client)) {
++		seat->server_cursor = LAB_CURSOR_CLIENT;
++		cursor_set(seat, LAB_CURSOR_DEFAULT);
++	}
++
++	wlr_log(WLR_INFO, "trusted window mapped (app_id=%s)",
++		view->app_id ? view->app_id : "");
++}
++
++void
++trusted_init(void)
++{
++	server.trusted_tree = lab_wlr_scene_tree_create(&server.scene->tree);
++	server.trusted_view_tree = lab_wlr_scene_tree_create(server.trusted_tree);
++	server.trusted_popup_tree = lab_wlr_scene_tree_create(server.trusted_tree);
++	trusted_restack();
++
++	struct wlr_seat *seat = server.seat.wlr_seat;
++	trusted.keyboard_grab_begin.notify = handle_grab_begin;
++	wl_signal_add(&seat->events.keyboard_grab_begin, &trusted.keyboard_grab_begin);
++	trusted.pointer_grab_begin.notify = handle_grab_begin;
++	wl_signal_add(&seat->events.pointer_grab_begin, &trusted.pointer_grab_begin);
++	trusted.touch_grab_begin.notify = handle_grab_begin;
++	wl_signal_add(&seat->events.touch_grab_begin, &trusted.touch_grab_begin);
++}
++
++void
++trusted_finish(void)
++{
++	if (trusted.end_grabs) {
++		wl_event_source_remove(trusted.end_grabs);
++		trusted.end_grabs = NULL;
++	}
++	if (trusted.keyboard_grab_begin.link.next) {
++		wl_list_remove(&trusted.keyboard_grab_begin.link);
++		wl_list_remove(&trusted.pointer_grab_begin.link);
++		wl_list_remove(&trusted.touch_grab_begin.link);
++	}
++}
+diff --git a/src/view-impl-common.c b/src/view-impl-common.c
+index 092ca55f04ef..5abe44d4f9ef 100644
+--- a/src/view-impl-common.c
++++ b/src/view-impl-common.c
+@@ -3,6 +3,7 @@
+ #include "view-impl-common.h"
+ #include "foreign-toplevel/foreign.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "view.h"
+ #include "window-rules.h"
+ 
+@@ -11,6 +12,10 @@ view_impl_map(struct view *view)
+ {
+ 	view_update_visibility(view);
+ 
++	if (view->trusted) {
++		trusted_view_mapped(view);
++	}
++
+ 	/* Leave minimized, if minimized before map */
+ 	if (!view->minimized) {
+ 		desktop_focus_view(view, /* raise */ true);
+diff --git a/src/view.c b/src/view.c
+index 21005f20b775..313fdcd65ccd 100644
+--- a/src/view.c
++++ b/src/view.c
+@@ -20,6 +20,7 @@
+ #include "foreign-toplevel/foreign.h"
+ #include "input/keyboard.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "menu/menu.h"
+ #include "output.h"
+ #include "placement.h"
+@@ -792,6 +793,12 @@ view_minimize(struct view *view, bool minimized)
+ 		return;
+ 	}
+ 
++	/* A trusted window is shown until its client unmaps it. */
++	if (minimized && view_get_root(view)->trusted) {
++		wlr_log(WLR_INFO, "not minimizing trusted window");
++		return;
++	}
++
+ 	/*
+ 	 * Minimize the root window first because some xwayland clients send a
+ 	 * request-unmap to sub-windows at this point (for example gimp and its
+@@ -1547,8 +1554,10 @@ view_set_layer(struct view *view, enum view_layer layer)
+ 		return;
+ 	}
+ 	view->layer = layer;
+-	wlr_scene_node_reparent(&view->scene_tree->node,
+-		view->workspace->view_trees[layer]);
++	if (!view->trusted) {
++		wlr_scene_node_reparent(&view->scene_tree->node,
++			view->workspace->view_trees[layer]);
++	}
+ 
+ 	wl_signal_emit_mutable(&view->events.always_on_top, NULL);
+ }
+@@ -1590,8 +1599,10 @@ view_move_to_workspace(struct view *view, struct workspace *workspace)
+ 	assert(workspace);
+ 	if (view->workspace != workspace) {
+ 		view->workspace = workspace;
+-		wlr_scene_node_reparent(&view->scene_tree->node,
+-			workspace->view_trees[view->layer]);
++		if (!view->trusted) {
++			wlr_scene_node_reparent(&view->scene_tree->node,
++				workspace->view_trees[view->layer]);
++		}
+ 	}
+ }
+ 
+diff --git a/src/xdg-popup.c b/src/xdg-popup.c
+index 7ca9ab0155e7..3349cddd2f41 100644
+--- a/src/xdg-popup.c
++++ b/src/xdg-popup.c
+@@ -12,6 +12,7 @@
+ #include "common/macros.h"
+ #include "common/mem.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "node.h"
+ #include "output.h"
+ #include "view.h"
+@@ -159,8 +160,8 @@ xdg_popup_create(struct view *view, struct wlr_xdg_popup *wlr_popup)
+ 	if (parent->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+ 		parent_tree = parent->surface->data;
+ 	} else {
+-		parent_tree = server.xdg_popup_tree;
+-		wlr_scene_node_set_position(&server.xdg_popup_tree->node,
++		parent_tree = trusted_popup_parent(view, server.xdg_popup_tree);
++		wlr_scene_node_set_position(&parent_tree->node,
+ 			view->current.x, view->current.y);
+ 	}
+ 	wlr_popup->base->surface->data =
+diff --git a/src/xdg.c b/src/xdg.c
+index 3c62b522fb6f..2ac2377ed0d6 100644
+--- a/src/xdg.c
++++ b/src/xdg.c
+@@ -18,6 +18,7 @@
+ #include "decorations.h"
+ #include "foreign-toplevel/foreign.h"
+ #include "labwc.h"
++#include "trusted.h"
+ #include "menu/menu.h"
+ #include "node.h"
+ #include "output.h"
+@@ -1041,8 +1042,14 @@ handle_new_xdg_toplevel(struct wl_listener *listener, void *data)
+ 	}
+ 
+ 	view->workspace = server.workspaces.current;
+-	view->scene_tree = lab_wlr_scene_tree_create(
+-		view->workspace->view_trees[VIEW_LAYER_NORMAL]);
++	view->trusted = trusted_client(
++		wl_resource_get_client(xdg_surface->resource));
++	if (view->trusted) {
++		/* Not hidden by workspace switches; see include/trusted.h */
++		view->visible_on_all_workspaces = true;
++	}
++	view->scene_tree = lab_wlr_scene_tree_create(trusted_view_parent(view,
++		view->workspace->view_trees[VIEW_LAYER_NORMAL]));
+ 	wlr_scene_node_set_enabled(&view->scene_tree->node, false);
+ 
+ 	struct wlr_scene_tree *tree = wlr_scene_xdg_surface_create(

@@ -18,4 +18,5 @@ LABWC_GIT=https://github.com/labwc/labwc.git
 LABWC_COMMIT=e0a3970b0c70e321814e8004ff7c6dbc7aeaf884
 
 # Debian revision of the eira-labwc binary package.
-EIRA_REVISION=1eira1
+# 1eira2: R-6.2 patch (patches/0001-trusted-group-stacking-and-focus.patch).
+EIRA_REVISION=1eira2

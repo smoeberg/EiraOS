@@ -35,7 +35,12 @@ SCRIPT = REPO / "packaging" / "session" / "eira-session"
 NOBODY = 65534
 
 
-def _setup(tmp_path: Path, labwc_version: str = "0.20.3") -> tuple[Path, Path, Path]:
+PATCHES = "0001-trusted-group-stacking-and-focus.patch\n"
+
+
+def _setup(
+    tmp_path: Path, labwc_version: str = "0.20.3", patches: str = PATCHES
+) -> tuple[Path, Path, Path]:
     bindir = tmp_path / "bin"
     bindir.mkdir()
     record = tmp_path / "labwc.env"
@@ -49,7 +54,7 @@ def _setup(tmp_path: Path, labwc_version: str = "0.20.3") -> tuple[Path, Path, P
     shell_bin.write_text("#!/bin/sh\n")
     for exe in (fake_labwc, shell_bin):
         exe.chmod(0o755)
-    for tool in ("sh", "env", "sed", "stat", "id", "mkdir", "chmod", "head", "sort", "printf"):
+    for tool in ("sh", "env", "sed", "stat", "id", "mkdir", "chmod", "head", "sort", "printf", "grep"):
         found = shutil.which(tool)
         if found:
             (bindir / tool).symlink_to(found)
@@ -61,6 +66,12 @@ def _setup(tmp_path: Path, labwc_version: str = "0.20.3") -> tuple[Path, Path, P
     text = text.replace("PATH=/usr/sbin:/usr/bin:/sbin:/bin\n", f"PATH={bindir}\n")
     text = text.replace("EIRA_CONF=/etc/eira/eira.conf\n", f"EIRA_CONF={conf}\n")
     text = text.replace("/usr/bin/eira-spatial-desktop", str(shell_bin))
+    marker = tmp_path / "eira-labwc-patches"
+    marker.write_text(patches)
+    assert "LABWC_PATCHES=/usr/share/eira-labwc/patches\n" in text
+    text = text.replace(
+        "LABWC_PATCHES=/usr/share/eira-labwc/patches\n", f"LABWC_PATCHES={marker}\n"
+    )
     script = tmp_path / "eira-session"
     script.write_text(text)
     script.chmod(0o755)
@@ -164,3 +175,13 @@ def test_session_accepts_newer_labwc(tmp_path: Path) -> None:
     result = _run(script, {"HOME": "/nonexistent"})
     assert result.returncode == 0, result.stderr
     assert "ARGS=-C /usr/share/eira-os/labwc" in record.read_text()
+
+
+def test_session_refuses_labwc_without_the_trusted_group_patch(tmp_path: Path) -> None:
+    """EIRA-CONSENT-AGENT R-6.2: without the patch any window can cover the
+    consent agent. A new enough labwc is not enough."""
+    script, _conf, record = _setup(tmp_path, labwc_version="0.21.0", patches="")
+    result = _run(script, {"HOME": "/nonexistent"})
+    assert result.returncode == 80, result.stderr
+    assert "trustedGroup" in result.stderr
+    assert record.read_text() == ""

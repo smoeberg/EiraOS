@@ -51,6 +51,6 @@ CI installerer testbilledet i en virtuel maskine (QEMU/KVM, UEFI), booter den in
 
 - EiraOS-shellen har kun strøm (sluk, genstart, dvale) gennem EiraSystemAPI. Netværk, lyd og indstillinger mangler (se [udviklingsplanen](UDVIKLINGSPLAN.md)).
 - Login går gennem GDM med en almindelig Ubuntu-bruger. Kontekster med én Linux-bruger pr. kontekst ([ADR-0005](decisions/ADR-0005-kontekster-og-datas-hjem.md)) er ikke implementeret endnu.
-- Samtykkeagentens beskyttelse mod clickjacking (R-6.2) mangler i `eira-labwc`.
+- Samtykkeagentens beskyttelse mod clickjacking (R-6.2) er afprøvet mod en headless labwc i CI, men endnu ikke i en grafisk session (UDVIKLINGSPLAN F0.2).
 - Installationen kræver netværk.
 - Fejler installationen, pakkes logs i `/var/log/installer/eira-error-logs.tgz` i installer-miljøet. Hent dem før genstart.

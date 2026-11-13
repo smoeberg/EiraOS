@@ -147,7 +147,7 @@ def test_debian_manifest_is_complete_and_offline_install_safe() -> None:
         "python3-httpx",
         "python3-pydantic",
         "python3-websockets",
-        "eira-labwc (>= 0.20.3)",
+        "eira-labwc (>= 0.20.3-1eira2)",  # R-6.2 patch
     ):
         assert dependency in dependencies
 

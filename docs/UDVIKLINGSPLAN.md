@@ -61,7 +61,7 @@ Det, der står tilbage af GATE-KERNEL bilag A og EIRA-CONSENT-AGENT.
 
 | # | Leverance | Færdig når | Afhænger af |
 |---|---|---|---|
-| F0.1 | **R-6.2-patch i `eira-labwc`:** compositoren lægger samtykkeagentens vindue øverst og giver det fokus ud fra klientens effektive GID, og intet andet vindue kan lægge sig over det. Patchen foreslås upstream til labwc, så den ikke skal vedligeholdes alene | Patchen ligger i `packaging/eira-labwc/patches/`; VM-test viser, at et almindeligt vindue ikke kan dække agenten | — |
+| F0.1 | **R-6.2-patch i `eira-labwc`** (leveret): `<trustedGroup>` i labwc; samtykkeagentens vindue ligger over alle andre (også fuldskærm), har fokus, og ingen anden klient kan tage fokus, starte træk-og-slip, holde input-grabs eller sætte et markørbillede, mens det vises. Sessionen starter ikke uden patchen. **Tilbage:** forslaget upstream til labwc | Patchen ligger i `packaging/eira-labwc/patches/`; `verify-trusted.sh` viser headless i CI, at et fuldskærmsvindue ikke kan dække agenten eller tage fokus, med kontrolkørsler. *Ændret fra planen:* en VM-test i en grafisk session hører til F0.2; VM'en tjekker pakke og konfiguration (`labwc-trusts-consent-group`) | — |
 | F0.2 | **Verifikation i en grafisk VM-session** (EIRA-CONSENT-AGENT V-1; O-6: procestræet under GDM) | `vm-install-acceptance` kører en rigtig labwc-session og afprøver agentens vindue, fokus og registrering | F0.1 |
 | F0.3 | **Login mod en rigtig OIDC-udbyder** (udgivelsesbetingelse) | Login i den installerede VM mod ejerens udbyder; identiteten bliver `did:eira:<provider-id>.<subjekt>` | Ejeren: app-registrering |
 
@@ -226,7 +226,7 @@ Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal generer
 
 1. ~~**F0b.1 og F0b.2** adgangskontrol pr. IPC-metode~~ (leveret i #186).
 2. ~~**F1.5** sessioner uden påstået identitet~~ (leveret).
-3. **F0.1** R-6.2-patch i `eira-labwc`, som lukker bilag A.
+3. ~~**F0.1** R-6.2-patch i `eira-labwc`~~ (leveret; forslag upstream udestår).
 
 Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges ind mellem de store trin.
 

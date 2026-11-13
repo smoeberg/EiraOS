@@ -472,6 +472,14 @@ check login-screen wait_for 300 systemctl is-active --quiet display-manager.serv
 check labwc-running wait_for 600 pgrep -u "$USER_NAME" -x labwc
 # EIRA-CONSENT-AGENT R-6.1: the session runs eira-labwc, not Ubuntu's labwc 0.9.
 check labwc-is-eira-labwc sh -c 'dpkg-query -W -f="\${Status}" eira-labwc | grep -q "install ok installed" && labwc --version | grep -Eq "^labwc 0\.(2[0-9]|[3-9][0-9])\."'
+# EIRA-CONSENT-AGENT R-6.2: the session's labwc has the trustedGroup patch and
+# trusts eira-consent, a group labwc (the desktop user) is not in. The
+# behaviour itself is tested headless in CI (verify-trusted.sh).
+check labwc-trusts-consent-group sh -c '
+    grep -qx 0001-trusted-group-stacking-and-focus.patch /usr/share/eira-labwc/patches &&
+    grep -q "<trustedGroup>eira-consent</trustedGroup>" /usr/share/eira-os/labwc/rc.xml &&
+    grep -aq "is a group labwc runs in" /usr/bin/labwc &&
+    ! id -nG "'"$USER_NAME"'" | tr " " "\n" | grep -qx eira-consent'
 check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop
 
 if [ "$failed" -ne 0 ]; then
