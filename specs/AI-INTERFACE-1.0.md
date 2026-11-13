@@ -83,7 +83,7 @@ ModelAdapter:
       intent: IntentExtraction,
       allowed_actions: tuple[str, ...],
       context: ConversationContext
-  ) -> ActionProposal | Abstain | ModelError
+  ) -> EdpAction | Abstain | ModelError
 ```
 
 I den nuværende kode hedder forslagstypen `EdpAction`. Det er et internt DTO-navn, ikke en påstand om, at alle forslag er EDP-handlinger: `system:power.request_action` oversættes særskilt til EiraSystemAPI-envelope af modelprocessen. En fremtidig kontraktrevision kan give den interne type et mere neutralt navn; denne dokumentrevision ændrer ikke Python-API'et.
@@ -174,7 +174,7 @@ UI'et må ikke fremstille et forslag som udført. Status og udfald skal komme fr
 
 1. **Egen procesidentitet:** modelprocessen kører som `eira-model`, ikke som desktop-brugeren eller `eira`.
 2. **Ingen netværksadgang:** modellen og dens runtime må ikke have netværksadgang. Ingen cloud-fallback, ekstern inference eller skjult download ved runtime.
-3. **Mindst mulige adgang:** ingen adgang til `/data), sessionlager, Gate-database, samtykkenøgle eller executor.
+3. **Mindst mulige adgang:** ingen adgang til `/data`, sessionlager, Gate-database, samtykkenøgle eller executor.
 4. **Ingen bypass:** alle beskyttede handlinger går gennem Gate Kernel.
 5. **Fail closed:** ugyldigt output, ukendt handling, timeout, manglende runtime, utilstrækkelige ressourcer eller usikker kontekst må ikke blive til et handlingsforslag.
 6. **Ingen autoritet fra confidence:** confidence og modelscore kan aldrig give rettigheder eller ændre Gate-beslutningen.
