@@ -3,7 +3,7 @@ Tests: tests/context/home/test_home.py::test_h1_c_a_home_that_overwrites_is_refu
 
 --- a/app/context/remote.py
 +++ b/app/context/remote.py
-@@ -165,7 +165,7 @@
+@@ -172,7 +172,7 @@
              raise ContextError(E_CONTEXT_HOME_UNSUPPORTED, "a fresh probe path already existed")
          if home.put_if_absent(probe, second):
              raise ContextError(E_CONTEXT_HOME_UNSUPPORTED, "an existing object was overwritten")

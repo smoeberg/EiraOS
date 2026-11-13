@@ -132,9 +132,16 @@ class WebDavHome:
             if collection in self._collections:
                 continue
             status = self.client.request("MKCOL", self._url(collection) + "/").status_code
-            if status not in (201, 405):  # 405: the collection exists
+            # 405: the collection exists. Under concurrent MKCOL some servers
+            # (Apache mod_dav) answer 403 for a collection another request is
+            # creating; it is fine if the collection exists afterwards.
+            if status not in (201, 405) and not self._is_collection(collection):
                 raise HomeError(f"MKCOL {collection}: HTTP {status}")
             self._collections.add(collection)
+
+    def _is_collection(self, collection: str) -> bool:
+        response = self.client.request("PROPFIND", self._url(collection) + "/", headers={"Depth": "0"})
+        return response.status_code == 207
 
     def put_if_absent(self, name: str, data: bytes) -> bool:
         self._mkcols(name)

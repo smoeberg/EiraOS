@@ -100,7 +100,7 @@ def webdav_server():
 # Servers whose If-None-Match is a check followed by a separate write: one
 # request at a time they comply (attach accepts them), but concurrent
 # uploads can both win. Found by T-H1-b; testplan finding 6.
-RACY = {"wsgidav"}
+RACY = {"wsgidav", "apache-mod_dav"}
 
 
 def _new_s3_home(server) -> S3Home:
