@@ -94,6 +94,10 @@ class Verdict:
     noop: bool = False
     content_hash: str | None = None
     rights_set: dict[str, Any] | None = field(default=None, compare=False)
+    # The active set this verdict was judged against (§4 rule 3). The cache
+    # installs only if that is still the active set, so two sets activated
+    # at the same time can never undo each other's version check.
+    against: Active | None = field(default=None, compare=False)
 
 
 class _Reject(Exception):
@@ -264,11 +268,11 @@ def verify(
             if doc["version"] == active.version:
                 if digest != active.content_hash:
                     raise _Reject(Reason.VERSION_CONFLICT)
-                return Verdict(ok=True, noop=True, content_hash=digest, rights_set=doc)
+                return Verdict(ok=True, noop=True, content_hash=digest, rights_set=doc, against=active)
         elif active is not None and kind == "default":
             # active is managed (other tenant): no way back to default.
             raise _Reject(Reason.DEFAULT_ON_ENROLLED)
-        return Verdict(ok=True, content_hash=digest, rights_set=doc)
+        return Verdict(ok=True, content_hash=digest, rights_set=doc, against=active)
     except _Reject as exc:
         return Verdict(ok=False, reason=exc.reason)
 

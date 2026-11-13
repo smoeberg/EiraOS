@@ -246,7 +246,7 @@ class ProductionCertificateVerifier:
         )
         request = urllib.request.Request(
             url,
-            headers={"Accept": "application/json", "User-Agent": "EiraOS/1.0-RC1"},
+            headers={"Accept": "application/json", "User-Agent": "EiraOS/1.0.0-rc2"},
             method="GET",
         )
         try:

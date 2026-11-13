@@ -77,11 +77,15 @@ def test_every_error_response_has_user_message(
 
 
 def test_runner_registers_all_daemons_and_socket_names() -> None:
-    assert len(DAEMON_NAMES) == 10
+    assert len(DAEMON_NAMES) == 7
     assert set(DAEMON_NAMES) == set(REGISTRARS)
-    for daemon in ("walletd", "presenced", "contextd"):
+    for daemon in DAEMON_NAMES:
         assert canonical_daemon(daemon) == daemon
         assert socket_path(daemon).name == f"{daemon}.sock"
+    # The prototypes outside the target picture are gone (UDVIKLINGSPLAN F1.2).
+    for prototype in ("walletd", "presenced", "contextd"):
+        with pytest.raises(KeyError):
+            canonical_daemon(prototype)
 
 
 def test_non_allowlisted_non_root_peer_is_denied() -> None:

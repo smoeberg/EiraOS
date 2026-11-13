@@ -33,7 +33,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest ruff alembic pyyaml
+        pip install pytest ruff pyyaml
 
     - name: Run Ruff linter
       run: |
@@ -42,10 +42,6 @@ jobs:
     - name: Install AppArmor parser for packaging validation
       run: |
         scripts/ci/apt-install.sh apparmor-utils xorriso
-
-    - name: Run database migrations (Alembic)
-      run: |
-        alembic upgrade head
 
     - name: Run integration tests (Pytest)
       run: |
@@ -58,10 +54,14 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up-Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - name: Rust format check
         run: cargo fmt --check
-      - name: Cargo check workspace
-        run: cargo check --workspace
+      # Every crate in the workspace (eira-core, eira-ipc, eira-stated,
+      # eira-consent-agent), with all features and test/example targets.
+      - name: Clippy workspace
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Cargo test workspace
         run: cargo test --workspace -- --nocapture
       # EIRA-CONSENT-AGENT: the agent's window against a real (headless)
@@ -81,7 +81,6 @@ jobs:
       # Behind a feature so the Android/WASM state core stays syscall-free.
       - name: Phase 0 contract tests (eira-core --features ipc-tokio)
         run: |
-          cargo clippy -p eira-core --features ipc-tokio --all-targets -- -D warnings
           cargo test -p eira-core --features ipc-tokio -- --nocapture
 
   # ui/src-tauri is `exclude`d from the root Cargo workspace, so
@@ -95,6 +94,12 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # Excluded from the root workspace, so the root `cargo fmt --check`
+      # does not see it.
+      - name: Rust format check ui/src-tauri
+        run: cargo fmt --manifest-path ui/src-tauri/Cargo.toml --check
       - name: Cache cargo build
         uses: actions/cache@v4
         with:
@@ -110,6 +115,8 @@ jobs:
           # NB: no --locked here: ui/src-tauri/Cargo.lock is gitignored, so
           # --locked would fail with "cannot create the lock file". The root
           # workspace lock does not apply (src-tauri is excluded from it).
+      - name: Clippy ui/src-tauri
+        run: cargo clippy --manifest-path ui/src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Cargo test ui/src-tauri
         run: cargo test --manifest-path ui/src-tauri/Cargo.toml -- --nocapture
 

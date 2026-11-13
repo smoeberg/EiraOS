@@ -170,7 +170,7 @@ Et nyt sæt anvendes kun, hvis **alle** disse er opfyldt (i denne rækkefølge; 
 
 Afvisningsårsagerne er faste strenge (`Reason` i `contract.py`) og rapporteres ordret i `apply-result`.
 
-Sættet anvendes **atomart**: hele cachen erstattes i én transaktion. `rights_set_id`, `version`, `template`, `issued_by` og indholdshashet gemmes. Hvis et af kravene ikke er opfyldt, anvendes intet. Det aktive sæt forbliver aktivt, og fejlen rapporteres via `POST /v1/report/apply-result` og audit-loggen.
+Sættet anvendes **atomart**: hele cachen erstattes i én transaktion, og kun hvis det sæt, punkt 6 blev afgjort mod, stadig er det aktive (compare-and-swap). Ellers afgøres punkt 6 igen mod det nye aktive sæt, så to samtidige aktiveringer aldrig kan rulle versionen tilbage eller begge godtage samme version med forskelligt indhold. `rights_set_id`, `version`, `template`, `issued_by` og indholdshashet gemmes. Hvis et af kravene ikke er opfyldt, anvendes intet. Det aktive sæt forbliver aktivt, og fejlen rapporteres via `POST /v1/report/apply-result` og audit-loggen.
 
 ### 4.1 Effektiv tid — uret må ikke kunne skrues tilbage
 
@@ -248,12 +248,15 @@ Hvordan et sæt kommer fra Fleet til enheden, og hvordan resultatet meldes tilba
 
 Vektorerne i `tests/vectors/rights-set/` dækker (`apply-*.json`): gyldigt managed- og default-sæt, udløbet, endnu ikke gyldigt, lavere version, samme version med samme og med andet indhold, forkert device, forkert tenant, gyldig signatur over forkert domæne (`EIRAOS-EVENT-V1`), ændret efter signering, ukendt `key_id`, managed-sæt signeret med release-nøglen, manglende `template`, TTL over loftet, ukendt handlingsnøgle, `*` i `actions`, ukendt felt, float, dobbelt nøgle, grant der overlever sættet, default-sæt på enrolled enhed og managed-sæt på uenrolled enhed. `authorize.json` dækker: gruppe-grant, gruppe uden grant, deny vinder, jokertegn-grænser, midlertidig grant der udløber, skærpet assurance og udløbet sæt.
 
+**Versioneret og delt med Fleet** (udviklingsplan F1.9). `tests/vectors/MANIFEST.json` giver sættet (`rights-set/`, `rights-keys/`, `rights-signing/`) et versionsnummer og en hash pr. fil; et ændret sæt kræver en ny version (`scripts/gen_rights_vectors.py --bump`). `rights-signing/` er Fleets side: det usignerede dokument og testnøglen ind, det kanoniske signerede dokument ud, byte for byte, for rettighedssæt, nøglecertifikat og tilbagekaldelsesliste. `eira-fleet-control` kører `scripts/rights_vectors_conformance.py --signer "<Fleets signer>" --expect-version <N>` i sin CI; `scripts/rights_reference_signer.py` er referencen.
+
 Krav, der testes, når agenten og gatens lag 6 bygges ovenpå (ikke del af vektorerne):
 1. Et afvist sæt efterlader det aktive sæt uændret (atomar apply).
 2. Gaten har ingen IPC-metode, der skriver til rettighedscachen (metodeklassifikationstesten).
 3. Audit-poster indeholder rettighedssættets id og version, og ved PASS den autoriserende grant.
 4. Effektiv tid (§4.1): et tilbagestillet ur forlænger hverken sæt, grant eller samtykke.
 5. Agentens kontakt til Fleet virker med et udløbet sæt (§5.1).
+6. Samtidige aktiveringer ender på den højeste version; samme version med andet indhold afvises, også når de aktiveres samtidig (`tests/test_rights_concurrent_activation.py`, fundregister S-23).
 
 ## 9. Afklaret (7. november 2026)
 

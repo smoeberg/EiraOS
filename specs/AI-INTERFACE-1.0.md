@@ -52,7 +52,7 @@ extract_intent(
 
 **Input:**
 - `text`: Brugerens rå input (dansk, tysk eller engelsk).
-- `context`: Samtalekontekst fra `contextd` (objekt, tidligere handlinger, deltagere).
+- `context`: Samtalekontekst fra samtalelaget ([EIRA-CONVERSATION](EIRA-CONVERSATION-1.0.md)): objekt, tidligere handlinger, deltagere.
 - `language_hint`: Valgfrit sprogvalg; ellers detekteres sproget.
 
 **Output — `IntentExtraction`:**
@@ -164,7 +164,7 @@ ModelAdapter:
 
 ## 6. Kontekstmodellen
 
-`ConversationContext` leveres af `contextd` og indeholder:
+`ConversationContext` bygges af samtalelaget ([EIRA-CONVERSATION](EIRA-CONVERSATION-1.0.md) §4–5: `conversation.events` og `conversation.members` for brugerens egen session) og indeholder:
 
 | Felt | Beskrivelse |
 |---|---|
@@ -242,4 +242,4 @@ Modellen må ikke modificere konteksten. Den er **read-only**.
 
 1. Skal EiraLang og EiraAI kunne køre i samme adapter (én model, to metoder), eller skal de altid være separate? **Anbefaling:** separate, så de kan skiftes uafhængigt.
 2. Skal `intentd` kunne kalde EiraLang og EiraAI parallelt for at reducere latenstid? **Anbefaling:** nej, sekventielt — EiraAI afhænger af EiraLang's output.
-3. Hvordan håndteres kontekst, der overskrider modellens grænse? **Anbefaling:** `intentd` opsummerer konteksten via `contextd`, før den sendes til adapteren.
+3. Hvordan håndteres kontekst, der overskrider modellens grænse? **Anbefaling:** konteksten opsummeres i samtalelaget (EIRA-CONVERSATION), før den sendes til adapteren.

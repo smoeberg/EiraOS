@@ -33,12 +33,6 @@ def main() -> int:
         dash = intent.call("dashboard.get", {})
         print("dashboard.get:", dash["greeting"], f"({len(dash['trust_items'])} trust items)")
 
-        planned = intent.call(
-            "intent.plan",
-            {"raw_input": "Godkend budget", "focus": "Kommunepilot"},
-        )
-        print("intent.plan:", planned["category"], planned["action"], f"can_execute={planned.get('can_execute')}")
-
         temporal = graph.call(
             "graph.temporal_query",
             {
@@ -65,7 +59,7 @@ def main() -> int:
                 raise AssertionError("step-up rejection omitted user_message") from exc
             print("identity.step_up (expected rejection):", user_message)
 
-        print("\nIPC smoke test OK (all nine daemons)")
+        print(f"\nIPC smoke test OK (all {len(DAEMON_NAMES)} daemons)")
         return 0
     finally:
         stop_daemons()

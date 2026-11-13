@@ -38,38 +38,12 @@ export interface Dashboard {
   state: string;
   trust_items: TrustItem[];
   active_journeys: Journey[];
-  mistral_available: boolean;
   /** The caller's own logged-in session, or null; the dashboard never creates one. */
   session_id?: string | null;
   actor_id?: string | null;
   authenticated?: boolean;
   /** The OS user's mode (F1.5): the same one the terminal check sees. */
   presentation_mode?: string;
-}
-
-export interface CapabilityMatch {
-  adapter_id: string;
-  adapter_name: string;
-  action: string;
-  resource: string;
-  required_assurance: string | null;
-  assurance_met: boolean;
-}
-
-export interface PlannedIntent {
-  intent_id: string;
-  raw_input: string;
-  category: string;
-  action: string;
-  confidence: number;
-  trust_level: TrustLevel;
-  trust_score: number;
-  rationale: string;
-  parse_mode: string;
-  status: string;
-  capability_match: CapabilityMatch | null;
-  can_execute: boolean;
-  block_reason: string | null;
 }
 
 const API = "";
@@ -193,20 +167,6 @@ export async function fetchDashboard(): Promise<Dashboard> {
   const data: Dashboard = await res.json();
   if (data.session_id) setSessionId(data.session_id);
   return data;
-}
-
-export async function planIntent(raw_input: string): Promise<PlannedIntent> {
-  const res = await fetch(`${API}/v1/intent/plan`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...apiHeaders() },
-    body: JSON.stringify({
-      raw_input,
-      focus: "Kommunepilot",
-      use_mistral: true,
-    }),
-  });
-  if (!res.ok) throw new Error("Intent plan failed");
-  return res.json();
 }
 
 export async function advanceJourney(journeyId: string): Promise<Journey> {

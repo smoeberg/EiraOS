@@ -1,0 +1,73 @@
+{
+  "name": "rights-set-unicode",
+  "description": "Ikke-ASCII i strenge: JCS skriver dem som UTF-8, ikke som \\u-escapes.",
+  "kind": "rights_set",
+  "seed_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+  "document": {
+    "eira_rights": "1",
+    "rights_set_id": "0190f5a0-0000-7000-8000-00000000abcd",
+    "kind": "managed",
+    "tenant_id": "kk",
+    "device_id": "dev-0001",
+    "version": 42,
+    "issued_at": "2026-11-07T11:00:00Z",
+    "expires_at": "2026-11-21T11:00:00Z",
+    "template": {
+      "id": "skoleforvaltning-laerer",
+      "version": "3"
+    },
+    "issued_by": {
+      "api_call_id": "req-lærer-7f3a",
+      "fleet": "fleet.kk.example"
+    },
+    "grants": [
+      {
+        "subject": {
+          "group": "laerere"
+        },
+        "scope": "obj:sag:*",
+        "actions": [
+          "edp:utterance",
+          "edp:commitment_proposed",
+          "edp:commitment_accepted"
+        ]
+      },
+      {
+        "subject": {
+          "group": "laerere"
+        },
+        "scope": "device:local",
+        "actions": [
+          "system:power.request_action"
+        ]
+      },
+      {
+        "subject": {
+          "principal": "did:eira:entra.9f3"
+        },
+        "scope": "obj:sag:42",
+        "actions": [
+          "edp:value_transfer_requested"
+        ],
+        "expires_at": "2026-11-07T15:00:00Z",
+        "required_assurance": "eid_high"
+      }
+    ],
+    "denies": [
+      {
+        "subject": {
+          "group": "vikarer"
+        },
+        "scope": "device:local",
+        "actions": [
+          "system:power.request_action"
+        ]
+      }
+    ],
+    "signature": {
+      "alg": "ed25519",
+      "key_id": "test-tenant-kk-1"
+    }
+  },
+  "expect_raw": "{\"denies\":[{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"vikarer\"}}],\"device_id\":\"dev-0001\",\"eira_rights\":\"1\",\"expires_at\":\"2026-11-21T11:00:00Z\",\"grants\":[{\"actions\":[\"edp:utterance\",\"edp:commitment_proposed\",\"edp:commitment_accepted\"],\"scope\":\"obj:sag:*\",\"subject\":{\"group\":\"laerere\"}},{\"actions\":[\"system:power.request_action\"],\"scope\":\"device:local\",\"subject\":{\"group\":\"laerere\"}},{\"actions\":[\"edp:value_transfer_requested\"],\"expires_at\":\"2026-11-07T15:00:00Z\",\"required_assurance\":\"eid_high\",\"scope\":\"obj:sag:42\",\"subject\":{\"principal\":\"did:eira:entra.9f3\"}}],\"issued_at\":\"2026-11-07T11:00:00Z\",\"issued_by\":{\"api_call_id\":\"req-lærer-7f3a\",\"fleet\":\"fleet.kk.example\"},\"kind\":\"managed\",\"rights_set_id\":\"0190f5a0-0000-7000-8000-00000000abcd\",\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-tenant-kk-1\",\"value\":\"8KP6ZhjYBpmX0XBg7tof9NRImXP7ko98JuH2PLxkQJ5XpdXvBffVt5ZzP_NLE6DtJJbK23pH-g0L2QRp8ReMAA\"},\"template\":{\"id\":\"skoleforvaltning-laerer\",\"version\":\"3\"},\"tenant_id\":\"kk\",\"version\":42}"
+}

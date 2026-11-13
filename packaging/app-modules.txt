@@ -16,15 +16,9 @@ app/conversation/feed.py
 app/conversation/ipc.py
 app/core/__init__.py
 app/core/audit.py
-app/core/cel_evaluator.py
-app/core/constraint.py
-app/core/event.py
-app/core/knowledge.py
-app/core/policy_store.py
 app/core/remote_store.py
 app/core/state.py
 app/core/store.py
-app/core/transformation.py
 app/core_rust.py
 app/daemons/__init__.py
 app/daemons/base.py
@@ -60,7 +54,6 @@ app/gate/render.py
 app/gate/store.py
 app/gate/system.py
 app/graph_context.py
-app/intent_parser.py
 app/ipc/__init__.py
 app/ipc/access.py
 app/ipc/auth.py
@@ -70,13 +63,11 @@ app/ipc/paths.py
 app/ipc/socket_security.py
 app/ipc/transport.py
 app/journey.py
-app/mistral.py
 app/model/__init__.py
 app/model/contract.py
 app/model/daemon.py
 app/model/rules.py
 app/models.py
-app/pending_intents.py
 app/rights/__init__.py
 app/rights/agent.py
 app/rights/cache.py
@@ -88,6 +79,7 @@ app/rights/keys.py
 app/rights/transport.py
 app/session_store.py
 app/temporal.py
+app/trust_items.py
 app/veritas/__init__.py
 app/veritas/c2pa_engine.py
 app/veritas/layer1_rules.py

@@ -50,9 +50,8 @@ Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/ar
 | Samtykkeagenten (`eira-consent-agent`) | Implementeret ([EIRA-CONSENT-AGENT](specs/EIRA-CONSENT-AGENT-0.1.md) 0.3): kun agenten kan samtykke og bekræfte, og intet vindue kan dække den (R-6.2, afprøvet headless). Tilbage er verifikation i en grafisk VM-session | Ja |
 | EiraSystemAPI | Kun strøm (`power.request_action`) bag gaten, via logind. Øvrige systemflader (netværk, lyd, indstillinger) mangler | Ja |
 | Terminal | Rigtig PTY i Builder Mode, kun når IT har slået Builder til | Ja |
-| Kontekster (`eira-contextd`) | Kontrakt og testplan accepteret; ikke implementeret. `app/daemons/contextd.py` er en gammel prototype, der skal erstattes | Nej |
+| Kontekster (`eira-contextd`) | Kontrakt og testplan accepteret; ikke implementeret. Den gamle prototype `app/daemons/contextd.py` er fjernet (udviklingsplan F1.2) | Nej |
 | Web App Manager, livets indbakke | Besluttet i ADR-0004 og ADR-0006; ingen kontrakt endnu | Nej |
-| `walletd`, `presenced` | Prototyper, som altid afviser eller kun lever i hukommelsen | Nej |
 
 Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verificeret. Kendte fund fra de eksterne gennemgange, herunder at desktop-brugeren i dag kan skrive i `stated` (S-1), står i [fundregistret](docs/reviews/GENNEMGANG-2026-11-12.md) med plan for rettelse.
 
@@ -74,7 +73,6 @@ Krav: Linux (daemon-IPC'en bruger `SO_PEERCRED`), Python 3.11+, Node.js 20+ og R
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-alembic upgrade head
 
 # Daemons i deres egen proces, som i produktion
 python -m app.daemons.runner --socket-dir data/run
