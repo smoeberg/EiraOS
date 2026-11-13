@@ -619,6 +619,35 @@ def _chain(count: int = 3):
     return states
 
 
+def test_push_blocks_counts_exact_replay_as_skipped_not_invalid() -> None:
+    """A transport retry re-sends the same envelopes; those are replays of
+    blocks already processed, so they are skipped, never invalid."""
+    _, _, registry, tokens = _services()
+    store = StateStore()
+    encryptor = _encryptor()
+    service = FleetSyncService(registry=registry, store=store, encryptor=encryptor)
+
+    def push(blocks):
+        return service.push_blocks({
+            "device_id": DEVICE_B,
+            "auth_token": tokens[DEVICE_B],
+            "blocks": blocks,
+        })
+
+    chain = _chain(2)
+    blocks = [encryptor.encrypt_state(state) for state in chain]
+
+    first = push(blocks)
+    assert first["accepted"] == 2
+    assert first["invalid"] == 0
+
+    retried = push(blocks)
+    assert retried["accepted"] == 0
+    assert retried["skipped"] == 2
+    assert retried["invalid"] == 0
+    assert store.count() == 2
+
+
 def test_full_sync_round_trip_between_two_devices() -> None:
     """Device A pushes a chain, device B pulls the missing blocks and
     reconstructs the exact same states locally."""

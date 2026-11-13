@@ -12,6 +12,7 @@ from app.core.state import State
 from app.fleet.e2ee import (
     NonceReuseError,
     PayloadIntegrityError,
+    ReplayDetectedError,
     StatePayloadEncryptor,
     _canonical_json,
 )
@@ -169,6 +170,48 @@ def test_nonce_inside_window_still_rejected(monkeypatch):
 
     with pytest.raises(NonceReuseError):
         enc.encrypt_state(_state(title="dup"), nonce=bytes([3]) * 12)
+
+
+def test_exact_replay_of_decrypted_envelope_rejected():
+    enc = _encryptor()
+    envelope = enc.encrypt_state(_state())
+    enc.decrypt_state(envelope)
+
+    with pytest.raises(ReplayDetectedError):
+        enc.decrypt_state(envelope)
+
+
+def test_replay_error_is_payload_integrity_error():
+    enc = _encryptor()
+    envelope = enc.encrypt_state(_state())
+    enc.decrypt_state(envelope)
+
+    with pytest.raises(PayloadIntegrityError):
+        enc.decrypt_state(envelope)
+
+
+def test_fresh_envelope_after_replay_still_decrypts():
+    enc = _encryptor()
+    first = enc.encrypt_state(_state(title="first"))
+    enc.decrypt_state(first)
+
+    with pytest.raises(ReplayDetectedError):
+        enc.decrypt_state(first)
+
+    second = enc.encrypt_state(_state(title="second"))
+    assert enc.decrypt_state(second).payload["title"] == "second"
+
+
+def test_replay_tracking_stays_bounded(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    envelopes = [enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12) for i in range(4)]
+    for envelope in envelopes:
+        enc.decrypt_state(envelope)
+    assert len(enc._seen_nonces) == 4
+
+    enc.encrypt_state(_state(title="fifth"), nonce=bytes([4]) * 12)
+    assert len(enc._seen_nonces) == 4
 
 
 def test_random_nonces_differ_across_encrypts():

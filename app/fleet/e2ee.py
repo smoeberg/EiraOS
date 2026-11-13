@@ -9,6 +9,11 @@ Keys are derived with HKDF-SHA256 from the caller's master fleet-sync key and
 a per device-pair context.  Nonces are tracked in a bounded sliding window so
 the same (key, nonce) pair is not reused for encryption; with 96-bit random
 nonces a repeat inside the window is negligible.
+
+Decryption keeps its own bounded window of nonces from envelopes it has fully
+authenticated and rejects an exact replay of such an envelope.  Legitimate
+re-delivery is unaffected: ``request_blocks`` re-encrypts with fresh nonces,
+and the window is per process, so a daemon restart clears it.
 """
 
 from __future__ import annotations
@@ -41,6 +46,10 @@ class PayloadIntegrityError(ValueError):
 
 class NonceReuseError(ValueError):
     """Raised when encryption would reuse a nonce under the same derived key."""
+
+
+class ReplayDetectedError(PayloadIntegrityError):
+    """Raised when an identical, already-authenticated envelope is decrypted again."""
 
 
 def _canonical_json(value: Mapping[str, Any]) -> bytes:
@@ -99,6 +108,8 @@ class StatePayloadEncryptor:
         self._aead = ChaCha20Poly1305(self._key)
         self._used_nonces: set[bytes] = set()
         self._nonce_order: deque[bytes] = deque()
+        self._seen_nonces: set[bytes] = set()
+        self._seen_order: deque[bytes] = deque()
         self._nonce_lock = threading.Lock()
 
     @staticmethod
@@ -120,11 +131,14 @@ class StatePayloadEncryptor:
             ),
         }
 
+    def _remember(self, nonces: set[bytes], order: deque[bytes], nonce: bytes) -> None:
+        nonces.add(nonce)
+        order.append(nonce)
+        while len(order) > _NONCE_WINDOW:
+            nonces.discard(order.popleft())
+
     def _remember_nonce(self, nonce: bytes) -> None:
-        self._used_nonces.add(nonce)
-        self._nonce_order.append(nonce)
-        while len(self._nonce_order) > _NONCE_WINDOW:
-            self._used_nonces.discard(self._nonce_order.popleft())
+        self._remember(self._used_nonces, self._nonce_order, nonce)
 
     def _reserve_nonce(self, nonce: bytes | None = None) -> bytes:
         """Return a nonce not used inside the sliding window."""
@@ -234,4 +248,9 @@ class StatePayloadEncryptor:
 
         if not state.is_hash_valid():
             raise PayloadIntegrityError("Decrypted state hash is invalid")
+
+        with self._nonce_lock:
+            if nonce in self._seen_nonces:
+                raise ReplayDetectedError("envelope has already been decrypted")
+            self._remember(self._seen_nonces, self._seen_order, nonce)
         return state
