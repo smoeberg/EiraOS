@@ -40,7 +40,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `identity.providers` | `read` |  |
 | `identity.session` | `caller` |  |
 | `identity.step_up` | `refused` |  |
-| `identity.verify_production_certificate` | `open_write` | Lukkes af F0b.4 |
+| `identity.verify_production_certificate` | `daemon_write` |  |
 
 ## `fleetd` — `/run/eira/fleetd.sock`
 

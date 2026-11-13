@@ -30,6 +30,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   Basis-ISO'ens cache gemmes kun, når ISO'en skifter.
 
 ### Gate Kernel og sikkerhed
+- F0b.4: `identity.verify_production_certificate` er kun for daemons; desktop-brugeren kan ikke længere få `identityd` til
+  at skrive audit-hændelser. Der er ingen kendte IPC-skrivehuller tilbage (`open_write` er tom).
+- F0b.3: sikkerhedsmodellen er skrevet ned (`docs/security/SIKKERHEDSMODEL.md`) og afløser `socket-permissions.md`.
 - F1b, første hele vej: IntentBar → `eira-modeld` → `gate.propose` → samtykkeagenten → gatens egen status. Modellen
   forstår strømkommandoer og foreslår dem som EiraSystemAPI-handlinger; mangler en delegation, beder UI'et om den gennem
   agenten; afstår modellen, siger UI'et det ærligt. Strøm-menuen (manuel vej) findes kun i Builder Mode (ADR-0001).

@@ -28,9 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # Client-callable writes with no caller or proof check that are known and
 # planned. The list may only shrink: a method that is fixed must be removed
 # here, and a new open write fails the test.
-KNOWN_OPEN_WRITES = {
-    ("identityd", "identity.verify_production_certificate"): "F0b.4",
-}
+# Every client-callable write without a check, with the plan item closing it.
+# Empty since F0b.4: a new entry needs a plan item and a reason in the PR.
+KNOWN_OPEN_WRITES: dict[tuple[str, str], str] = {}
 
 
 @pytest.fixture(scope="module")
@@ -189,3 +189,30 @@ def test_a_valid_sync_batch_is_written_and_repeats_are_skipped(stated):
     assert stated.module.state_sync_push({"states": batch}) == {
         "status": "synced", "accepted": 2, "skipped": 0, "invalid": 0}
     assert stated.module.state_sync_push({"states": batch})["skipped"] == 2
+
+
+# --- identityd: F0b.4 -----------------------------------------------------------
+
+
+def test_the_desktop_user_cannot_make_identityd_write_audit_events():
+    """identity.verify_production_certificate audits every attempt; a client
+    could fill the audit chain with failed ones. Daemons only (F0b.4)."""
+    from app.daemons.identityd import IdentityDaemon, register_identity_handlers
+
+    events: list = []
+    daemon = IdentityDaemon(policies={}, trust_anchors=[],
+                            audit_sink=lambda event, details: events.append(event))
+    server = JsonRpcServer("identityd", "identityd")
+    register_identity_handlers(server, daemon)
+    line = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "identity.verify_production_certificate",
+                       "params": {"provider": "eudi_wallet", "certificate_chain": ["x"]}})
+
+    user = SimpleNamespace(uid=os.getuid() + 1, gid=0, pid=1, groups=frozenset())
+    reply = json.loads(server.handle_line(line, user))
+    assert reply["error"]["message"] == "E_ACCESS_DAEMON_ONLY"
+    assert events == []
+
+    # Another daemon (the service user) still gets an answer.
+    service = SimpleNamespace(uid=os.getuid(), gid=0, pid=1, groups=frozenset())
+    reply = json.loads(server.handle_line(line, service))
+    assert reply["error"]["message"] == "identity_provider_not_configured"

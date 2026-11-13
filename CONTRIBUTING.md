@@ -12,6 +12,7 @@ Gælder mennesker og AI-assistenter. Afløser den arkiverede [bidragyder-prompt]
 4. [`specs/README.md`](specs/README.md): kontrakterne (Gate Kernel, EDP, samtykkeagent, rettigheder, identitet, samtale, AI-interface).
 5. [`docs/decisions/`](docs/decisions/): ADR'erne. En ADR, ejeren har accepteret, ændres kun af ejeren.
 6. [`docs/reviews/GENNEMGANG-2026-11-12.md`](docs/reviews/GENNEMGANG-2026-11-12.md): kendte fejl og svagheder (fundregistret).
+7. [`docs/security/SIKKERHEDSMODEL.md`](docs/security/SIKKERHEDSMODEL.md): hvem vi beskytter mod, grænserne og adgangsklasserne.
 
 ## 2. Hårde regler
 

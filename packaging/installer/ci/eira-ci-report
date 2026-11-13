@@ -457,6 +457,23 @@ for method in ("state.append", "state.sync_push", "audit.append"):
     if reply.get("error", {}).get("message") != "E_ACCESS_DAEMON_ONLY":
         sys.exit(f"{method}: {reply}")'
 check user-cannot-write-stated runuser -u "$USER_NAME" -- python3 -c "$STATED_WRITE_PY"
+# F0b.4: identityd audits every certificate verification, so only daemons may
+# ask; the user's attempt is refused before the handler (and before an audit).
+IDENTITY_AUDIT_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(10)
+s.connect("/run/eira/identityd.sock")
+params = {"provider": "eudi_wallet", "certificate_chain": ["forged"], "_eira": {"ipc_token": token}}
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "identity.verify_production_certificate",
+                       "params": params}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+if reply.get("error", {}).get("message") != "E_ACCESS_DAEMON_ONLY":
+    sys.exit(f"verify_production_certificate: {reply}")'
+check user-cannot-make-identityd-audit runuser -u "$USER_NAME" -- python3 -c "$IDENTITY_AUDIT_PY"
 # F1.5 (fundregister S-4/S-5): the mode belongs to the OS user on the socket,
 # so the desktop user can read and set it with no session; a claimed actor
 # gets neither a session nor a name.

@@ -16,7 +16,7 @@ from app.auth.production_cert_verifier import (
     ProductionCertificateError,
     ProductionCertificateVerifier,
 )
-from app.ipc.access import caller, open_write, read, refused
+from app.ipc.access import caller, daemon_write, read, refused
 from app.ipc.auth import PEER_KEY
 from app.ipc.client import IpcClient
 from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
@@ -239,7 +239,10 @@ def register_identity_handlers(
     # Writes an audit event per attempt; any client can trigger one.
     server.register(
         "identity.verify_production_certificate",
-        open_write(service.verify_production_certificate, "F0b.4"),
+        # Every attempt writes an audit event. Only another EiraOS daemon may
+        # ask (UDVIKLINGSPLAN F0b.4): the desktop user cannot fill the audit
+        # chain with failed attempts. No client calls it today.
+        daemon_write(service.verify_production_certificate),
     )
     server.register(
         "health",
