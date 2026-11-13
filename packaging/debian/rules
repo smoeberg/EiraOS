@@ -13,11 +13,16 @@ override_dh_auto_build:
 	# EIRA-CONSENT-AGENT: the only process the gate takes decisions from.
 	cargo build --release -p eira-consent-agent
 
+# Debian's nocheck skips the suites (CI runs them in a parallel job on 26.04).
 override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	python3 -m venv debian/.test-venv
 	debian/.test-venv/bin/python -m pip install -r requirements-dev.txt alembic
 	PYTHONPATH=. debian/.test-venv/bin/python -m pytest -q tests
 	npm test --prefix ui
+else
+	@echo "nocheck: the test suites run in CI (tests-on-ubuntu-26-04)"
+endif
 
 override_dh_auto_install:
 	install -d debian/eira-os-core/usr/lib/eira-os
