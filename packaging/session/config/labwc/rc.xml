@@ -2,6 +2,12 @@
 <labwc_config>
   <core>
     <decoration>no</decoration>
+    <!--
+      EIRA-CONSENT-AGENT R-6.2: samtykkeagenten (setgid eira-consent) ligger
+      over alle andre vinduer og har fokus (patch i eira-labwc). Gruppen har
+      ingen medlemmer; en gruppe, labwc selv er i, giver ingen tillid.
+    -->
+    <trustedGroup>eira-consent</trustedGroup>
   </core>
   <!--
     EIRA-CONSENT-AGENT R-6.1: ingen klient får privilegerede protokoller

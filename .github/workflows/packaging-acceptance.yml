@@ -104,7 +104,7 @@ jobs:
       - name: Install build dependencies
         run: |
           # Retries, then a mirror outside ubuntu.com (scripts/ci/apt-install.sh).
-          scripts/ci/apt-install.sh $(cat packaging/eira-labwc/build-deps) wayland-utils
+          scripts/ci/apt-install.sh $(cat packaging/eira-labwc/build-deps) wayland-utils grim
 
       - name: Build eira-labwc
         run: packaging/eira-labwc/build.sh --output-dir dist
@@ -125,6 +125,13 @@ jobs:
             echo "verify-globals passed a config that allows virtual pointer"; exit 1
           fi
           dpkg-deb --field dist/eira-labwc.deb Package Version Depends Conflicts Replaces
+
+      - name: Verify the consent agent's window stays on top with focus (R-6.2)
+        # As root: the test agent runs with the trusted group as its GID.
+        # The script's own control runs prove it can fail.
+        run: |
+          packaging/eira-labwc/verify-trusted.sh /tmp/x/usr/bin/labwc
+          grep -qx 0001-trusted-group-stacking-and-focus.patch /tmp/x/usr/share/eira-labwc/patches
 
       - name: Upload eira-labwc package
         uses: actions/upload-artifact@v4

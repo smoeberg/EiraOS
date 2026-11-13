@@ -1,6 +1,6 @@
 # EIRA Consent Agent 0.3 — betroet vej til samtykke mod programmer, der kører som brugeren
 
-**Status:** Accepteret af ejeren 11. november 2026 og normativ. Implementeret undtagen R-6.2 (labwc-patch); se §0.
+**Status:** Accepteret af ejeren 11. november 2026 og normativ. Implementeret; R-6.2 (labwc-patch) siden 13. november 2026. Se §0.
 **Version:** 0.3 (11. november 2026: implementering, nøglen bindes til logind-sessionen, delegation går også gennem agenten, §0, §5.3, §5.5, §12). 0.2: beslutninger om compositor, toolkit, FIDO2 og `hidepid`, §6, §10.
 **Lukker:** "Rest" under GATE-KERNEL bilag A pkt. 1, *Betroet vej til samtykke*
 **Erstatter:** Agent 3-opgaven "LD_PRELOAD Consent Path" i `docs/AGENT_WORK_ASSIGNMENTS.md` (se §2)
@@ -15,7 +15,7 @@ Intet i denne kontrakt er en opnået sikkerhedsegenskab. Alle punkter nedenfor e
 | Egenskab | Krav | Implementeret | Verificeret |
 |---|---|---|---|
 | Ingen privilegerede Wayland-protokoller til klienter | R-6.1 | `eira-labwc` + tom `<privilegedInterfaces>` (#163) | Kun lokalt (headless, mutationstjek). Ikke i VM-session |
-| Intet vindue over agenten; agenten har fokus | R-6.2 | **Nej** (labwc-patch mangler) | Nej |
+| Intet vindue over agenten; agenten har fokus | R-6.2 | Ja: `<trustedGroup>`-patchen i `eira-labwc` (`packaging/eira-labwc/patches/0001-…`), `rc.xml` stoler på `eira-consent`, og sessionen starter ikke uden patchen | Headless i CI med kontrol- og fail-closed-kørsler og mutationstjek (`verify-trusted.sh`); VM: pakke og konfiguration (`labwc-trusts-consent-group`). Ikke i VM-session |
 | Beslutning tidligst efter 750 ms fokus | R-6.3 | Ja (`ui.rs`, `FocusGate`; fokus = compositorens `activated`) | Enhedstest; vinduet tegnet mod headless weston i CI. Ikke i VM-session |
 | setgid-installation `root:eira-consent 2755` og gruppe uden medlemmer/adgangskode, fail-closed ved start | §3 | Ja (`dpkg-statoverride`, `addgroup --system`, `gpasswd -R`; `app/gate/consent_path.py`) | Test pr. betingelse med mutationstjek; VM (`consent-agent-setgid`, `consent-group-*`) |
 | Effektiv GID via `SO_PEERCRED` identificerer agenten | §3 pkt. 3 | Ja (`Caller.gid`, `consent_agent`) | Test; VM: gaten afviser alle andre (`consent-path-enforced`) |
@@ -26,7 +26,7 @@ Intet i denne kontrakt er en opnået sikkerhedsegenskab. Alle punkter nedenfor e
 | Samtykkenøglen skrives aldrig til disk og er ugyldig efter genstart | §5.3 | Ja, med tmpfs og boot-id (#178) | Kun enhedstests. Ikke i VM |
 | Agentens miljø-, fd- og argumentkrav | R-5.1–R-5.5 | Ja (`hygiene.rs`; binæren linker kun libc) | Enhedstest; VM og CI: `ldd` (`consent-agent-links-only-libc`) |
 
-**Det, der står tilbage:** R-6.2 (labwc-patchen) og verifikation i en rigtig grafisk session (O-6, R-6.1–R-6.3). Indtil da kan et program, der kører som brugeren, ikke få fat i samtykkenøglen eller samtykke selv, men det kan i princippet lægge et almindeligt vindue over agentens og narre brugerens klik (clickjacking); R-6.3 dæmper det. ADR-0003's sætning (§8) gælder først, når R-6.2 er lavet.
+**Det, der står tilbage:** verifikation i en rigtig grafisk session (O-6, R-6.1–R-6.3). R-6.2 er lavet (patchen beskrevet i §6.1) og afprøvet mod en headless labwc, hvor en fuldskærmsklient hverken kan dække agenten eller tage fokus. ADR-0003's sætning (§8) gælder først, når R-6.1–R-6.3 også er verificeret i en grafisk session (F0.2).
 
 ### 0.1 Verifikationskrav (testplanen)
 
@@ -172,6 +172,7 @@ De to sidste kan kun compositoren lukke. Det er **krav for udgivelse**:
 - **Version:** labwc ≥ 0.20.3 med den wlroots 0.20, den kræver. `<privilegedInterfaces>` findes fra 0.20.0, men logikken ("første `<privilegedInterfaces>` slår alle fra, `<allow>` tilføjer") blev først rigtig i 0.20.3. `eira-labwc` erstatter (`Conflicts`/`Replaces`) Ubuntus `labwc`, og `eira-session` kalder den med fuld sti.
 - **R-6.1 med konfiguration alene:** Den leverede `rc.xml` indeholder en tom `<privilegedInterfaces/>`. Den skjuler alle privilegerede protokoller for alle klienter. Ingen EiraOS-klient har brug for dem: appen er et fullscreen-vindue (`tauri.conf.json`), og agenten er et almindeligt `xdg_toplevel`. `<shell>layer-shell</shell>` i dagens `rc.xml` er ikke en labwc-indstilling og fjernes.
 - **R-6.2 med en lille patch:** labwc kender hver klients effektive GID gennem `wl_client_get_credentials` (SO_PEERCRED på klientens forbindelse). Patchen gør tre ting for klienter med `gid = eira-consent` og kun for dem: deres vinduer lægges i et eget scenetræ over alle andre lag, inklusive fullscreen og `overlay`; de får tastaturfokus, når de vises; og andre klienter kan ikke aktivere sig selv eller tage fokus, så længe et sådant vindue findes. GID'en angives i `rc.xml` (fx `<core><trustedGroup>eira-consent</trustedGroup></core>`), så patchen er generel og kan foreslås upstream. Indtil den er accepteret, vedligeholder EiraOS den selv. Patchen ligger i `packaging/eira-labwc/patches/` med en test pr. punkt.
+- **Som bygget (13. november 2026, `patches/0001-trusted-group-stacking-and-focus.patch`):** ud over de tre punkter lukker patchen fire andre veje til at dække agenten eller tage dens input: en klients eget markørbillede (tegnes over alle vinduer og kan være vilkårligt stort) afvises, mens agenten vises; træk-og-slip kan ikke startes; input-grabs (fx en xdg_popup-grab med et gammelt serienummer) afsluttes; og agentens vindue kan ikke minimeres. Kun session-låsen ligger over agenten. En gruppe, der ikke findes, eller som labwc selv kører i, giver ingen tillid (fail closed, logges). Begrænsninger: X11-vinduer er aldrig betroede; et vindue beholder sin plads, hvis `<trustedGroup>` ændres ved genindlæsning; agenten skal ikke bruge popups med grab (de afsluttes). Afprøvet af `packaging/eira-labwc/verify-trusted.sh`: en headless labwc med en "agent" (testgruppen som effektiv GID) og en fuldskærmsklient i begge rækkefølger, plus kontrolkørsler uden `<trustedGroup>` og med labwc's egen gruppe, hvor fuldskærmsklienten skal vinde. Patchen foreslås upstream (UDVIKLINGSPLAN F0.1).
 - **Konsekvens for Builder Mode (P4):** Et panel kræver layer-shell. Det må kun gives tilbage gennem en mekanisme, der begrænser protokollen til en bestemt klient (også efter GID), aldrig ved at tilføje `<allow>zwlr_layer_shell_v1</allow>` globalt.
 
 ## 7. Fejlkoder

@@ -91,3 +91,51 @@ def test_verify_globals_covers_the_contract_list() -> None:
         "ext_foreign_toplevel_list_v1",
     ):
         assert iface in script, iface
+
+
+# --- R-6.2: the consent agent's window on top, with focus ---------------------
+
+PATCH = "0001-trusted-group-stacking-and-focus.patch"
+
+
+def test_rc_xml_trusts_only_the_consent_group() -> None:
+    root = ET.parse(REPO / "packaging/session/config/labwc/rc.xml").getroot()
+    groups = [g.text for g in root.findall("core/trustedGroup")]
+    assert groups == ["eira-consent"]
+
+
+def test_trusted_group_patch_is_applied_and_targets_the_pinned_labwc() -> None:
+    series = [
+        line for line in (PKG / "patches/series").read_text().splitlines()
+        if line and not line.startswith("#")
+    ]
+    assert series == [PATCH]
+    patch = (PKG / "patches" / PATCH).read_text()
+    assert _sources()["LABWC_COMMIT"] in patch
+    # Each part of R-6.2 has its hook (EIRA-CONSENT-AGENT §6.1).
+    for hook in (
+        "+++ b/src/trusted.c",        # stacking, grabs, cursor
+        "trusted_view_parent(view,",  # trusted windows in their own tree
+        "trusted_blocks_view(view)",  # no focus/raise/activation past it
+        "surface = trusted_view->surface;",  # keyboard focus stays on it
+        "trusted_blocks_cursor(",     # no client cursor image above it
+        "drag refused while a trusted window is shown",
+        "not minimizing trusted window",
+        "is a group labwc runs in",   # fail closed
+    ):
+        assert hook in patch, hook
+
+
+def test_package_and_session_require_the_patch() -> None:
+    assert "/usr/share/eira-labwc/patches" in (PKG / "build.sh").read_text()
+    session = (REPO / "packaging/session/eira-session").read_text()
+    assert "LABWC_PATCHES=/usr/share/eira-labwc/patches\n" in session
+    assert f"grep -qx '{PATCH}' \"$LABWC_PATCHES\"" in session
+
+
+def test_ci_runs_the_behaviour_test_with_controls() -> None:
+    ci = (REPO / ".github/workflows/packaging-acceptance.yml").read_text()
+    assert "packaging/eira-labwc/verify-trusted.sh /tmp/x/usr/bin/labwc" in ci
+    script = (PKG / "verify-trusted.sh").read_text()
+    for control in ("cfg-none", "cfg-own-group", "agent-first", "attacker-first"):
+        assert control in script, control

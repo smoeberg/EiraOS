@@ -86,10 +86,17 @@ fi
 # en ældre labwc ignorerer blokken og giver alle klienter virtual pointer,
 # layer-shell og screencopy. Derfor starter sessionen ikke med en ældre labwc.
 LABWC_MIN=0.20.3
+LABWC_PATCHES=/usr/share/eira-labwc/patches
 if [ "$WM" = "labwc" ]; then
     have=$(labwc --version 2>/dev/null | sed -n 's/^labwc \([0-9][0-9.]*\).*/\1/p' | head -n 1)
     if [ -z "$have" ] || [ "$(printf '%s\n%s\n' "$LABWC_MIN" "$have" | sort -V | head -n 1)" != "$LABWC_MIN" ]; then
         echo "eira-session: labwc ${have:-ukendt} er for gammel; EiraOS kræver >= $LABWC_MIN (pakken eira-labwc)" >&2
+        exit 80
+    fi
+    # R-6.2: kun eira-labwc med <trustedGroup>-patchen lægger samtykkeagenten
+    # øverst og giver den fokus. Uden den kan et vindue dække agenten.
+    if ! grep -qx '0001-trusted-group-stacking-and-focus.patch' "$LABWC_PATCHES" 2>/dev/null; then
+        echo "eira-session: labwc mangler <trustedGroup>-patchen (R-6.2); installer eira-labwc" >&2
         exit 80
     fi
 fi
