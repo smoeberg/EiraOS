@@ -22,7 +22,7 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 | Desktop | Explorer og Builder Mode, rigtig terminal, strøm via EiraSystemAPI; login gennem GDM |
 | Pakning | `.deb`, `eira-labwc`, installer-ISO på Ubuntu 26.04, offline VM-test |
 
-**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået).
+**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået), fordelt beregning mellem personens egne enheder (ADR-0010, foreslået; fremtidig funktion, der ikke må lukkes ude af F2, Fleet-attestation og Web App Manager-manifestet).
 
 **Ikke besluttet:** økonomi. Det eneste af personens kerneområder uden en ADR (§3, spor P).
 
@@ -250,3 +250,4 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | Grundspørgsmålene til ADR-0008 (økonomi) | P.3 |
 | Accept af ADR-0009 (datalagets byggesten; NextGraph som forlæg, ikke afhængighed) og O-3 (RDF for graphd) | F2.6 |
 | Hvem der deltager i brugertests | U.5–U.6 |
+| Accept af ADR-0010 (fordelt beregning) og O-1: inference på egne enheder i samme kontekst som ændring af AI-INTERFACE §176 | F2 (enhedslisten), Fleet-attestation, F5 (manifest) |
