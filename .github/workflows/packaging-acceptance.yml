@@ -194,12 +194,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      # The runner has ~90 GB free (#191: 91 GB before anything ran), enough
-      # for the base ISO, both ISOs, the offline repo and the VM disk. Clearing
-      # preinstalled toolchains cost 2.5 minutes and is not needed; the free
-      # space is logged so a smaller runner shows up here first.
-      - name: Disk space
-        run: df -h /
+      # The job peaks at ~30 GB (base ISO, two ISOs, offline repo). Runners
+      # differ: #191 had 91 GB free, #208 (ubuntu-26.04 image, 72 GB disk) had
+      # 16 GB and xorriso ran out of space. Clear the preinstalled toolchains
+      # this job never uses (~2.5 min) only when there is less than 40 GB free.
+      - name: Make sure there is disk space
+        run: |
+          df -h /
+          free_gb=$(df --output=avail -BG / | tail -n 1 | tr -dc '0-9')
+          if [ "$free_gb" -lt 40 ]; then
+            echo "Only ${free_gb} GB free: removing unused toolchains"
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+              /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift \
+              /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft
+            df -h /
+          fi
+          free_gb=$(df --output=avail -BG / | tail -n 1 | tr -dc '0-9')
+          if [ "$free_gb" -lt 30 ]; then
+            echo "::error::Only ${free_gb} GB free after cleanup; the job needs about 30 GB"
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4
