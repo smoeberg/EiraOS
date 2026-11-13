@@ -9,6 +9,12 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
   `tools/eira-context-export/`, som læser et hjem uden EiraOS; testvektorer; B-1, B-2 og B-3 verificeret på N1 med 16
   mutanter (`scripts/check-mutants.sh`). Kontrakten har fået præciseringer i §6.6, og testplanen har et nyt fund om
   enhedslisten.
+- F2.2: kontekst-hjem på S3 og WebDAV (`app/context/remote.py`) med opret-hvis-fraværende (`If-None-Match: *`). Et hjem
+  prøves ved tilknytning og afvises med `E_CONTEXT_HOME_UNSUPPORTED`, hvis det overskriver. En manifestkollision afvises
+  og auditeres. Nyt CI-job `context-home` kører H-1 mod MinIO, Apache `mod_dav`, moto og WsgiDAV; mutanterne er flyttet
+  dertil (20 i alt). Testplanens fund 6: ingen af de testede WebDAV-servere holder H-1 under samtidige uploads.
+- ADR-0009 (forslag): datalagets byggesten. NextGraph bruges som forlæg, ikke som afhængighed; CRDT via Automerge eller
+  Yrs bag en grænseflade.
 
 ### Model og AI-grænseflade
 - AI-INTERFACE 1.0 er afstemt mod runtime efter #190: `eira-modeld` ejer adapterkaldet, samtalekontekst kommer fra appen/EIRA-CONVERSATION (ikke `contextd`), forespørgsler uden samtale begrænses til systemhandlinger, og EDP/EiraSystemAPI beskrives som adskilte handlingsfamilier bag samme Gate Kernel. Den aktive adapter er fortsat regelbaseret; ingen sprogmodel eller modelruntime er tilføjet.
@@ -28,8 +34,13 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   ISO'er uploades uden ny komprimering, VM-disken bruger `cache=unsafe`, Rust-bygget har sccache, og testsuiterne
   på Ubuntu 26.04's Python og Node kører i et parallelt job i stedet for inde i pakkebygget (`DEB_BUILD_OPTIONS=nocheck`).
   Basis-ISO'ens cache gemmes kun, når ISO'en skifter.
+- Packaging Acceptance rydder disk, når runneren har under 40 GB fri, og fejler tydeligt under 30 GB (ISO-bygget løb
+  tør for plads på en runner med 16 GB fri).
 
 ### Gate Kernel og sikkerhed
+- Gate: sessioner uden udløbstidspunkt er ikke længere gyldige (fail-closed).
+- Fleet e2ee: hver retning i et par har sin egen nøgle, nonces huskes i et glidende vindue (konstant hukommelse), og en
+  genafspillet envelope afvises (`ReplayDetectedError`); `fleetd.push_blocks` tæller den som sprunget over.
 - F0b.4: `identity.verify_production_certificate` er kun for daemons; desktop-brugeren kan ikke længere få `identityd` til
   at skrive audit-hændelser. Der er ingen kendte IPC-skrivehuller tilbage (`open_write` er tom).
 - F0b.3: sikkerhedsmodellen er skrevet ned (`docs/security/SIKKERHEDSMODEL.md`) og afløser `socket-permissions.md`.
