@@ -177,7 +177,7 @@ impl power::PowerAdapter for UnavailablePower {
 
 #[cfg(test)]
 mod tests {
-    use super::power::{mock_power, Availability};
+    use super::power::{Availability, mock_power};
     use super::*;
     use serde_json::json;
 

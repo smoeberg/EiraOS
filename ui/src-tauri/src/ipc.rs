@@ -115,10 +115,12 @@ async fn exchange_with_retry(
                 ));
             }
             Ok(Err(error)) => {
-                if attempt + 1 >= IPC_MAX_ATTEMPTS || !retryable_connect_error(&error) {
-                    return Err(error);
-                }
-                tokio::time::sleep(Duration::from_millis(IPC_RETRY_BACKOFF_MS[attempt])).await;
+                // There is one backoff fewer than attempts, so the final attempt has none.
+                let backoff_ms = match IPC_RETRY_BACKOFF_MS.get(attempt) {
+                    Some(ms) if retryable_connect_error(&error) => *ms,
+                    _ => return Err(error),
+                };
+                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
             }
         }
     }
@@ -661,6 +663,10 @@ mod tests {
         }
 
         #[tokio::test]
+        // The tests share process-wide environment variables, so ENV_LOCK is a plain
+        // std Mutex held for the whole test on purpose; #[tokio::test] runs on a
+        // current-thread runtime, so holding it across .await cannot deadlock.
+        #[allow(clippy::await_holding_lock)]
         async fn send_ipc_request_roundtrip_via_env_socket_dir() {
             let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
@@ -721,6 +727,10 @@ mod tests {
         }
 
         #[tokio::test]
+        // The tests share process-wide environment variables, so ENV_LOCK is a plain
+        // std Mutex held for the whole test on purpose; #[tokio::test] runs on a
+        // current-thread runtime, so holding it across .await cannot deadlock.
+        #[allow(clippy::await_holding_lock)]
         async fn send_ipc_request_timeout_is_fail_closed() {
             let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
