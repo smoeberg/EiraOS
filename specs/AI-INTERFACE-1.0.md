@@ -114,7 +114,7 @@ propose_action(
 **Regler:**
 - Modellen må kun foreslå handlinger fra `allowed_actions`. Forslag uden for listen skal afvises af modellen selv — og af gaten, hvis den alligevel kommer igennem.
 - Modellen må ikke sætte `transport`, `veritas` eller `temporal.supersedes`.
-- Modellen må ikke kende til executor eller system-API'er.
+- Modellen må ikke kende til executor eller system-API'er. Den må foreslå en EiraSystemAPI-handling ved dens type (fx `system:power.request_action`) som kandidat; gaten fastlægger reversibilitet og rettigheder, og modellen kalder aldrig systemet selv ([ADR-0002](../docs/decisions/ADR-0002-gate-to-handlingsfamilier.md)). Uden en samtale er kun systemhandlinger kandidater.
 - Hvis ingen handling matcher, returneres `Abstain` — ikke en gættet handling.
 
 ---

@@ -195,6 +195,32 @@ reply = json.loads(s.makefile().readline())
 gate = reply["result"]["gate"]
 assert gate["decision"] == "REJECT", reply
 PY
+# F1b: the IntentBar's request, as the desktop user and without a
+# conversation: the packaged model understands a power command and proposes
+# it to the gate as an EiraSystemAPI action; without an authenticated
+# session the gate refuses it and nothing runs. (The whole path with consent
+# needs an installed login, F0.3, and a graphical session, F0.2.)
+INTENT_POWER_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+def ask(text):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(15)
+    s.connect("/run/eira-model/modeld.sock")
+    params = {"session_id": "forged", "text": text, "_eira": {"ipc_token": token}}
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "model.prepare", "params": params}) + "\n").encode())
+    return json.loads(s.makefile().readline())["result"]
+power = ask("sluk computeren")
+if power.get("action_type") != "system:power.request_action" or power["gate"]["decision"] != "REJECT":
+    sys.exit(f"power: {power}")
+if power["gate"].get("state") == "executed":
+    sys.exit(f"power ran: {power}")
+other = ask("sluk lyset")
+if other.get("abstain") != "ambiguous_input" or "gate" in other:
+    sys.exit(f"abstain: {other}")'
+check intent-power-reaches-gate-and-is-refused runuser -u "$USER_NAME" -- python3 -c "$INTENT_POWER_PY"
 # EIRA-CONSENT-AGENT V-2: the setgid chain on the installed package.
 AGENT=/usr/lib/eira-os/eira-consent-agent
 check consent-agent-setgid sh -c '[ "$(stat -c "%U:%G %a" '"$AGENT"')" = "root:eira-consent 2755" ]'

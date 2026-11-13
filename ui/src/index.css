@@ -550,6 +550,53 @@ button {
   color: #ff9d9d;
 }
 
+.intent-waiting {
+  color: #f2cc60;
+}
+
+.intent-bar .intent-allow {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: #e6edf3;
+}
+
+/* Strøm: the manual path to power (F1b). */
+.power-menu {
+  position: relative;
+}
+
+.power-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.power-menu-panel button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: #e6edf3;
+  font: inherit;
+  padding: 6px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.power-menu-panel p {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 .header-actions {
   display: flex;
   align-items: center;

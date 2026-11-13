@@ -33,8 +33,21 @@ export function propose(
   });
 }
 
-/** Call only after the user has seen `proposal.rendering.text` and said yes. */
+type TestDelegation = (proposal: DelegationProposal) => Promise<unknown>;
+
+declare global {
+  interface Window {
+    __EIRA_TEST_DELEGATION__?: TestDelegation;
+  }
+}
+
+/**
+ * Asks the Rust core to have the person decide. On an installed system the
+ * consent agent shows `proposal.rendering.text` in its own window; this
+ * webview does not.
+ */
 export function approve<T = unknown>(proposal: DelegationProposal): Promise<T> {
+  if (window.__EIRA_TEST_DELEGATION__) return window.__EIRA_TEST_DELEGATION__(proposal) as Promise<T>;
   return invoke<T>("delegation_create", {
     proposalId: proposal.proposal_id,
     contentHash: proposal.content_hash,

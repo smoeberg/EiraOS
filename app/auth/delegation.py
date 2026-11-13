@@ -280,15 +280,28 @@ def _sha256(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+# What a target means, in the words the user approves. A target without an
+# entry is shown as it is: never a friendlier guess at what it covers.
+TARGET_WORDS = {
+    "intent:system:power.request_action": "at slukke, genstarte eller sætte computeren i dvale",
+    "intent:utterance": "at sende beskeder",
+    "intent:commitment_proposed": "at foreslå aftaler",
+    "intent:*": "alle slags handlinger",
+}
+
+
 def render(request: DelegationCreateRequest, expires_at: datetime) -> str:
-    """The exact text the user approves (Danish, like the gate's renderer)."""
-    actions = ", ".join(sorted(request.scope.actions))
-    targets = ", ".join(sorted(request.scope.targets))
+    """The exact text the user approves (Danish, like the gate's renderer).
+    It names the model's identity and every target, so the text says what the
+    delegation covers and nothing else."""
+    targets = sorted(request.scope.targets)
+    what = " og ".join(TARGET_WORDS.get(t, t) for t in targets)
+    raw = ", ".join(targets)
     until = expires_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return (
-        f"Modellen {request.delegee_id} må forberede ({actions}) handlinger på {targets} "
-        f"på dine vegne indtil {until}. Du skal stadig selv give samtykke til og bekræfte "
-        "hver handling. Du kan trække det tilbage når som helst."
+        f"Eira ({request.delegee_id}) må forberede forslag om {what} ({raw}) "
+        f"på dine vegne indtil {until}. Du skal stadig selv give samtykke til hvert forslag, "
+        "før noget sker. Du kan trække tilladelsen tilbage når som helst."
     )
 
 
