@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="EIRA HTTP Dev Bridge",
     description="REST → IPC bridge for React UI during development. Not for production.",
-    version="0.3.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 

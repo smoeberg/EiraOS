@@ -57,6 +57,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Clippy med `-D warnings` på alle Rust-crates i CI, også `ui/src-tauri` og `eira-consent-agent`, og
   `cargo fmt --check` på `ui/src-tauri`; IPC-broens genforsøg indekserer ikke længere med løkkevariablen
   (udviklingsplan F1.1).
+- Én version for hele EiraOS i `VERSION` (0.8.0, næste efter det taggede 0.7.0): pakken, Rust-workspacet, Tauri-appen,
+  UI'et og udviklingsbroen bruger den, og `tests/test_version.py` fejler, hvis de afviger. Pakken er `0.8.0-1` til
+  Ubuntu 26.04 (`resolute`) i stedet for `1.0~rc1` til `noble`; `build_deb.sh` læser versionen fra changelog'en,
+  og installer-ISO'et hedder `EiraOS-<version>-amd64.iso` i stedet for `EiraOS-1.0-RC1-amd64.iso` (udviklingsplan F1.3).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
