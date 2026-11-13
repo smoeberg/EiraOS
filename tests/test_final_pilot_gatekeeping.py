@@ -11,7 +11,7 @@ def test_all_ten_sprint_deliverable_boundaries_exist() -> None:
     required = {
         "sprint_1_2": ["app/core/state.py", "app/daemons/stated.py", "app/ipc/transport.py"],
         "sprint_3_4": ["app/veritas/layer2_qeaa.py", "app/core/cel_evaluator.py"],
-        "sprint_5_6": ["app/fleet/e2ee.py", "crates/eira-core/src/ffi.rs", "android/app/build.gradle.kts"],
+        "sprint_5_6": ["app/fleet/e2ee.py", "crates/eira-core/src/ffi.rs", "docs/archive/android/app/build.gradle.kts"],
         "sprint_7_8": ["ui/src/components/SpatialCanvas.tsx", "crates/eira-ipc/src/shm.rs"],
         "sprint_9": ["packaging/debian/control", "scripts/build_iso.sh"],
         "sprint_10": ["app/auth/production_cert_verifier.py", "scripts/release_rc1.sh"],
