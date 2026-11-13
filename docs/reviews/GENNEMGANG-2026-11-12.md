@@ -38,7 +38,7 @@
 | S-18 | **`walletd`, `presenced`, `contextd` mangler socket og handlers** | G2 | **Afvist som beskrevet**: de registreres af `runner.py`, men er bevidst ikke pakket. Rigtigt er, at de skal væk | `app/daemons/runner.py:16-27`, `packaging/daemon-policy.json` | — | F1.2 |
 | S-19 | **Step-up afviser MitID Erhverv** | G4 | **Bekræftet**, bevidst fail-closed, indtil en betroet udbyder er tilsluttet | `app/daemons/identityd.py:40` | Mellem (funktion mangler) | F4.3 |
 | S-20 | **Fleet-interoperabilitet er ikke bevist** mod `eira-fleet-control` | G4 | **Bekræftet**: testvektorerne ligger her, men intet afprøver den anden side | `tests/vectors/rights-set/` | Mellem | F1.9 |
-| S-21 | **To veje til databaseskemaet:** Alembic og `init_db()` med `ALTER TABLE` ved opstart | G5 | **Bekræftet** | `alembic/versions/001_initial_schema.py`, `app/session_store.py:38-95` | Lav | F1.10 |
+| S-21 | **To veje til databaseskemaet:** Alembic og `init_db()` med `ALTER TABLE` ved opstart | G5 | **Rettet** i F1.10; var *Bekræftet* | `alembic/versions/001_initial_schema.py`, `app/session_store.py:38-95` | Lav | F1.10 |
 | S-22 | **Forældet Pydantic-API** `req.dict()` | G5 | **Bekræftet**, kun i udviklingsbroen | `app/routers/veritas.py:27, 32, 38` | Lav | F1.6 |
 | S-23 | **Gate-politik: samtidig aktivering og rollback, "tvetydig politik → afvis"** bør dækkes bedre | G2 | **Uafklaret**: gaten afviser en ændret politik siden forslaget (`E_POLICY`, GATE-KERNEL §8), men samtidig aktivering er ikke testet særskilt | `tests/test_gate_kernel.py` | Lav | F1.7 |
 
@@ -57,7 +57,7 @@
 | D-9 | **`android/` er udokumenteret** og uden CI | G1, G5 | **Bekræftet** | F1.8 |
 | D-10 | **`ui/veritas-hud/index.html`** er udokumenteret | G5 | **Bekræftet**: en løs fil, som intet bruger (Veritas-HUD'en er `ui/src/components/VeritasHUD.tsx`) | F1.6 |
 | D-11 | **Ingen `CONTRIBUTING.md`**, ingen PR- og issue-skabeloner; ingen guide til "ny beskyttet handling fra ende til anden" | G2, G5 | **Bekræftet** | Plan §4.5 |
-| D-12 | **Migrationsstrategi udokumenteret** | G5 | **Bekræftet** (S-21) | F1.10 |
+| D-12 | **Migrationsstrategi udokumenteret** | G5 | **Rettet** i F1.10; var *Bekræftet* (S-21) | F1.10 |
 | D-13 | Testplanens CI-job `context-home` findes ikke | G4 | **Forventet**: kommer med F2.2 | F2.2 |
 | D-14 | 139 brudte links | G3 | **Delvist**: i arkivet, som er markeret som ikke-normativt; ingen i de aktive dokumenter efter #185 | — |
 | D-15 | Kontrakter står som udkast (GATE-KERNEL, AI-INTERFACE, EDP, EIRA-IDENTITY) | G4 | **Ejerens beslutning** | Planens §6 |

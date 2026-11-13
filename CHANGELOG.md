@@ -76,6 +76,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   som `.deb`-pakken og `scripts/deploy_systemd.sh` installerer.
 - README: rettede stier og links, opstartsvejledning fra repoets rod, korrekte socket-navne og en
   statustabel over alle ni daemons i stedet for de modstridende tal (6/7).
+- Én vej til databaseskemaet: Alembic er fjernet (det kendte to af omkring tredive tabeller, kørte aldrig på en
+  installeret maskine og gav i CI `audit_events` en anden form). Hvert modul opretter og opgraderer sine egne tabeller
+  additivt; reglerne står i `docs/reference/databaseskema.md`, og `tests/test_schema_one_path.py` tjekker, at
+  initialiseringen er idempotent og opgraderer en gammel database (udviklingsplan F1.10).
 
 ## [0.7.0] — released 2026-10-20
 

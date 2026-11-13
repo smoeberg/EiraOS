@@ -91,7 +91,7 @@ Små PR'er, der kan tages i vilkårlig rækkefølge.
 | F1.7 | **Små rettelser fra gennemgangene:** gatens audit-lyttere logger, når Fleet-ankeret fejler, i stedet for at sluge fejlen (S-13); docstringen i `app/gate/consent_proof.py` beskriver agent-modellen (D-8); test af samtidig aktivering af politik (S-23) | Fundregistret |
 | F1.8 | **Android:** ejeren afgør, om `android/` er med i 1.0. Hvis ja: et CI-job, der bygger den og tester hash-paritet Kotlin↔Rust med de samme vektorer som Python (S-16), og en README (D-9). Hvis nej: arkivér | Telefonen er uden for EIRA-CONTEXT 1.0 (§13) |
 | F1.9 | **Fleet-interoperabilitet:** rettighedssættets testvektorer køres også i `eira-fleet-control`, og et fælles vektorsæt versioneres (S-20) | Endpointets kode alene beviser ikke, at Fleet signerer det samme |
-| F1.10 | **Én vej til databaseskemaet:** Alembic eller `init_db()`, ikke begge; skrevet ned (S-21, D-12) | Skema-drift |
+| F1.10 | **Én vej til databaseskemaet:** Alembic eller `init_db()`, ikke begge; skrevet ned (S-21, D-12) (leveret: `init_db()`; Alembic fjernet fra repo, CI og `debian/rules`; [databaseskema.md](reference/databaseskema.md)) | Skema-drift |
 
 ### F1b — Første hele vej: fra intention til udført handling
 
