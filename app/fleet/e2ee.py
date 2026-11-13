@@ -6,8 +6,9 @@ object) is encrypted.  Identifiers used for Merkle comparison — ``id``,
 header.
 
 Keys are derived with HKDF-SHA256 from the caller's master fleet-sync key and
-a per device-pair context.  Nonces are tracked so the same (key, nonce) pair is
-never reused for encryption.
+a per device-pair context.  Nonces are tracked in a bounded sliding window so
+the same (key, nonce) pair is not reused for encryption; with 96-bit random
+nonces a repeat inside the window is negligible.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import base64
 import json
 import os
 import threading
+from collections import deque
 from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
@@ -30,6 +32,7 @@ from app.core.state import State
 _NONCE_SIZE = 12
 _KEY_SIZE = 32
 _MAX_NONCE_RETRIES = 8
+_NONCE_WINDOW = 65536
 
 
 class PayloadIntegrityError(ValueError):
@@ -95,6 +98,7 @@ class StatePayloadEncryptor:
         ).derive(master_pairing_key)
         self._aead = ChaCha20Poly1305(self._key)
         self._used_nonces: set[bytes] = set()
+        self._nonce_order: deque[bytes] = deque()
         self._nonce_lock = threading.Lock()
 
     @staticmethod
@@ -116,21 +120,27 @@ class StatePayloadEncryptor:
             ),
         }
 
+    def _remember_nonce(self, nonce: bytes) -> None:
+        self._used_nonces.add(nonce)
+        self._nonce_order.append(nonce)
+        while len(self._nonce_order) > _NONCE_WINDOW:
+            self._used_nonces.discard(self._nonce_order.popleft())
+
     def _reserve_nonce(self, nonce: bytes | None = None) -> bytes:
-        """Return a unique nonce for this derived key; never reuse."""
+        """Return a nonce not used inside the sliding window."""
         with self._nonce_lock:
             if nonce is not None:
                 if len(nonce) != _NONCE_SIZE:
                     raise ValueError(f"nonce must be {_NONCE_SIZE} bytes")
                 if nonce in self._used_nonces:
                     raise NonceReuseError("nonce must not be reused with the same key")
-                self._used_nonces.add(nonce)
+                self._remember_nonce(nonce)
                 return nonce
 
             for _ in range(_MAX_NONCE_RETRIES):
                 candidate = os.urandom(_NONCE_SIZE)
                 if candidate not in self._used_nonces:
-                    self._used_nonces.add(candidate)
+                    self._remember_nonce(candidate)
                     return candidate
             raise NonceReuseError("unable to allocate a unique nonce")
 

@@ -7,6 +7,7 @@ import os
 
 import pytest
 
+import app.fleet.e2ee as e2ee
 from app.core.state import State
 from app.fleet.e2ee import (
     NonceReuseError,
@@ -132,6 +133,42 @@ def test_nonce_is_never_reused_with_same_key():
 
     with pytest.raises(NonceReuseError):
         enc.encrypt_state(_state(title="second"), nonce=fixed)
+
+
+def test_nonce_window_stays_bounded(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    for i in range(4):
+        enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12)
+    assert len(enc._used_nonces) == 4
+
+    enc.encrypt_state(_state(title="fifth"), nonce=bytes([4]) * 12)
+    assert len(enc._used_nonces) == 4
+    assert bytes([0]) * 12 not in enc._used_nonces
+
+
+def test_evicted_nonce_can_be_used_again(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    for i in range(4):
+        enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12)
+
+    with pytest.raises(NonceReuseError):
+        enc.encrypt_state(_state(title="still-held"), nonce=bytes([0]) * 12)
+
+    enc.encrypt_state(_state(title="fifth"), nonce=bytes([4]) * 12)
+    envelope = enc.encrypt_state(_state(title="again"), nonce=bytes([0]) * 12)
+    assert enc.decrypt_state(envelope).payload["title"] == "again"
+
+
+def test_nonce_inside_window_still_rejected(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    for i in range(4):
+        enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12)
+
+    with pytest.raises(NonceReuseError):
+        enc.encrypt_state(_state(title="dup"), nonce=bytes([3]) * 12)
 
 
 def test_random_nonces_differ_across_encrypts():
