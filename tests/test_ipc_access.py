@@ -29,11 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # planned. The list may only shrink: a method that is fixed must be removed
 # here, and a new open write fails the test.
 KNOWN_OPEN_WRITES = {
-    ("identityd", "identity.session"): "F1.5",
     ("identityd", "identity.verify_production_certificate"): "F0b.4",
-    ("intentd", "dashboard.get"): "F1.5",
-    ("intentd", "presentation.mode_get"): "F1.5",
-    ("intentd", "presentation.mode_set"): "F1.5",
     ("intentd", "intent.parse"): "F1.2",
     ("intentd", "intent.plan"): "F1.2",
 }

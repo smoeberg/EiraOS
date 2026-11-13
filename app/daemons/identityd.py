@@ -17,25 +17,29 @@ from app.auth.production_cert_verifier import (
     ProductionCertificateVerifier,
 )
 from app.ipc.access import caller, open_write, read, refused
+from app.ipc.auth import PEER_KEY
 from app.ipc.client import IpcClient
 from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
-from app.session_store import ensure_session, get_session
+from app.session_store import session_of_caller
 
 IDENTITY_VALIDATION_FAILED = -32020
 
 
-def _session_id_from(params: dict) -> str:
-    sid = params.get("session_id")
-    actor = params.get("actor_id")
-    return ensure_session(sid, actor)
-
-
 def identity_session(params: dict) -> dict:
-    sid = _session_id_from(params)
-    session = get_session(sid)
-    if not session:
-        raise JsonRpcError(-32602, "session not found")
-    return session
+    """Who am I: the caller's own authenticated session, or none.
+
+    The caller is the OS user on the socket (SO_PEERCRED). A session id names
+    one of the caller's sessions; without one, the newest. Never creates a
+    session and never returns another user's (fundregister S-5, F1.5)."""
+    peer = params.pop(PEER_KEY, None)
+    uid = getattr(peer, "uid", None)
+    session = session_of_caller(uid, params.get("session_id")) if isinstance(uid, int) else None
+    if session is None:
+        return {"session_id": None, "authenticated": False}
+    return {**session, "authenticated": True}
+
+
+identity_session.wants_peer = True  # type: ignore[attr-defined]
 
 
 def identity_step_up(params: dict) -> dict:
@@ -211,8 +215,7 @@ def register_identity_handlers(
     server: Any, daemon: IdentityDaemon | None = None
 ) -> IdentityDaemon:
     service = daemon or IdentityDaemon()
-    # Creates a session from a claimed actor_id (fundregister S-5).
-    server.register("identity.session", open_write(identity_session, "F1.5"))
+    server.register("identity.session", caller(identity_session))
     # Desktop login (bilag A pkt. 1): the only way to a session the gate accepts.
     from app import database
     from app.auth import login

@@ -431,6 +431,35 @@ for method in ("state.append", "state.sync_push", "audit.append"):
     if reply.get("error", {}).get("message") != "E_ACCESS_DAEMON_ONLY":
         sys.exit(f"{method}: {reply}")'
 check user-cannot-write-stated runuser -u "$USER_NAME" -- python3 -c "$STATED_WRITE_PY"
+# F1.5 (fundregister S-4/S-5): the mode belongs to the OS user on the socket,
+# so the desktop user can read and set it with no session; a claimed actor
+# gets neither a session nor a name.
+USER_MODE_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+def call(sock, method, params):
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(10)
+    s.connect(f"/run/eira/{sock}.sock")
+    params = {**params, "_eira": {"ipc_token": token}}
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}) + "\n").encode())
+    reply = json.loads(s.makefile().readline())
+    if "result" not in reply:
+        sys.exit(f"{method}: {reply}")
+    return reply["result"]
+if call("intentd", "presentation.mode_set", {"mode": "explorer"})["mode"] != "explorer":
+    sys.exit("mode_set")
+if call("intentd", "presentation.mode_get", {})["mode"] != "explorer":
+    sys.exit("mode_get")
+dash = call("intentd", "dashboard.get", {"actor_id": "forged@example.org"})
+if dash.get("authenticated") or dash.get("actor_id"):
+    sys.exit(f"dashboard: {dash}")
+who = call("identityd", "identity.session", {"session_id": "forged", "actor_id": "forged@example.org"})
+if who.get("authenticated") or who.get("session_id"):
+    sys.exit(f"identity.session: {who}")'
+check user-mode-without-session runuser -u "$USER_NAME" -- python3 -c "$USER_MODE_PY"
 if [ "$failed" -ne 0 ]; then
     say "diag run-eira: $(ls -ln /run/eira 2>&1 | tr '\n' ' ')"
     say "diag user-ids: $(id "$USER_NAME" 2>&1)"

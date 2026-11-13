@@ -51,6 +51,14 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             timestamp TEXT
         );
 
+        -- Presentation mode belongs to the OS user at the desk, proven by
+        -- SO_PEERCRED, not to a session a client names (UDVIKLINGSPLAN F1.5).
+        CREATE TABLE IF NOT EXISTS presentation_modes (
+            os_uid INTEGER PRIMARY KEY,
+            mode TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
             actor_id TEXT,
@@ -231,19 +239,49 @@ def update_assurance(session_id: str, assurance_level: str) -> dict:
         raise RuntimeError("Session not found after update")
     return session
 
-def get_presentation_mode(session_id: str) -> str:
-    session = get_session(session_id)
-    if not session:
-        return "normal"
-    return session.get("presentation_mode", "normal")
+def mode_for_uid(os_uid: int) -> str:
+    """The presentation mode of an OS user; Explorer until set (ADR-0001)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT mode FROM presentation_modes WHERE os_uid = ?", (os_uid,)
+        ).fetchone()
+    return row["mode"] if row else "explorer"
 
-def set_presentation_mode(session_id: str, mode: str) -> str:
-    ensure_session(session_id)
-    now = utc_now_iso()
+
+def set_mode_for_uid(os_uid: int, mode: str) -> str:
     with get_connection() as conn:
         conn.execute(
-            "UPDATE sessions SET presentation_mode = ?, updated_at = ? WHERE session_id = ?",
-            (mode, now, session_id),
+            """INSERT INTO presentation_modes (os_uid, mode, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(os_uid) DO UPDATE SET mode = excluded.mode,
+                                                 updated_at = excluded.updated_at""",
+            (os_uid, mode, utc_now_iso()),
         )
         conn.commit()
     return mode
+
+
+def session_of_caller(os_uid: int, session_id: str | None = None) -> dict | None:
+    """The caller's own authenticated, unexpired session, without secrets.
+
+    With ``session_id``: that session, only if it belongs to ``os_uid``.
+    Without: the caller's newest one. Never creates a session, and never
+    returns another user's (fundregister S-5)."""
+    # The same format expires_at is written in, so text comparison is time order.
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with get_connection() as conn:
+        if session_id:
+            row = conn.execute(
+                """SELECT session_id FROM sessions WHERE session_id = ? AND os_uid = ?
+                   AND authenticated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?)""",
+                (session_id, os_uid, now),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """SELECT session_id FROM sessions WHERE os_uid = ?
+                   AND authenticated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?)
+                   ORDER BY authenticated_at DESC LIMIT 1""",
+                (os_uid, now),
+            ).fetchone()
+    return get_session(row["session_id"]) if row else None
+
+
