@@ -24,15 +24,13 @@ def test_all_ten_sprint_deliverable_boundaries_exist() -> None:
 
 
 def test_all_daemons_are_registered_and_core_services_have_profiles() -> None:
+    # The prototypes walletd, presenced and contextd are gone (F1.2).
     expected = {
-        "stated", "identityd", "fleetd", "veritasd", "intentd", "graphd",
-        "walletd", "presenced", "contextd", "delegationd",
+        "stated", "identityd", "fleetd", "veritasd", "intentd", "graphd", "delegationd",
     }
     assert set(DAEMON_NAMES) == expected
     assert set(REGISTRARS) == expected
 
-    # The three newly IPC-registered daemons are runtime modules in this issue's
-    # scope; the existing six production daemons retain their systemd/AppArmor units.
     core_daemons = {"stated", "identityd", "fleetd", "veritasd", "intentd", "graphd"}
     for daemon in core_daemons:
         assert (REPO_ROOT / "systemd" / f"eira-{daemon}.service").is_file()

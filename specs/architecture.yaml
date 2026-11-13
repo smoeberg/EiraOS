@@ -55,19 +55,6 @@ daemons:
       - "financial_wallets"
       - "graph_index"
 
-  walletd:
-    layer: "daemons"
-    allowed_imports:
-      - "app.ipc.*"
-    forbidden_imports:
-      - "app.daemons.*"
-    owns:
-      - "accounts"
-      - "transactions"
-    must_not_own:
-      - "identities"
-      - "graph_index"
-
   veritasd:
     layer: "daemons"
     allowed_imports:
@@ -97,20 +84,6 @@ daemons:
       - "claims"
       - "evidence"
       - "sessions"
-
-  presenced:
-    layer: "daemons"
-    allowed_imports:
-      - "app.ipc.*"
-    forbidden_imports:
-      - "app.daemons.*"
-
-  contextd:
-    layer: "daemons"
-    allowed_imports:
-      - "app.ipc.*"
-    forbidden_imports:
-      - "app.daemons.*"
 
   intentd:
     layer: "daemons"

@@ -82,8 +82,8 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `health` | `read` |  |
 | `intent.confirm` | `refused` |  |
 | `intent.execute` | `refused` |  |
-| `intent.parse` | `open_write` | Lukkes af F1.2 |
-| `intent.plan` | `open_write` | Lukkes af F1.2 |
+| `intent.parse` | `refused` |  |
+| `intent.plan` | `refused` |  |
 | `journey.advance` | `refused` |  |
 | `journey.get` | `read` |  |
 | `journey.list` | `read` |  |

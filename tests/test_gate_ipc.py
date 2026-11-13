@@ -89,10 +89,10 @@ def test_bad_parameters(rpc):
 
 
 def test_intentd_registers_the_gate():
-    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+    from app.daemons.intentd import register_intent_handlers
 
     server = FakeServer()
-    register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
+    register_intent_handlers(server)
     assert {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "gate.capabilities"} <= set(server.methods)
 
 
@@ -104,8 +104,6 @@ GATE_METHODS = {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "
 READ_ONLY = {
     "health",
     "dashboard.get",
-    "intent.parse",
-    "intent.plan",
     "journey.list",
     "journey.get",
     "capability.list",
@@ -119,15 +117,16 @@ READ_ONLY = {
 }
 POLICY_GATED_SETTINGS = {"presentation.mode_set"}  # Builder needs device policy
 # Former bypasses, now answering E_GATE_REQUIRED (proved below).
-REDIRECTED = {"intent.confirm", "intent.execute", "journey.advance"}
+# intent.parse/intent.plan kept pending intents for a claimed session (F1.2).
+REDIRECTED = {"intent.confirm", "intent.execute", "intent.parse", "intent.plan", "journey.advance"}
 KNOWN_BYPASSES: set[str] = set()
 
 
 def test_every_intentd_method_is_classified():
-    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+    from app.daemons.intentd import register_intent_handlers
 
     server = FakeServer()
-    register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
+    register_intent_handlers(server)
     exposed = set(server.methods)
     classified = GATE_METHODS | READ_ONLY | POLICY_GATED_SETTINGS | REDIRECTED | KNOWN_BYPASSES
     assert exposed == classified, {
@@ -140,15 +139,15 @@ def test_former_bypasses_answer_gate_required_and_never_execute(monkeypatch, tmp
     """Over the real JSON-RPC server: no former write path can reach the
     stated appender. The old executor and journey writer no longer exist."""
     from app.daemons.base import JsonRpcServer
-    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+    from app.daemons.intentd import register_intent_handlers
     from app.gate.ipc import GATE_REQUIRED
 
-    touched = []
-    service = IntentDaemonService.__new__(IntentDaemonService)
-    monkeypatch.setattr(service, "execute", lambda *a, **k: touched.append("stated_append"), raising=False)
+    monkeypatch.setenv("EIRA_DB_PATH", str(tmp_path / "eira.db"))
     server = JsonRpcServer(name="intent-test", daemon="intentd")
-    register_intent_handlers(server, service)
+    register_intent_handlers(server)
     payloads = {
+        "intent.parse": {"raw_input": "Godkend budget", "actor_id": "mette@kommune.dk"},
+        "intent.plan": {"raw_input": "Godkend budget", "actor_id": "mette@kommune.dk"},
         "intent.confirm": {"intent_id": "i-1", "session_id": "s-1"},
         "intent.execute": {"intent": "Godkend bevilling på 175.000 kr"},
         "journey.advance": {"journey_id": "j-1"},
@@ -159,4 +158,13 @@ def test_former_bypasses_answer_gate_required_and_never_execute(monkeypatch, tmp
         assert response["error"]["code"] == GATE_REQUIRED, method
         assert response["error"]["data"]["use"] == "gate.propose"
         assert response["error"]["data"]["user_message"]
-    assert touched == []
+    # Nothing was written: the old parse/plan created a session for a
+    # claimed actor and stored a pending intent.
+    db = tmp_path / "eira.db"
+    if db.exists():
+        import sqlite3
+
+        with sqlite3.connect(db) as conn:
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            for table in {"sessions", "pending_intents"} & tables:
+                assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0, table

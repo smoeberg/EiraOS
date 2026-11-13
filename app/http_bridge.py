@@ -21,14 +21,10 @@ from app.routers import (
     audit,
     auth,
     capability,
-    context,
     dashboard,
     graph,
     health,
-    intent,
-    presence,
     veritas,
-    wallet,
 )
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
@@ -60,12 +56,8 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(dashboard.router)
-app.include_router(intent.router)
 app.include_router(auth.router)
 app.include_router(graph.router)
 app.include_router(audit.router)
 app.include_router(veritas.router)
-app.include_router(wallet.router)
-app.include_router(presence.router)
 app.include_router(capability.router)
-app.include_router(context.router)

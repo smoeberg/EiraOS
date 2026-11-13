@@ -74,24 +74,13 @@ def test_post_veritas_evidence():
     assert "trust_score" in data or "verdict" in data or "score" in data or "evidence_id" in data or "status" in data or "analysis" in data or "details" in data or isinstance(data, dict)
 
 
-def test_post_intent_parse():
-    payload = {
-        "raw_input": "Opret ny sag angående byggetilladelse",
-        "focus": "Kommunepilot",
-        "actor_id": "mette@kommune.dk"
-    }
-    with patch("app.routers.intent.intent_ipc.call", return_value={"intent": "create_case", "status": "parsed"}):
-        response = client.post("/v1/intent/parse", json=payload)
-        assert response.status_code == 200
-        data = response.json()
-        assert data.get("status") == "parsed" or "intent" in data
-
-
 def test_invalid_requests():
     # Invalid endpoint -> 404 Not Found
     resp_404 = client.get("/v1/nonexistent/endpoint")
     assert resp_404.status_code == 404
 
-    # Invalid JSON payload on intent parse -> 422 Unprocessable Entity
-    resp_422 = client.post("/v1/intent/parse", content="invalid json")
+    # Invalid JSON payload -> 422 Unprocessable Entity
+    resp_422 = client.post("/v1/veritas/evidence", content="invalid json")
     assert resp_422.status_code == 422
+    # The intent routes are gone with intent.parse/plan (F1.2).
+    assert client.post("/v1/intent/parse", json={"raw_input": "x"}).status_code == 404

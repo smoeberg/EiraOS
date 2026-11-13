@@ -50,9 +50,6 @@ fn canonical_daemon(daemon: &str) -> Option<&'static str> {
         "intent" | "intentd" => Some("intentd"),
         "delegation" | "delegationd" => Some("delegationd"),
         "graph" | "graphd" => Some("graphd"),
-        "wallet" | "walletd" => Some("walletd"),
-        "presence" | "presenced" => Some("presenced"),
-        "context" | "contextd" => Some("contextd"),
         // The model process (F1b): the IntentBar asks it for a proposal; it
         // proposes to the gate as itself and can never decide.
         "model" | "modeld" => Some("modeld"),
@@ -348,11 +345,12 @@ mod tests {
         assert_eq!(canonical_daemon("graph"), Some("graphd"));
         assert_eq!(canonical_daemon("intentd"), Some("intentd"));
         assert_eq!(canonical_daemon("delegationd"), Some("delegationd"));
-        assert_eq!(canonical_daemon("wallet"), Some("walletd"));
-        assert_eq!(canonical_daemon("presenced"), Some("presenced"));
+        // The prototypes are gone (F1.2): no socket to reach.
+        assert_eq!(canonical_daemon("wallet"), None);
+        assert_eq!(canonical_daemon("presenced"), None);
         assert_eq!(canonical_daemon("model"), Some("modeld"));
         assert_eq!(canonical_daemon("modeld"), Some("modeld"));
-        assert_eq!(canonical_daemon("context"), Some("contextd"));
+        assert_eq!(canonical_daemon("context"), None);
         assert_eq!(canonical_daemon("../../tmp/evil"), None);
         assert_eq!(canonical_daemon("/run/eira/stated"), None);
         assert_eq!(canonical_daemon("stated/../fleetd"), None);
@@ -704,8 +702,8 @@ mod tests {
         async fn send_ipc_request_roundtrip_via_env_socket_dir() {
             let _env_guard = ENV_LOCK.lock().unwrap();
             let dir = short_temp_dir();
-            let sock_path = dir.join("walletd.sock");
-            let listener = UnixListener::bind(&sock_path).expect("bind walletd");
+            let sock_path = dir.join("graphd.sock");
+            let listener = UnixListener::bind(&sock_path).expect("bind graphd");
 
             unsafe {
                 std::env::set_var("EIRA_SOCKET_DIR", dir.as_os_str());
@@ -724,23 +722,23 @@ mod tests {
                 let body = json!({
                     "jsonrpc": "2.0",
                     "id": id,
-                    "result": { "status": "ok", "rails": ["sepa_instant"] }
+                    "result": { "status": "ok", "nodes": ["obj:1"] }
                 });
                 let mut out = serde_json::to_vec(&body).unwrap();
                 out.push(b'\n');
                 stream.write_all(&out).await.expect("write");
                 stream.flush().await.expect("flush");
             });
-            assert_eq!(socket_path("walletd"), sock_path);
+            assert_eq!(socket_path("graphd"), sock_path);
             let result = send_ipc_request(
-                "wallet".to_owned(),
-                "wallet.list_credentials".to_owned(),
+                "graph".to_owned(),
+                "graph.spatial_snapshot".to_owned(),
                 json!({}),
             )
             .await
             .expect("send_ipc_request ok");
             assert_eq!(result["status"], "ok");
-            assert_eq!(result["rails"][0], "sepa_instant");
+            assert_eq!(result["nodes"][0], "obj:1");
             server.await.expect("server");
             unsafe {
                 std::env::remove_var("EIRA_SOCKET_DIR");

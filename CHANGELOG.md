@@ -13,6 +13,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   Basis-ISO'ens cache gemmes kun, når ISO'en skifter.
 
 ### Gate Kernel og sikkerhed
+- F1.2 og F1.6: prototyperne `walletd`, `presenced` og `contextd` er fjernet; gate-processen har ingen LLM-klient
+  og ingen gammel `intent.parse`/`intent.plan`/`IntentDaemonService` mere (de svarer `E_GATE_REQUIRED`); udviklingsbroens
+  skriveruter uden gate er fjernet. Pakken installerer ni moduler færre (fundregister S-7, S-8, S-9, S-22, D-10).
 - F1b, første hele vej: IntentBar → `eira-modeld` → `gate.propose` → samtykkeagenten → gatens egen status. Modellen
   forstår strømkommandoer og foreslår dem som EiraSystemAPI-handlinger; mangler en delegation, beder UI'et om den gennem
   agenten; afstår modellen, siger UI'et det ærligt. Strøm-menuen (manuel vej) findes kun i Builder Mode (ADR-0001).

@@ -35,18 +35,20 @@ def test_daemon_lifecycle_and_sockets_ready(runtime):
         assert res.get("status") in ("ok", True) or res.get("ok") is True or "version" in res
 
 
-def test_end_to_end_intent_orchestration(runtime):
-    """2. Test End-to-End Intent: raw input -> intentd parse -> policy/context -> graph/stated -> result."""
+def test_the_old_intent_path_is_refused_over_real_ipc(runtime):
+    """2. Over the running daemons, the old intent.parse no longer proposes
+    anything (F1.2): it names the gate. The path from a sentence to an action
+    is the model process and gate.propose (tests/test_intent_to_gate.py)."""
+    from app.ipc.jsonrpc import JsonRpcError
+
     intent_client = IpcClient("intentd")
-    
-    parse_res = intent_client.call("intent.parse", {
-        "raw_input": "Opret ny sag angående byggetilladelse",
-        "focus": "Kommunepilot",
-        "actor_id": "mette@kommune.dk"
-    })
-    
-    assert isinstance(parse_res, dict)
-    assert parse_res.get("status") in ("parsed", "ok") or "intent" in parse_res or "intent_id" in parse_res
+    with pytest.raises(JsonRpcError) as refused:
+        intent_client.call("intent.parse", {
+            "raw_input": "Opret ny sag angående byggetilladelse",
+            "focus": "Kommunepilot",
+            "actor_id": "mette@kommune.dk"
+        })
+    assert refused.value.message == "E_GATE_REQUIRED"
 
 
 def test_veritas_evidence_processing_and_conflict_scoring(runtime):

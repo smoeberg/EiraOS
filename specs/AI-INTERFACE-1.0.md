@@ -52,7 +52,7 @@ extract_intent(
 
 **Input:**
 - `text`: Brugerens rå input (dansk, tysk eller engelsk).
-- `context`: Samtalekontekst fra `contextd` (objekt, tidligere handlinger, deltagere).
+- `context`: Samtalekonteksten (objekt, tidligere handlinger, deltagere), som appen henter fra samtalelaget ([EIRA-CONVERSATION](EIRA-CONVERSATION-1.0.md), `conversation.*`) og giver modelprocessen. Uden en samtale (IntentBar) er den tom, og kun systemhandlinger er kandidater.
 - `language_hint`: Valgfrit sprogvalg; ellers detekteres sproget.
 
 **Output — `IntentExtraction`:**
@@ -164,7 +164,7 @@ ModelAdapter:
 
 ## 6. Kontekstmodellen
 
-`ConversationContext` leveres af `contextd` og indeholder:
+`ConversationContext` leveres af appen fra samtalelaget (EIRA-CONVERSATION) og indeholder (prototypen `contextd` er fjernet, UDVIKLINGSPLAN F1.2; `eira-contextd` i EIRA-CONTEXT er noget andet: kontekst-brugere, ikke samtalekontekst):
 
 | Felt | Beskrivelse |
 |---|---|
@@ -242,4 +242,4 @@ Modellen må ikke modificere konteksten. Den er **read-only**.
 
 1. Skal EiraLang og EiraAI kunne køre i samme adapter (én model, to metoder), eller skal de altid være separate? **Anbefaling:** separate, så de kan skiftes uafhængigt.
 2. Skal `intentd` kunne kalde EiraLang og EiraAI parallelt for at reducere latenstid? **Anbefaling:** nej, sekventielt — EiraAI afhænger af EiraLang's output.
-3. Hvordan håndteres kontekst, der overskrider modellens grænse? **Anbefaling:** `intentd` opsummerer konteksten via `contextd`, før den sendes til adapteren.
+3. Hvordan håndteres kontekst, der overskrider modellens grænse? **Anbefaling:** appen opsummerer samtalekonteksten fra samtalelaget, før den sendes til modelprocessen; modelprocessen afviser med `E_CONTEXT_TOO_LARGE`, hvis den stadig er for stor.

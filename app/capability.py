@@ -5,19 +5,10 @@ from pathlib import Path
 
 from app.database import get_connection, utc_now_iso
 from app.models import (
-    AgencyContext,
     CapabilityManifest,
-    CapabilityMatch,
 )
 
 MANIFESTS_DIR = Path(__file__).resolve().parent.parent / "manifests"
-
-ASSURANCE_RANK = {
-    "none": 0,
-    "eid_low": 1,
-    "org_acting": 2,
-    "eid_high": 3,
-}
 
 
 def seed_capabilities() -> None:
@@ -69,14 +60,6 @@ def get_manifest(adapter_id: str) -> CapabilityManifest | None:
     return CapabilityManifest.model_validate_json(row["manifest_json"])
 
 
-def _assurance_met(current: str, required: str | None) -> bool:
-    if not required:
-        return True
-    current_rank = ASSURANCE_RANK.get(current, 0)
-    required_rank = ASSURANCE_RANK.get(required, 99)
-    return current_rank >= required_rank
-
-
 def seed_adapter_health() -> None:
     now = utc_now_iso()
     with get_connection() as conn:
@@ -101,33 +84,3 @@ def is_adapter_online(adapter_id: str) -> bool:
     if not row:
         return False
     return row["status"] == "online"
-
-
-def find_capability_match(
-    action: str,
-    resource: str,
-    agency: AgencyContext,
-) -> CapabilityMatch | None:
-    for manifest in list_manifests():
-        if not is_adapter_online(manifest.adapter_id):
-            continue
-        for cap in manifest.capabilities:
-            if cap.action == action and cap.resource == resource:
-                return CapabilityMatch(
-                    adapter_id=manifest.adapter_id,
-                    adapter_name=manifest.name,
-                    action=cap.action,
-                    resource=cap.resource,
-                    required_assurance=cap.assurance,
-                    assurance_met=_assurance_met(agency.assurance_level, cap.assurance),
-                )
-    return None
-
-
-def infer_resource(action: str, raw_input: str) -> str:
-    lower = raw_input.lower()
-    if "ordre" in lower or "leverand" in lower:
-        return "order"
-    if action in ("status", "read", "search"):
-        return "document"
-    return "document"

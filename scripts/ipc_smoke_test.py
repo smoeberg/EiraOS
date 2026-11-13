@@ -33,11 +33,14 @@ def main() -> int:
         dash = intent.call("dashboard.get", {})
         print("dashboard.get:", dash["greeting"], f"({len(dash['trust_items'])} trust items)")
 
-        planned = intent.call(
-            "intent.plan",
-            {"raw_input": "Godkend budget", "focus": "Kommunepilot"},
-        )
-        print("intent.plan:", planned["category"], planned["action"], f"can_execute={planned.get('can_execute')}")
+        # The old intent.plan is gone (F1.2); it names the gate instead.
+        try:
+            intent.call("intent.plan", {"raw_input": "Godkend budget"})
+            raise AssertionError("intent.plan unexpectedly answered")
+        except JsonRpcError as exc:
+            if exc.message != "E_GATE_REQUIRED":
+                raise
+            print("intent.plan (expected refusal):", exc.message)
 
         temporal = graph.call(
             "graph.temporal_query",
@@ -65,7 +68,7 @@ def main() -> int:
                 raise AssertionError("step-up rejection omitted user_message") from exc
             print("identity.step_up (expected rejection):", user_message)
 
-        print("\nIPC smoke test OK (all nine daemons)")
+        print(f"\nIPC smoke test OK (all {len(DAEMON_NAMES)} daemons)")
         return 0
     finally:
         stop_daemons()

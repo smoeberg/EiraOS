@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from app.daemons.identityd import identity_step_up
-from app.daemons.walletd import WalletDaemon
 from app.ipc.jsonrpc import ASSURANCE_REQUIRED, JsonRpcError
 
 
@@ -32,17 +31,3 @@ def test_identity_step_up_rejects_unsupported_method() -> None:
     assert rejected.value.message == "unsupported_step_up"
 
 
-def test_wallet_never_reports_payment_success_without_provider() -> None:
-    result = WalletDaemon().optimize_and_pay(
-        150.0, "Example merchant", ["sepa_instant", "digital_euro"]
-    )
-
-    assert result["status"] == "NOT_CONFIGURED"
-    assert result["selected_rail"] is None
-    assert result["transaction_id"] is None
-    assert result["eudi_consent_verified"] is False
-    assert "provider" in result["reason"]
-
-
-def test_wallet_never_claims_unverified_credentials_are_valid() -> None:
-    assert WalletDaemon().list_credentials() == []
