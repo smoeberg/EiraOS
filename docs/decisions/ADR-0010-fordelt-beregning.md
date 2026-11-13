@@ -1,6 +1,6 @@
 # ADR-0010 — Fordelt beregning: arbejde kan flytte, myndighed kan ikke
 
-**Status:** Foreslået, til ejerens accept (13. november 2026). Retningen er ejerens: fordelt beregning mellem personens enheder er en fremtidig funktion, som arkitekturen skal understøtte. Udformningen er et forslag. Intet bygges nu.
+**Status:** Foreslået, til ejerens accept (13. november 2026). Retningen er ejerens: fordelt beregning mellem personens enheder er med nu og er en del af 1.0 (udviklingsplanens spor C). Udformningen er et forslag.
 **Gælder for:** gaten og EiraSystemAPI (ADR-0002), `eira-modeld` og AI Interface, kontekster og enhedslisten (EIRA-CONTEXT §8), Fleet-rettigheder og attestation (EIRA-FLEET-RIGHTS-API §6), Web App Manager (ADR-0004 D3), hændelser og Event Store (ADR-0009 N3)
 **Relateret:** [ADR-0002](ADR-0002-gate-to-handlingsfamilier.md), [ADR-0003](ADR-0003-rettigheder-fra-fleet.md), [ADR-0004](ADR-0004-gui-arkitektur-vendor-neutral.md), [ADR-0005](ADR-0005-kontekster-og-datas-hjem.md), [ADR-0009](ADR-0009-datalagets-byggesten-nextgraph.md), [AI-INTERFACE](../../specs/AI-INTERFACE-1.0.md), [EIRA-CONTEXT](../../specs/EIRA-CONTEXT-1.0.md), [EIRA-FLEET-RIGHTS-API](../../specs/EIRA-FLEET-RIGHTS-API-1.0.md), [GATE-KERNEL](../../specs/GATE-KERNEL-1.0.md)
 
@@ -10,7 +10,7 @@
 
 ## Kontekst
 
-Ejeren (13. november 2026): EiraOS skal på sigt kunne flytte *arbejde* mellem enheder, fx at en tung model kører på en hjemmeserver eller organisationens server, mens laptoppen sender opgaven. I dag flytter EiraOS kun *data* (kontekster, F2).
+Ejeren (13. november 2026): EiraOS skal kunne flytte *arbejde* mellem enheder, og det skal med nu, fx at en tung model kører på en hjemmeserver eller organisationens server, mens laptoppen sender opgaven. I dag flytter EiraOS kun *data* (kontekster, F2).
 
 Anledningen var en gennemgang af EU-projektet NEMO (Horizon Europe, meta-OS til IoT/edge/cloud). NEMO's meta-orchestrator placerer og flytter arbejdsbyrder selv, oven på Kubernetes. Vi tager tankegangen og ikke maskineriet. Tre ting fra NEMO er værd at tage med (D6–D8), og én ting tager vi ikke: en orkestrator med egen beslutningsmagt.
 
@@ -71,15 +71,15 @@ Er modtageren utilgængelig, afvist eller uden attestation, kører arbejdet loka
 
 ## Konsekvenser
 
-**Nu (ingen kode):** de beslutninger, der træffes i mellemtiden, må ikke lukke døren:
+Funktionen bygges som udviklingsplanens **spor C**, og er en del af 1.0:
 
-- **EIRA-CONTEXT §8 (enhedslisten):** skal kunne bære en enheds rolle (fx `compute_host`) og attestationsstatus.
-- **EIRA-FLEET-RIGHTS-API:** rettighedssættet skal kunne udtrykke opgavetyper og modtagende enheder; attestation planlægges som forudsætning (D6).
-- **Gate-registry:** operationsfamilien `system:compute.*` reserveres.
-- **Web App Manager-kontrakten (ADR-0004 D3):** skrives, så dens manifest kan blive det fælles manifest (D7).
-- **AI-INTERFACE:** ændringen i D5 skrives ind, når O-1 er besluttet.
-
-**Senere:** egen kontrakt `EIRA-COMPUTE` (opgaveformat, afsendelse, modtagelse, kryptering, resultat som hændelse), skrevet efter F2 (kontekster) og efter attestation i Fleet.
+- **Kontrakter nu (C.1–C.2):** `EIRA-COMPUTE 1.0`; `EIRA-MANIFEST 1.0` (D7); ændring af AI-INTERFACE §176 (D5, O-1); EIRA-CONTEXT §8 (enhedens rolle, fx `compute_host`, og attestationsstatus); FLEET-RIGHTS-API (opgavetyper og modtagende enheder i rettighedssættet).
+- **Gaten (C.3):** operationsfamilien `system:compute.*` med `dispatch` og `accept`, efter F1b.
+- **Afsender og modtager (C.4):** `eira-dispatchd` og modtagende executor, med E2EE til enhedens TPM-nøgle (F2.3).
+- **Attestation (C.5):** FLEET-RIGHTS-API §6 pkt. 1 rykker fra "senere" til en del af 1.0.
+- **Isolation hos modtageren (C.6):** forudsætter `eira-contextd` (F2.4).
+- **Stående mål (C.7):** efter C.4.
+- **Web App Manager (F5)** bygger på det fælles manifest fra C.2.
 
 ## Åbne spørgsmål
 

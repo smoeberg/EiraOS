@@ -22,7 +22,7 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 | Desktop | Explorer og Builder Mode, rigtig terminal, strøm via EiraSystemAPI; login gennem GDM |
 | Pakning | `.deb`, `eira-labwc`, installer-ISO på Ubuntu 26.04, offline VM-test |
 
-**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået), fordelt beregning mellem personens egne enheder (ADR-0010, foreslået; fremtidig funktion, der ikke må lukkes ude af F2, Fleet-attestation og Web App Manager-manifestet).
+**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået), fordelt beregning mellem personens egne enheder (ADR-0010, foreslået; spor C, del af 1.0).
 
 **Ikke besluttet:** økonomi. Det eneste af personens kerneområder uden en ADR (§3, spor P).
 
@@ -51,6 +51,7 @@ F1 Teknisk gæld ────┼──► F1b Hele vejen ──► F2 Kontekster
 
 U Brugerbevis løber ved siden af alle trin fra F1b
 P Personens områder: beslutninger og kontrakter skrives parallelt med F2; bygges i takt med F2–F6
+C Fordelt beregning (ADR-0010): kontrakter nu (C.1–C.2); bygges efter F1b og i takt med F2 (C.3–C.7); del af 1.0
 ```
 
 Kontekster kommer før Web App Manager og indbakken, fordi begge bygger på konteksten: en webprofil *er* en kontekst (ADR-0005), og der er én indbakke pr. kontekst (ADR-0006).
@@ -173,9 +174,23 @@ Rækkefølge: netværksstatus (læs, NetworkManager), skift netværk, lyd, skær
 | F8.1 | Gentagelig flersproget evaluering (se [soofi-s-model-evaluation](architecture/soofi-s-model-evaluation.md)) |
 | F8.2 | En lokal sprogmodel som adapter i `eira-modeld`, bag den samme kontrakt og de samme grænser (egen bruger, intet net, ingen samtykke) |
 
+### C — Fordelt beregning (ADR-0010)
+
+Arbejde kan flytte mellem personens egne enheder i samme kontekst; beslutninger, nøgler og samtykke flytter aldrig. Afsendelse og modtagelse går hver gennem sin egen gate. Ingen orkestrator med egen beslutningsmagt, ingen Kubernetes. Sporet er en del af 1.0.
+
+| # | Leverance | Afhænger af | Færdig når | Niveau |
+|---|---|---|---|---|
+| C.1 | **Kontrakter:** `EIRA-COMPUTE 1.0` (opgaveformat, afsendelse, modtagelse, kryptering, resultat som hændelse), ændring af AI-INTERFACE §176 (inference på egne enheder i samme kontekst, kun gennem gaten), EIRA-CONTEXT §8 (enhedens rolle og attestationsstatus i enhedslisten), FLEET-RIGHTS-API (opgavetyper og modtagende enheder i rettighedssættet) | Ejerens accept af ADR-0010 og O-1 | Kontrakterne er accepteret af ejeren | — |
+| C.2 | **Fælles manifest** `EIRA-MANIFEST 1.0` (ADR-0010 D7): ét format for webapps, adaptere, executors og opgavetyper; validering før registrering; registrering og aktivering som hver sin gatehandling. Første brugere er opgavetyperne; Web App Manager (F5) bygger på samme format | C.1 | Kontrakt accepteret; validator med vektorer og mutanter | N1 |
+| C.3 | **Gaten:** `system:compute.dispatch` (afsender) og `system:compute.accept` (modtager) med policy-poster og reversibilitet. Tests: ingen bypass; ukendt opgavetype afvises; enhed uden for enhedslisten afvises; modellen kan ikke sende uden delegation | F1b, C.1 | Tests og mutanter består | N1 |
+| C.4 | **`eira-dispatchd` og modtagende executor:** egen proces med net kun til kontekstens enheder; `eira-modeld` forbliver uden net. Opgaven krypteres end-to-end til modtagerens TPM-nøgle (F2.3); resultatet kommer tilbage som hændelse via outbox og Event Store (ADR-0009 N3). Første opgavetype: modelinferens (regelbaseret adapter, indtil F8.2) | C.3, F2.3 | To VM'er: opgave sendt, udført og besvaret; afvist ved manglende rettighed; ærlig fejl ved utilgængelig modtager (D9) | N2 |
+| C.5 | **Attestation:** EiraOS sender TPM-quote med målt opstart ved enroll og heartbeat (FLEET-RIGHTS-API §6 pkt. 1); Fleet verificerer (i `eira-fleet-control`). Administrerede enheder modtager kun arbejde med gyldig attestation; personlige enheder uden attestation vises åbent | F2.3, Fleet | VM med vTPM: ændret opstart giver afvist modtagelse | N3 |
+| C.6 | **Isolation hos modtageren:** opgaven kører som kontekstens Linux-bruger (EIRA-CONTEXT §3) og efterlader intet læsbart (F-1) | F2.4 | Installeret pakke: ingen data tilbage efter opgaven; ingen adgang på tværs af kontekster | N3 |
+| C.7 | **Stående mål** (ADR-0010 D8): kontrakt og første mål, "kør tunge opgaver på hjemmeserveren, når laptoppen er på batteri", med målt opfyldelse i skallen; hver rettende handling går gennem gaten | C.4 | Brugertest: personen kan se, om målet er opfyldt, og hvorfor ikke (spor U) | N3 |
+
 ### F9 — Release 1.0
 
-Opgradering og rollback, backup og genopretning, licenser, tilgængelighed og lokalisering, supportmatrix og en ærlig liste over kendte begrænsninger (MASTER-PLAN §6 og WS-11). Forudsætter F0, F2 og F3.
+Opgradering og rollback, backup og genopretning, licenser, tilgængelighed og lokalisering, supportmatrix og en ærlig liste over kendte begrænsninger (MASTER-PLAN §6 og WS-11). Forudsætter F0, F2, F3 og C.
 
 ### U — Brugerbevis
 
@@ -228,7 +243,7 @@ Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal generer
 2. ~~**F1.5** sessioner uden påstået identitet~~ (leveret).
 3. ~~**F0.1** R-6.2-patch i `eira-labwc`~~ (leveret; forslag upstream udestår).
 
-Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges ind mellem de store trin.
+Derefter F1b (hele vejen fra IntentBar). Kontrakterne for fordelt beregning (C.1–C.2) skrives nu, parallelt med F1b. F1.1–F1.4 og F1.6–F1.10 kan lægges ind mellem de store trin.
 
 ## 6. Ejerens beslutninger
 
@@ -250,4 +265,4 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | Grundspørgsmålene til ADR-0008 (økonomi) | P.3 |
 | Accept af ADR-0009 (datalagets byggesten; NextGraph som forlæg, ikke afhængighed) og O-3 (RDF for graphd) | F2.6 |
 | Hvem der deltager i brugertests | U.5–U.6 |
-| Accept af ADR-0010 (fordelt beregning) og O-1: inference på egne enheder i samme kontekst som ændring af AI-INTERFACE §176 | F2 (enhedslisten), Fleet-attestation, F5 (manifest) |
+| Accept af ADR-0010 (fordelt beregning) og O-1: inference på egne enheder i samme kontekst som ændring af AI-INTERFACE §176 | C.1 |
