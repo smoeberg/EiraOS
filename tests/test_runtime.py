@@ -35,19 +35,6 @@ def test_daemon_lifecycle_and_sockets_ready(runtime):
         assert res.get("status") in ("ok", True) or res.get("ok") is True or "version" in res
 
 
-def test_end_to_end_intent_orchestration(runtime):
-    """2. Test End-to-End Intent: raw input -> intentd parse -> policy/context -> graph/stated -> result."""
-    intent_client = IpcClient("intentd")
-    
-    parse_res = intent_client.call("intent.parse", {
-        "raw_input": "Opret ny sag angående byggetilladelse",
-        "focus": "Kommunepilot",
-        "actor_id": "mette@kommune.dk"
-    })
-    
-    assert isinstance(parse_res, dict)
-    assert parse_res.get("status") in ("parsed", "ok") or "intent" in parse_res or "intent_id" in parse_res
-
 
 def test_veritas_evidence_processing_and_conflict_scoring(runtime):
     """3. Test Veritas Evidence Engine: Submit evidence via IPC, check trust scoring & layers."""

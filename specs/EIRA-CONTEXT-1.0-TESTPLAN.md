@@ -275,6 +275,6 @@ Hver afvisning auditeres. Ingen kombination må give adgang til den oprindelige 
 ## 5. Fund under arbejdet med planen
 
 1. **Manglende fejlkoder.** Kontrakten nævnte ikke, hvilken fejl en manifest-kollision, en AEAD-fejl på en blok og et hjem uden opret-hvis-fraværende giver. Rettet i kontrakten v0.3 (§12): `E_CONTEXT_INTEGRITY` dækker nu også blokke og manifest-kollision, og `E_CONTEXT_HOME_UNSUPPORTED` er ny.
-2. **Den eksisterende `app/daemons/contextd.py` modsiger kontrakten.** Den har en fast liste af seks kontekster, én "aktiv" kontekst og en beløbsgrænse for automatisk godkendelse i wallet pr. kontekst. Den skal erstattes af `eira-contextd`, ikke udbygges. Beløbsgrænsen hører under gaten og rettighedssættet, ikke under kontekstlaget.
+2. **Den eksisterende `app/daemons/contextd.py` modsiger kontrakten.** Den har en fast liste af seks kontekster, én "aktiv" kontekst og en beløbsgrænse for automatisk godkendelse i wallet pr. kontekst. Den skal erstattes af `eira-contextd`, ikke udbygges. Beløbsgrænsen hører under gaten og rettighedssættet, ikke under kontekstlaget. *Løst:* prototypen er fjernet (udviklingsplan F1.2).
 3. **`/proc` manglede i §3.3.** Som standard kan alle brugere læse alle processers kommandolinje. Tilføjet i kontrakten: `hidepid=invisible` for hele systemet med undtagelsesgruppen `eira-procview` (besluttet af ejer). Testes i T-I1-i og T-I1-j.
 4. **Tilbagekaldelse og glemsel** manglede i §12a. Tilføjet som R-1 og F-1 (besluttet af ejer).

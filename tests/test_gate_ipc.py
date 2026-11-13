@@ -89,10 +89,10 @@ def test_bad_parameters(rpc):
 
 
 def test_intentd_registers_the_gate():
-    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+    from app.daemons.intentd import register_intent_handlers
 
     server = FakeServer()
-    register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
+    register_intent_handlers(server)
     assert {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "gate.capabilities"} <= set(server.methods)
 
 
@@ -104,8 +104,6 @@ GATE_METHODS = {"gate.propose", "gate.consent", "gate.confirm", "gate.status", "
 READ_ONLY = {
     "health",
     "dashboard.get",
-    "intent.parse",
-    "intent.plan",
     "journey.list",
     "journey.get",
     "capability.list",
@@ -124,10 +122,10 @@ KNOWN_BYPASSES: set[str] = set()
 
 
 def test_every_intentd_method_is_classified():
-    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
+    from app.daemons.intentd import register_intent_handlers
 
     server = FakeServer()
-    register_intent_handlers(server, IntentDaemonService.__new__(IntentDaemonService))
+    register_intent_handlers(server)
     exposed = set(server.methods)
     classified = GATE_METHODS | READ_ONLY | POLICY_GATED_SETTINGS | REDIRECTED | KNOWN_BYPASSES
     assert exposed == classified, {
@@ -138,16 +136,15 @@ def test_every_intentd_method_is_classified():
 
 def test_former_bypasses_answer_gate_required_and_never_execute(monkeypatch, tmp_path):
     """Over the real JSON-RPC server: no former write path can reach the
-    stated appender. The old executor and journey writer no longer exist."""
+    stated appender. The old executor, the old free-text pipeline
+    (IntentDaemonService) and the journey writer no longer exist (F1.2)."""
+    import app.daemons.intentd as intentd
     from app.daemons.base import JsonRpcServer
-    from app.daemons.intentd import IntentDaemonService, register_intent_handlers
     from app.gate.ipc import GATE_REQUIRED
 
-    touched = []
-    service = IntentDaemonService.__new__(IntentDaemonService)
-    monkeypatch.setattr(service, "execute", lambda *a, **k: touched.append("stated_append"), raising=False)
+    assert not hasattr(intentd, "IntentDaemonService")
     server = JsonRpcServer(name="intent-test", daemon="intentd")
-    register_intent_handlers(server, service)
+    intentd.register_intent_handlers(server)
     payloads = {
         "intent.confirm": {"intent_id": "i-1", "session_id": "s-1"},
         "intent.execute": {"intent": "Godkend bevilling på 175.000 kr"},
@@ -159,4 +156,27 @@ def test_former_bypasses_answer_gate_required_and_never_execute(monkeypatch, tmp
         assert response["error"]["code"] == GATE_REQUIRED, method
         assert response["error"]["data"]["use"] == "gate.propose"
         assert response["error"]["data"]["user_message"]
-    assert touched == []
+
+
+def test_gate_process_contains_no_language_model_or_free_text_pipeline():
+    """UDVIKLINGSPLAN F1.2 (fundregister S-7, S-8, S-9): the gate process holds
+    the gate, not an LLM client, the old parser or the CEL executor."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    probe = (
+        "import sys\n"
+        "from app.daemons.base import JsonRpcServer\n"
+        "from app.daemons.intentd import register_intent_handlers\n"
+        "register_intent_handlers(JsonRpcServer(name='probe', daemon='intentd'))\n"
+        "banned = ('httpx', 'app.mistral', 'app.intent_parser', 'app.pending_intents',\n"
+        "          'app.core.transformation', 'app.core.cel_evaluator')\n"
+        "print(','.join(m for m in banned if m in sys.modules))\n"
+    )
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, cwd=root, timeout=120
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.strip() == ""

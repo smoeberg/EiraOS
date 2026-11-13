@@ -1,234 +1,23 @@
-"""Intent daemon with mandatory CEL constraint enforcement."""
+"""The gate process (eira-intentd).
+
+It holds Gate Kernel and the read side around it: the dashboard, the
+presentation mode and the conversation layer's event stream. It contains no
+language model client and no free-text parser (UDVIKLINGSPLAN F1.2, fundregister
+S-7, S-8, S-9): proposals come from eira-modeld through ``gate.propose``.
+"""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Protocol
-
-from app.core.cel_evaluator import CELEvaluator
-from app.core.event import EventBus
-from app.core.knowledge import KnowledgeEntry, KnowledgeRepository
-from app.core.policy_store import PolicyStore
-from app.core.state import State
-from app.core.transformation import ConstraintViolation, IntegratedEngine
-from app.intent_parser import IntentParser
 from app.ipc.access import read
-from app.ipc.jsonrpc import CONSTRAINT_VIOLATION, JsonRpcError
 
 
-class StateAppender(Protocol):
-    def append(self, state: State) -> None: ...
+def register_intent_handlers(server) -> None:
+    from app.daemons.intent_engine import register_intent_handlers as register_reads
 
-
-class RpcStateStore:
-    """StateStore-compatible adapter that persists immutable state via stated."""
-
-    def append(self, state: State) -> None:
-        from app.ipc.client import IpcClient
-
-        IpcClient("stated").call("state.append", state.model_dump(mode="json"))
-
-
-class IntentDaemonService:
-    def __init__(
-        self,
-        *,
-        parser: IntentParser | None = None,
-        policy_store: PolicyStore | None = None,
-        state_store: StateAppender | None = None,
-        event_bus: EventBus | None = None,
-        knowledge_repository: KnowledgeRepository | None = None,
-    ) -> None:
-        self.parser = parser or IntentParser.from_environment()
-        self.policy_store = policy_store or PolicyStore()
-        self.state_store = state_store or RpcStateStore()
-        self.event_bus = event_bus or EventBus()
-        self.knowledge_repository = knowledge_repository or KnowledgeRepository()
-        self.engine = IntegratedEngine(self.state_store, self.event_bus)  # type: ignore[arg-type]
-
-    @staticmethod
-    def _world_state(params: dict[str, Any]) -> dict[str, Any]:
-        world = dict(params.get("world") or {})
-        actor = dict(world.get("actor") or {})
-        for key in ("actor_id", "assurance_level", "org_unit"):
-            if key in params:
-                actor[key] = params[key]
-        actor.setdefault("id", actor.get("actor_id", "anonymous"))
-        actor.setdefault("assurance_level", "eid_low")
-        world["actor"] = actor
-        world.setdefault("now", datetime.now(timezone.utc).isoformat())
-        return world
-
-    def execute(self, params: dict[str, Any]) -> dict[str, Any]:
-        raw_input = params.get("intent") or params.get("raw_input")
-        if not isinstance(raw_input, str) or not raw_input.strip():
-            raise JsonRpcError(-32602, "intent or raw_input is required")
-
-        world = self._world_state(params)
-        proposal = self.parser.parse(
-            raw_input,
-            context=params.get("context")
-            if isinstance(params.get("context"), dict)
-            else None,
-        )
-        if proposal.suggested_transformation == "clarify_intent":
-            raise JsonRpcError(
-                -32002,
-                "CLARIFICATION_REQUIRED",
-                {
-                    "rationale": proposal.rationale,
-                    "confidence": proposal.confidence_score,
-                },
-            )
-
-        # Policy lookup and CEL evaluation are a mandatory pre-append gate.
-        # Never allow a store/evaluator failure to reach the state appender.
-        try:
-            constraints = self.policy_store.get_constraints(
-                proposal.suggested_transformation
-            )
-            evaluator = CELEvaluator()
-            failed_constraints = []
-            for constraint in constraints:
-                if not constraint.evaluate(
-                    proposal.candidate_state, world, evaluator=evaluator
-                ):
-                    failed_constraints.append(constraint)
-        except Exception:  # noqa: BLE001 - security boundary must fail closed
-            raise JsonRpcError(
-                -32603,
-                "INTENT_EXECUTION_FAILED",
-                {
-                    "user_message": "Intentionen kunne ikke gennemføres, fordi politikkerne ikke kunne kontrolleres.",
-                    "rationale": "Policy/CEL evaluation failed closed.",
-                },
-            ) from None
-
-        if failed_constraints:
-            # Report the first hard failure; include every failed rule id so
-            # callers can see that the full constraint set was evaluated.
-            constraint = failed_constraints[0]
-            data: dict[str, Any] = {
-                "rule_id": constraint.id,
-                "rule": constraint.expression,
-                "failed_rule_ids": [item.id for item in failed_constraints],
-                "transformation": proposal.suggested_transformation,
-                "user_message": constraint.error_message,
-                "rationale": "Afvist af en obligatorisk CEL-politikregel.",
-            }
-            required_assurance = constraint.metadata.get("required_assurance")
-            if required_assurance:
-                data.update(
-                    {
-                        "step_up_required": True,
-                        "required_assurance": required_assurance,
-                        "step_up_method": constraint.metadata.get(
-                            "step_up_method", "mitid_erhverv"
-                        ),
-                    }
-                )
-            raise JsonRpcError(
-                CONSTRAINT_VIOLATION,
-                "CONSTRAINT_VIOLATION",
-                data,
-            )
-
-        try:
-            # IntegratedEngine rechecks constraints immediately before append;
-            # the explicit gate above ensures every rule was evaluated first.
-            state = self.engine.apply_proposal(proposal, constraints, world)
-        except ConstraintViolation as exc:
-            constraint = exc.constraint
-            data: dict[str, Any] = {
-                "rule_id": constraint.id,
-                "rule": constraint.expression,
-                "transformation": proposal.suggested_transformation,
-                "user_message": constraint.error_message,
-            }
-            required_assurance = constraint.metadata.get("required_assurance")
-            if required_assurance:
-                data.update(
-                    {
-                        "step_up_required": True,
-                        "required_assurance": required_assurance,
-                        "step_up_method": constraint.metadata.get(
-                            "step_up_method", "mitid_erhverv"
-                        ),
-                    }
-                )
-            data["rationale"] = "Afvist af en obligatorisk CEL-politikregel."
-            raise JsonRpcError(
-                CONSTRAINT_VIOLATION,
-                "CONSTRAINT_VIOLATION",
-                data,
-            ) from None
-        except Exception:  # noqa: BLE001 - never leak internals over IPC
-            raise JsonRpcError(
-                -32603,
-                "INTENT_EXECUTION_FAILED",
-                {
-                    "user_message": "Intentionen kunne ikke gennemføres på grund af en intern kontrolfejl.",
-                    "rationale": "Execution failed closed.",
-                },
-            ) from None
-
-        knowledge = KnowledgeEntry(
-            state_id=state.id,
-            transformation_name=proposal.suggested_transformation,
-            explanation=proposal.rationale,
-            proof_type="CEL_CONSTRAINT",
-            confidence=proposal.confidence_score,
-        )
-        self.knowledge_repository.add_entry(knowledge)
-        return {
-            "status": "executed",
-            "proposal_id": str(proposal.proposal_id),
-            "transformation": proposal.suggested_transformation,
-            "state": state.model_dump(mode="json"),
-            "confidence_score": proposal.confidence_score,
-            "rationale": proposal.rationale,
-            "applied_constraints": [
-                {
-                    "id": item.id,
-                    "version": item.version,
-                    "expression": item.expression,
-                }
-                for item in constraints
-            ],
-            "knowledge_entry": knowledge.model_dump(mode="json"),
-        }
-
-
-_DEFAULT_SERVICE: IntentDaemonService | None = None
-
-
-def default_service() -> IntentDaemonService:
-    global _DEFAULT_SERVICE
-    if _DEFAULT_SERVICE is None:
-        _DEFAULT_SERVICE = IntentDaemonService()
-    return _DEFAULT_SERVICE
-
-
-def intent_execute(params: dict[str, Any]) -> dict[str, Any]:
-    return default_service().execute(params)
-
-
-def register_intent_handlers(
-    server, service: IntentDaemonService | None = None
-) -> IntentDaemonService:
-    try:
-        from app.daemons.intent_engine import (
-            register_intent_handlers as register_legacy,
-        )
-
-        register_legacy(server)
-    except ImportError:
-        pass
-    active = service or default_service()
+    register_reads(server)
     from app.gate.ipc import gate_required, register_gate_handlers
 
-    # IntentDaemonService.execute appends to stated after a CEL check but
-    # without consent or confirmation: not reachable over IPC any more.
+    # The old free-text executor is gone; protected actions go through the gate.
     server.register("intent.execute", gate_required("intent.execute"))
 
     gate = register_gate_handlers(server)
@@ -238,7 +27,6 @@ def register_intent_handlers(
     register_conversation_handlers(server, gate)
     _start_audit_anchor(server)
     server.register("health", read(lambda _: {"daemon": "eira-intentd", "ok": True}))
-    return active
 
 
 def _start_audit_anchor(server) -> None:
