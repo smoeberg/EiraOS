@@ -36,6 +36,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - EIRA Fleet Rights API: grænseflade, rod- og driftsnøgler med tilbagekaldelse, HTTPS + mTLS, enroll
   og planlagt synkronisering (#146–#149); enhedsnøglen i TPM i kontrakten (#177).
 - `fleetd`: administratorkrav, `device_id` fra nøglen, gamle inventarmetoder fjernet (#176).
+- Rettighedsvektorerne er versioneret (`tests/vectors/MANIFEST.json`, version 1) og har nu også signer-vektorer
+  (`rights-signing/`) og et konformansscript, som `eira-fleet-control` kan køre mod sin egen signer
+  (`scripts/rights_vectors_conformance.py`); en ændret vektor uden ny version fejler i CI (udviklingsplan F1.9).
 
 ### Identitet, model og samtale
 - Installeret desktop-login (RFC 8252) gennem `identityd` (#151, #152); leverandørneutral OIDC,
