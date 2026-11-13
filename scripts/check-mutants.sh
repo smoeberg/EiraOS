@@ -27,7 +27,7 @@ for patch in "${patches[@]}"; do
     name=$(basename "$patch" .patch)
     tests=$(sed -n 's/^Tests: //p' "$patch")
     work=$(mktemp -d -t eira-mutant.XXXXXXXX)
-    cp -r app tests tools specs "$work/"
+    cp -r app tests tools specs packaging "$work/"
     [ -f ruff.toml ] && cp ruff.toml "$work/"
     if ! (cd "$work" && patch -p1 --quiet --forward < "$ROOT/$patch"); then
         echo "MUTANT $name: patch does not apply (regenerate with tests/mutants/make_mutants.py)"

@@ -1,0 +1,18 @@
+# OpenSSL configuration for EiraOS processes that use the device key
+# (EIRA-CONTEXT §5.0, FLEET-RIGHTS-API §8): loads the tpm2 provider next to
+# the default one, so a TSS2 key blob can sign the mTLS handshake in the TPM.
+# Set with OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf; never system-wide.
+openssl_conf = eira_openssl_init
+
+[eira_openssl_init]
+providers = eira_providers
+
+[eira_providers]
+default = eira_default
+tpm2 = eira_tpm2
+
+[eira_default]
+activate = 1
+
+[eira_tpm2]
+activate = 1

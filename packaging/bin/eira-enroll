@@ -2,5 +2,7 @@
 # Enroll this device with Fleet (FLEET-RIGHTS-API §8). Run as root by IT,
 # with the invitation file from Fleet.
 set -eu
+# The device key is made in the TPM (EIRA-CONTEXT §5.0, devicekey.py).
+export OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf
 export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
 exec /usr/bin/python3 -m app.rights.enroll "$@"

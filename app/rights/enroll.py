@@ -5,8 +5,10 @@
 The invitation comes from IT over their own channel (USB, provisioning
 image): Fleet's URL, Fleet's CA and a single-use enroll token. The device
 
-1. generates its key pair locally — the private key never leaves the device,
-   only a certificate signing request does;
+1. generates its key pair in the TPM (devicekey.py): the private key cannot
+   leave the TPM, only its wrapped blob is written and only a certificate
+   signing request is sent. Without a TPM 2.0, enroll stops with exit 2
+   before anything is written (managed requires one);
 2. calls POST /v1/enroll over TLS that trusts only the invitation's CA;
 3. checks the answer: same Fleet, a certificate issued by that CA for *this*
    key, a valid enrollment (roots with not_after);
@@ -36,11 +38,10 @@ from pathlib import Path
 from typing import Any
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+from cryptography.hazmat.primitives import serialization
+from cryptography.x509.oid import ExtendedKeyUsageOID
 
-from app.rights import fleet_api
+from app.rights import devicekey, fleet_api
 from app.rights.transport import MAX_RESPONSE_BYTES, TIMEOUT_SECONDS, TlsFiles
 
 INVITE_VERSION = "1"
@@ -96,17 +97,7 @@ def machine_hash(path: Path | None = None) -> str:
     return "sha256:" + hashlib.sha256(b"eira-enroll:" + raw.encode()).hexdigest()
 
 
-def new_key_and_csr() -> tuple[ec.EllipticCurvePrivateKey, bytes]:
-    key = ec.generate_private_key(ec.SECP256R1())
-    csr = (
-        x509.CertificateSigningRequestBuilder()
-        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, socket.gethostname()[:64] or "eira")]))
-        .sign(key, hashes.SHA256())
-    )
-    return key, csr.public_bytes(serialization.Encoding.PEM)
-
-
-def check_answer(answer: Any, invitation: Invitation, key, now: dt.datetime) -> tuple[dict, bytes, str | None]:
+def check_answer(answer: Any, invitation: Invitation, public_key: bytes, now: dt.datetime) -> tuple[dict, bytes, str | None]:
     """Everything Fleet returns is checked before anything is written."""
     if not isinstance(answer, dict):
         raise EnrollError("enroll answer is not an object")
@@ -130,7 +121,7 @@ def check_answer(answer: Any, invitation: Invitation, key, now: dt.datetime) -> 
         cert.verify_directly_issued_by(ca)
     except Exception:  # noqa: BLE001 - any failure means "not issued by this CA"
         raise EnrollError("device certificate is not issued by the invitation's CA") from None
-    ours = key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    ours = public_key
     theirs = cert.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
     if ours != theirs:
         raise EnrollError("device certificate is for another key")
@@ -200,26 +191,36 @@ def enroll(
     now = now or dt.datetime.now(dt.timezone.utc)
     if enrollment_path.exists():
         raise EnrollError("device is already enrolled; remove the enrollment to re-enroll")
-    key, csr = new_key_and_csr()
-    answer = call_enroll(invitation, {
-        "enroll_token": invitation.enroll_token,
-        "csr": csr.decode("ascii"),
-        "machine_hash": machine_hash(),
-        "hostname": socket.gethostname(),
-    }, context=context)
-    enrollment, cert_pem, token = check_answer(answer, invitation, key, now)
-
+    if not devicekey.tpm_present():  # before anything is written (§8 step 1)
+        raise devicekey.NoTpm("this device has no TPM 2.0; managed requires one (FLEET-RIGHTS-API §6 pt. 1a)")
     gid = grp.getgrnam(group).gr_gid if group else None
     directory = files.key.parent
     directory.mkdir(mode=0o750, parents=True, exist_ok=True)
-    if gid is not None:
-        os.chown(directory, 0, gid)
-    os.chmod(directory, 0o750)
-    key_pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
-                                serialization.NoEncryption())
-    _write(files.ca, invitation.ca_pem, 0o644, None)
-    _write(files.certificate, cert_pem, 0o644, None)
-    _write(files.key, key_pem, 0o640, gid)
+    staged = directory / f".{files.key.name}.new"
+    try:
+        # The key is made in the TPM; only its wrapped blob is on disk and
+        # only the CSR leaves the device.
+        devicekey.create(staged)
+        csr = devicekey.csr(staged, socket.gethostname())
+        answer = call_enroll(invitation, {
+            "enroll_token": invitation.enroll_token,
+            "csr": csr.decode("ascii"),
+            "machine_hash": machine_hash(),
+            "hostname": socket.gethostname(),
+        }, context=context)
+        enrollment, cert_pem, token = check_answer(answer, invitation, devicekey.public_key_der(staged), now)
+        if gid is not None:
+            os.chown(directory, 0, gid)
+            os.chown(staged, 0, gid)
+        os.chmod(directory, 0o750)
+        os.chmod(staged, 0o640)
+        _write(files.ca, invitation.ca_pem, 0o644, None)
+        _write(files.certificate, cert_pem, 0o644, None)
+        os.replace(staged, files.key)
+    except devicekey.DeviceKeyError as exc:
+        raise EnrollError(f"device key: {exc}") from None
+    finally:
+        staged.unlink(missing_ok=True)
     if token:
         _write(files.token, token.encode("ascii"), 0o640, gid)
     else:
@@ -241,6 +242,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         invitation = parse_invitation(json.loads(Path(args[0]).read_text(encoding="utf-8")), now)
         enrollment = enroll(invitation, enrollment_path=fleet_api.ENROLLMENT_PATH, files=TlsFiles.default())
+    except devicekey.NoTpm as exc:
+        print(f"eira-enroll: {exc}", file=sys.stderr)
+        return 2
     except (OSError, ValueError, EnrollError) as exc:
         print(f"eira-enroll: {exc}", file=sys.stderr)
         return 1

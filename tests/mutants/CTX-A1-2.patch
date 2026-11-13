@@ -1,0 +1,19 @@
+Mutant CTX-A1-2: the device key is made in software and written as a file
+Tests: tests/test_device_key_tpm.py::test_t_a1_f_the_key_is_a_tpm_blob_that_cannot_be_exported
+
+--- a/app/rights/devicekey.py
++++ b/app/rights/devicekey.py
+@@ -63,10 +63,10 @@
+     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+     os.close(fd)
+     try:
+-        _openssl("genpkey", *PROVIDERS, "-algorithm", "EC", "-pkeyopt", "group:P-256", "-out", str(path))
+-        if not path.read_bytes().startswith(TSS2_HEADER):
++        _openssl("genpkey", "-algorithm", "EC", "-pkeyopt", "group:P-256", "-out", str(path))
++        if False:
+             raise DeviceKeyError("the key was not made in the TPM")
+-        missing = REQUIRED_ATTRIBUTES - attributes(path)
++        missing = set()
+         if missing:
+             raise DeviceKeyError(f"the TPM key can be exported (missing {', '.join(sorted(missing))})")
+     except BaseException:

@@ -35,6 +35,8 @@ Depends:
  python3-jsonschema (>= 4.10),
  python3-pydantic (>= 2.10),
  python3-websockets (>= 13),
+ tpm2-openssl,
+ tpm-udev,
  eira-labwc (>= 0.20.3-1eira2),
  systemd,
  xwayland
