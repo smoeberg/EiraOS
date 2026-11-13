@@ -3,7 +3,10 @@
 Runs as ``eira-model`` (its own UID, not in the ``eira`` group), with no
 network and no access to /data. One method:
 
-``model.prepare {session_id, text, conversation_id, me, participants[], now?, lang?}``
+``model.prepare {session_id, text, conversation_id?, me?, participants[], now?, lang?}``
+
+Without a conversation (the central IntentBar) only system operations are
+candidates; conversation actions need ``conversation_id`` and ``me``.
 
 1. The adapter reads the text (EiraLang) and proposes an action (EiraAI)
    inside the candidate list (AI-INTERFACE-1.0 §3, §5).
@@ -44,7 +47,11 @@ from app.model.contract import (
 from app.model.rules import RuleAdapter
 
 # Candidates the model may propose (§5.3: not a permission; the gate decides).
-CANDIDATES = ("utterance", "commitment_proposed")
+# A system operation is proposed by type only; the gate fixes reversibility
+# and rights, and the model never calls a system API (ADR-0002).
+CONVERSATION_CANDIDATES = ("utterance", "commitment_proposed")
+SYSTEM_CANDIDATES = ("system:power.request_action",)
+CANDIDATES = CONVERSATION_CANDIDATES + SYSTEM_CANDIDATES
 NO_CALLER = -32001
 NOT_ALLOWED = -32003
 
@@ -53,10 +60,12 @@ def _context(params: dict[str, Any]) -> tuple[ConversationContext, str, str]:
     text, conversation, me = params.get("text"), params.get("conversation_id"), params.get("me")
     if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
         raise JsonRpcError(-32602, f"text is required (at most {MAX_TEXT} characters)")
-    if not isinstance(conversation, str) or not conversation:
-        raise JsonRpcError(-32602, "conversation_id is required")
-    if not isinstance(me, str) or not me:
-        raise JsonRpcError(-32602, "me (the requesting identity) is required")
+    if conversation is None:
+        conversation, me = "", ""  # no conversation: system operations only
+    elif not isinstance(conversation, str) or not conversation:
+        raise JsonRpcError(-32602, "conversation_id must be a non-empty string")
+    elif not isinstance(me, str) or not me:
+        raise JsonRpcError(-32602, "me (the requesting identity) is required with a conversation")
     raw = params.get("participants") or []
     if not isinstance(raw, list) or len(raw) > MAX_PARTICIPANTS:
         raise JsonRpcError(-32602, f"participants must be a list of at most {MAX_PARTICIPANTS}")
@@ -85,6 +94,34 @@ def _envelope(action, context: ConversationContext, me: str) -> dict[str, Any]:
         "veritas": {"status": "unassessed", "trust_score": None, "evidence_refs": []},
         "temporal": {"created_at": datetime.now(timezone.utc).isoformat(), "valid_from": None, "supersedes": None},
     }
+
+
+def _system_envelope(action) -> dict[str, Any]:
+    """EiraSystemAPI wire form (app/gate/system.py). The model gives only
+    the operation and its input; scope and actor are the gate's."""
+    return {
+        "eira_system": "1",
+        "id": "sys-" + uuid.uuid4().hex,
+        "operation": action.type.removeprefix("system:"),
+        "input": action.content,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _delegation_needed(result: dict[str, Any], action_type: str) -> dict[str, str] | None:
+    """The gate refused for want of a delegation (EIRA Delegation v1.1):
+    tell the app exactly which one, so it can ask the user. The delegee is
+    this process's own identity, as the gate derives it (model_identity)."""
+    if result.get("error") != "E_UNAUTHORIZED" or "delegation" not in str(result.get("detail", "")):
+        return None
+    return {"delegee_id": _own_identity(), "target": f"intent:{action_type}"}
+
+
+def _own_identity() -> str:
+    """The identity the gate gives this process (same function, same UID)."""
+    from app.gate.caller import Caller, model_identity
+
+    return model_identity(Caller(uid=os.getuid(), pid=os.getpid(), model=True)) or ""
 
 
 def _gate_propose(envelope: dict[str, Any], session_id: str, lang: str) -> dict[str, Any]:
@@ -118,13 +155,20 @@ def register_model_handlers(server, adapter: ModelAdapter | None = None, propose
             return {"abstain": intent.reason, "model": about}
         if isinstance(intent, ModelError):
             return {"error": intent.code, "model": about}
-        action = checked_action(active.propose_action(intent, CANDIDATES, context), CANDIDATES, context)
+        candidates = SYSTEM_CANDIDATES + (CONVERSATION_CANDIDATES if context.conversation_id else ())
+        action = checked_action(active.propose_action(intent, candidates, context), candidates, context)
         if isinstance(action, Abstain):
             return {"abstain": action.reason, "model": about}
         if isinstance(action, ModelError):
             return {"error": action.code, "model": about}
-        result = propose(_envelope(action, context, me), session_id, lang)
-        return {"gate": result, "model": {**about, "intent": intent.intent, "confidence": intent.confidence}}
+        envelope = _system_envelope(action) if action.type.startswith("system:") else _envelope(action, context, me)
+        result = propose(envelope, session_id, lang)
+        reply = {"gate": result, "action_type": action.type,
+                 "model": {**about, "intent": intent.intent, "confidence": intent.confidence}}
+        needed = _delegation_needed(result, action.type)
+        if needed:
+            reply["needs_delegation"] = needed
+        return reply
 
     prepare.wants_peer = True
     server.register("model.prepare", caller(prepare))

@@ -5,6 +5,7 @@ import {
   type ProposalRecord,
 } from "./components/SpatialCanvas";
 import { IntentBar } from "./components/IntentBar";
+import { PowerMenu } from "./components/PowerMenu";
 import { SituationUI } from "./components/SituationUI";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { VeritasHUD, type VeritasResult } from "./components/VeritasHUD";
@@ -117,6 +118,7 @@ export default function App() {
               Terminal
             </button>
           )}
+          {builderMode && <PowerMenu />}
           <div className="runtime-status">
             <span aria-hidden />
             Lokal Unix IPC

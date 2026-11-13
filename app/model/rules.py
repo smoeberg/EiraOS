@@ -29,6 +29,15 @@ MEETING = re.compile(
     r"^\s*(?:aftal|foreslå|book)\s+(?:et\s+)?møde\s+med\s+(?P<who>\S+)\s+(?P<when>.+?)\s+om\s+(?P<topic>\S.*)$",
     re.IGNORECASE | re.DOTALL,
 )
+# Power (EiraSystemAPI, ADR-0002). Whole sentence only: "sluk lyset" is not
+# a request to turn the computer off.
+_MACHINE = r"(?:\s+(?:for\s+)?(?:computeren|maskinen|pc'en|pcen))?"
+POWER = (
+    (re.compile(rf"^\s*(?:sluk|luk\s+ned){_MACHINE}\s*[.!]?\s*$", re.IGNORECASE), "poweroff"),
+    (re.compile(rf"^\s*(?:genstart){_MACHINE}\s*[.!]?\s*$", re.IGNORECASE), "reboot"),
+    (re.compile(rf"^\s*(?:sæt{_MACHINE}\s+i\s+dvale|dvale){_MACHINE}\s*[.!]?\s*$", re.IGNORECASE),
+     "suspend"),
+)
 WHEN_DATE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})\s+kl\.?\s*(?P<h>\d{1,2})(?:[:.](?P<m>\d{2}))?$", re.IGNORECASE)
 WHEN_REL = re.compile(r"^(?P<day>i\s+dag|i\s+morgen)\s+kl\.?\s*(?P<h>\d{1,2})(?:[:.](?P<m>\d{2}))?$", re.IGNORECASE)
 
@@ -74,6 +83,9 @@ class RuleAdapter:
     ) -> IntentExtraction | Abstain | ModelError:
         if language_hint not in (None, "da"):
             return ModelError(E_UNSUPPORTED_LANGUAGE, "the rule adapter reads Danish only")
+        for pattern, action in POWER:
+            if pattern.match(text):
+                return IntentExtraction("power", {"action": action}, "da", 0.95)
         if match := SEND.match(text):
             person = _person(match["who"], context)
             if person is None:
@@ -95,6 +107,8 @@ class RuleAdapter:
     def propose_action(
         self, intent: IntentExtraction, allowed_actions: tuple[str, ...], context: ConversationContext
     ) -> EdpAction | Abstain | ModelError:
+        if intent.intent == "power" and "system:power.request_action" in allowed_actions:
+            return EdpAction("system:power.request_action", {"action": intent.entities["action"]})
         addressed = tuple(p for p in context.participants if p.identity == intent.entities.get("person"))
         if intent.intent == "send_message" and "utterance" in allowed_actions:
             return EdpAction("utterance", {"text": intent.entities["text"], "lang": "da"}, addressed)

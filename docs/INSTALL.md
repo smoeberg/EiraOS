@@ -10,7 +10,7 @@ EiraOS installeres fra et ISO, der er bygget på Ubuntu Desktop 26.04 LTS' offic
 
 ## 1. Hent eller byg ISO'et
 
-**Fra CI:** Kør workflowet *Ubuntu 26.04 Packaging Acceptance* (fanen Actions → Run workflow), og hent artefaktet `eira-installer-iso-ubuntu-26.04-amd64`. Brug aldrig artefaktet `eira-ci-iso`: det er et testbillede, som sletter den første disk uden at spørge.
+**Fra CI:** Kør workflowet *Ubuntu 26.04 Packaging Acceptance* (fanen Actions → Run workflow), og hent artefaktet `eira-installer-iso-ubuntu-26.04-amd64`. Det testbillede, CI installerer i sin VM (det sletter den første disk uden at spørge), forlader ikke CI-maskinen og kan ikke hentes.
 
 **Lokalt på Ubuntu 26.04:**
 
@@ -21,7 +21,7 @@ BASE=$(scripts/fetch_ubuntu_iso.sh)
 scripts/build_iso.sh --base-iso "$BASE" --deb dist/eira-os-core.deb --output-dir dist
 ```
 
-`fetch_ubuntu_iso.sh` henter det nyeste Ubuntu Desktop 26.04-ISO og afviser det, hvis `SHA256SUMS` ikke er signeret med Canonicals CD-image-nøgle, eller hvis checksummen ikke passer. Resultatet er `dist/EiraOS-1.0-RC1-amd64.iso` med `.sha3-256` og `.build-info.json`.
+`fetch_ubuntu_iso.sh` henter det nyeste Ubuntu Desktop 26.04-ISO og afviser det, hvis `SHA256SUMS` ikke er signeret med Canonicals CD-image-nøgle, eller hvis checksummen ikke passer. Resultatet er `dist/EiraOS-<version>-amd64.iso` (versionen står i `VERSION`) med `.sha3-256` og `.build-info.json`.
 
 ## 2. Skriv ISO'et til en USB-nøgle
 
