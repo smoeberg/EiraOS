@@ -7,6 +7,11 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
 ### Gate Kernel og sikkerhed
+- F1b, første hele vej: IntentBar → `eira-modeld` → `gate.propose` → samtykkeagenten → gatens egen status. Modellen
+  forstår strømkommandoer og foreslår dem som EiraSystemAPI-handlinger; mangler en delegation, beder UI'et om den gennem
+  agenten; afstår modellen, siger UI'et det ærligt. Strøm-menuen (manuel vej) findes kun i Builder Mode (ADR-0001).
+  Delegationsteksten er skrevet i almindeligt dansk. VM-check `intent-power-reaches-gate-and-is-refused`
+  (fundregister S-6).
 - R-6.2: `eira-labwc` har `<trustedGroup>`-patchen. Samtykkeagentens vindue ligger over alle andre, også fuldskærm, og har
   fokus; andre klienter kan ikke tage fokus, starte træk-og-slip, holde input-grabs eller sætte et markørbillede imens.
   Afprøvet headless i CI med kontrolkørsler (`verify-trusted.sh`); sessionen starter ikke uden patchen; pakken er

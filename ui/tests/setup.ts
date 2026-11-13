@@ -9,4 +9,6 @@ HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElemen
 afterEach(() => {
   cleanup();
   delete window.__EIRA_TEST_IPC__;
+  delete window.__EIRA_TEST_GATE__;
+  delete window.__EIRA_TEST_DELEGATION__;
 });

@@ -53,6 +53,9 @@ fn canonical_daemon(daemon: &str) -> Option<&'static str> {
         "wallet" | "walletd" => Some("walletd"),
         "presence" | "presenced" => Some("presenced"),
         "context" | "contextd" => Some("contextd"),
+        // The model process (F1b): the IntentBar asks it for a proposal; it
+        // proposes to the gate as itself and can never decide.
+        "model" | "modeld" => Some("modeld"),
         _ => None,
     }
 }
@@ -71,7 +74,20 @@ fn socket_root() -> PathBuf {
     PathBuf::from("/run/eira")
 }
 
+/// The model process runs as `eira-model`, which may not write /run/eira, so
+/// its socket has its own runtime directory (app/ipc/paths.py, same order):
+/// `EIRA_MODEL_RUN_DIR`, then /run/eira-model if it exists, then the root.
+const MODEL_RUN_DIR: &str = "/run/eira-model";
+
 fn socket_path(daemon: &str) -> PathBuf {
+    if daemon == "modeld" {
+        if let Some(dir) = std::env::var_os("EIRA_MODEL_RUN_DIR") {
+            return PathBuf::from(dir).join("modeld.sock");
+        }
+        if std::path::Path::new(MODEL_RUN_DIR).is_dir() {
+            return PathBuf::from(MODEL_RUN_DIR).join("modeld.sock");
+        }
+    }
     socket_root().join(format!("{daemon}.sock"))
 }
 
@@ -334,6 +350,8 @@ mod tests {
         assert_eq!(canonical_daemon("delegationd"), Some("delegationd"));
         assert_eq!(canonical_daemon("wallet"), Some("walletd"));
         assert_eq!(canonical_daemon("presenced"), Some("presenced"));
+        assert_eq!(canonical_daemon("model"), Some("modeld"));
+        assert_eq!(canonical_daemon("modeld"), Some("modeld"));
         assert_eq!(canonical_daemon("context"), Some("contextd"));
         assert_eq!(canonical_daemon("../../tmp/evil"), None);
         assert_eq!(canonical_daemon("/run/eira/stated"), None);
@@ -388,6 +406,28 @@ mod tests {
             std::env::remove_var("EIRA_RUN_DIR");
         }
         assert_eq!(socket_root(), std::path::PathBuf::from("/run/eira"));
+    }
+
+    #[test]
+    fn the_model_socket_has_its_own_directory() {
+        let _env_guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            std::env::set_var("EIRA_SOCKET_DIR", "/tmp/eira-sp");
+            std::env::set_var("EIRA_MODEL_RUN_DIR", "/tmp/eira-model-test");
+        }
+        assert_eq!(
+            socket_path("modeld"),
+            std::path::PathBuf::from("/tmp/eira-model-test/modeld.sock")
+        );
+        // Only the model: the other daemons stay in the common directory.
+        assert_eq!(
+            socket_path("intentd"),
+            std::path::PathBuf::from("/tmp/eira-sp/intentd.sock")
+        );
+        unsafe {
+            std::env::remove_var("EIRA_MODEL_RUN_DIR");
+            std::env::remove_var("EIRA_SOCKET_DIR");
+        }
     }
 
     #[test]
