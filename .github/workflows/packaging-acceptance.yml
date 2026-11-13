@@ -88,7 +88,7 @@ jobs:
           PY
 
       - name: Upload Debian package and inspection evidence
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: eira-deb-ubuntu-26.04
           path: |
@@ -177,7 +177,7 @@ jobs:
           grep -qx 0001-trusted-group-stacking-and-focus.patch /tmp/x/usr/share/eira-labwc/patches
 
       - name: Upload eira-labwc package
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: eira-labwc-ubuntu-26.04
           path: dist/eira-labwc.deb
@@ -194,26 +194,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      # Base ISO, two ISOs, the offline repo and the VM disk do not fit next
-      # to the runner's preinstalled toolchains, which this job never uses.
-      - name: Free disk space
-        run: |
-          df -h / /mnt 2>/dev/null || df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
-          df -h /
+      # The runner has ~90 GB free (#191: 91 GB before anything ran), enough
+      # for the base ISO, both ISOs, the offline repo and the VM disk. Clearing
+      # preinstalled toolchains cost 2.5 minutes and is not needed; the free
+      # space is logged so a smaller runner shows up here first.
+      - name: Disk space
+        run: df -h /
 
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Download Debian package
-        uses: actions/download-artifact@v4
+        uses: ./.github/actions/download-artifact-retry
         with:
           name: eira-deb-ubuntu-26.04
           path: dist
 
       - name: Download eira-labwc package
-        uses: actions/download-artifact@v4
+        uses: ./.github/actions/download-artifact-retry
         with:
           name: eira-labwc-ubuntu-26.04
           path: dist
@@ -260,7 +258,7 @@ jobs:
 
       - name: Verify ISO layout and boot records
         run: |
-          for ISO in dist/EiraOS-1.0-RC1-amd64.iso dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso; do
+          for ISO in dist/EiraOS-*-amd64.iso dist/EiraOS-*-amd64-ci-unattended.iso; do
             echo "== $ISO"
             cat "$ISO.sha3-256"
             xorriso -indev "$ISO" -report_el_torito plain 2>/dev/null | tee el-torito.txt
@@ -272,27 +270,27 @@ jobs:
               grep -q "'$f'" files.txt || { echo "missing $f"; exit 1; }
             done
           done
-          ! xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -find /eira/ci 2>/dev/null | grep -q "'/eira/ci"
-          ! xorriso -indev dist/EiraOS-1.0-RC1-amd64.iso -find /eira/repo 2>/dev/null | grep -q "'/eira/repo"
-          xorriso -indev dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso -find /eira/repo/Packages.gz 2>/dev/null \
+          ! xorriso -indev dist/EiraOS-*-amd64.iso -find /eira/ci 2>/dev/null | grep -q "'/eira/ci"
+          ! xorriso -indev dist/EiraOS-*-amd64.iso -find /eira/repo 2>/dev/null | grep -q "'/eira/repo"
+          xorriso -indev dist/EiraOS-*-amd64-ci-unattended.iso -find /eira/repo/Packages.gz 2>/dev/null \
             | grep -q "'/eira/repo/Packages.gz'"
 
       # The ISO is already compressed (squashfs); zipping it again only costs time.
       - name: Upload installer ISO
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: eira-installer-iso-ubuntu-26.04-amd64
           path: |
-            dist/EiraOS-1.0-RC1-amd64.iso
-            dist/EiraOS-1.0-RC1-amd64.iso.sha3-256
-            dist/EiraOS-1.0-RC1-amd64.iso.build-info.json
+            dist/EiraOS-*-amd64.iso
+            dist/EiraOS-*-amd64.iso.sha3-256
+            dist/EiraOS-*-amd64.iso.build-info.json
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
 
       - name: Make room for the VM disk
         run: |
-          rm -rf .cache/ubuntu-iso offline-repo dist/EiraOS-1.0-RC1-amd64.iso
+          rm -rf .cache/ubuntu-iso offline-repo dist/EiraOS-*-amd64.iso
           df -h .
 
       - name: Install QEMU and enable KVM
@@ -324,7 +322,7 @@ jobs:
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
             -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
-            -cdrom dist/EiraOS-1.0-RC1-amd64-ci-unattended.iso -boot order=d \
+            -cdrom dist/EiraOS-*-amd64-ci-unattended.iso -boot order=d \
             -device virtio-vga -display none -nic none \
             -serial file:install-serial.log -no-reboot || status=$?
           echo "installer VM exited with ${status:-0} (124 = timeout)"
@@ -354,7 +352,7 @@ jobs:
 
       - name: Upload serial logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: vm-acceptance-logs
           path: |

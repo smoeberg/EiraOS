@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 """Generate tests/vectors/rights-set/ for EIRA Rights Set 1.0.
 
-The vectors are the shared contract between eira-os and eira-fleet-control:
-both repos run the same files in CI. Regenerating must be deliberate — the
-output is committed, and test_rights_set_contract.py fails if a vector's
-expectation and the reference verifier disagree.
+The vectors are the shared contract between eira-os and eira-fleet-control
+(EIRA-RIGHTS-SET §8). eira-os runs them against its verifier; Fleet runs
+tests/vectors/rights-signing/ against its signer with
+scripts/rights_vectors_conformance.py and pins the set's version in
+tests/vectors/MANIFEST.json. Regenerating must be deliberate — the output is
+committed, test_rights_set_contract.py fails if a vector's expectation and
+the reference verifier disagree, and test_rights_vectors_manifest.py fails if
+a vector changes without a new manifest version (--bump).
 
 The keys below are TEST KEYS derived from fixed seeds. They are not, and
 must never become, trust anchors on a real device.
 
-    python3 scripts/gen_rights_vectors.py
+    python3 scripts/gen_rights_vectors.py           regenerate (same version)
+    python3 scripts/gen_rights_vectors.py --bump    regenerate as a new version
 """
 
 from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -29,8 +36,14 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat 
 from app.rights import keys  # noqa: E402
 from app.rights.contract import DOMAIN, canonical, signing_input  # noqa: E402
 
-OUT = ROOT / "tests" / "vectors" / "rights-set"
-KEYS_OUT = ROOT / "tests" / "vectors" / "rights-keys"
+# EIRA_VECTORS_OUT lets the tests regenerate into a scratch directory.
+VECTORS = Path(os.environ.get("EIRA_VECTORS_OUT") or ROOT / "tests" / "vectors")
+OUT = VECTORS / "rights-set"
+KEYS_OUT = VECTORS / "rights-keys"
+SIGNING_OUT = VECTORS / "rights-signing"
+MANIFEST = VECTORS / "MANIFEST.json"
+# The directories the versioned set covers (UDVIKLINGSPLAN F1.9).
+VERSIONED = ("rights-set", "rights-keys", "rights-signing")
 ROOT_SEEDS = {"test-root-kk": bytes([0x66] * 32), "test-root-kk-expired": bytes([0x77] * 32)}
 ROOT_NOT_AFTER = {"test-root-kk": "2036-01-01T00:00:00Z", "test-root-kk-expired": "2026-11-01T00:00:00Z"}
 
@@ -314,7 +327,86 @@ def key_vectors() -> list[dict]:
     return v
 
 
+def signing_vectors() -> list[dict]:
+    """What Fleet must produce byte for byte: the unsigned document and the
+    test key in, the canonical signed document out (Ed25519 is deterministic).
+    One case per document Fleet signs and per signing domain."""
+    v = []
+
+    def case(name, description, kind, signed, seed):
+        unsigned = copy.deepcopy(signed)
+        del unsigned["signature"]["value"]
+        v.append({"name": name, "description": description, "kind": kind,
+                  "seed_hex": seed.hex(), "document": unsigned, "expect_raw": text(signed)})
+
+    case("rights-set-managed", "Managed-sæt signeret med tenantens driftsnøgle (EIRAOS-RIGHTS-V1).",
+         "rights_set", sign(managed(), "test-tenant-kk-1"), KEYS["test-tenant-kk-1"][1])
+    case("rights-set-default", "Bundlens default-sæt signeret med release-nøglen (EIRAOS-RIGHTS-V1).",
+         "rights_set", sign(default_set(), "test-release-1"), KEYS["test-release-1"][1])
+    case("rights-set-unicode", "Ikke-ASCII i strenge: JCS skriver dem som UTF-8, ikke som \\u-escapes.",
+         "rights_set",
+         sign(managed(issued_by={"api_call_id": "req-lærer-7f3a", "fleet": "fleet.kk.example"}),
+              "test-tenant-kk-1"),
+         KEYS["test-tenant-kk-1"][1])
+    ops = public(KEYS["test-tenant-kk-1"][1])
+    cert = {"eira_rights_key": "1", "key_id": "test-tenant-kk-1", "public_key": ops, "tenant_id": "kk",
+            "not_before": "2026-11-01T00:00:00Z", "not_after": "2027-01-15T00:00:00Z"}
+    case("key-certificate", "Driftsnøglens certifikat signeret med tenantens rod (EIRAOS-RIGHTS-KEY-V1).",
+         "key_certificate", _root_sign(cert, "test-root-kk", keys.signing_input_certificate),
+         ROOT_SEEDS["test-root-kk"])
+    rev = {"eira_rights_revocations": "1", "tenant_id": "kk", "sequence": 2,
+           "issued_at": "2026-11-07T10:00:00Z", "revoked": ["old-1", "old-2"]}
+    case("revocations", "Tilbagekaldelseslisten signeret med tenantens rod (EIRAOS-RIGHTS-REVOKE-V1).",
+         "revocations", _root_sign(rev, "test-root-kk", keys.signing_input_revocations),
+         ROOT_SEEDS["test-root-kk"])
+    return v
+
+
+def _file_hashes() -> dict[str, str]:
+    return {
+        path.relative_to(VECTORS).as_posix(): "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        for directory in VERSIONED
+        for path in sorted((VECTORS / directory).glob("*.json"))
+    }
+
+
+def set_hash(files: dict[str, str]) -> str:
+    """One hash over the whole set: names and contents."""
+    body = "".join(f"{name}\0{digest}\n" for name, digest in sorted(files.items()))
+    return "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+
+
+def write_manifest(bump: bool) -> dict:
+    """Record the set's hash under its version. A changed set needs --bump,
+    so a pinned version always means the same files on both sides."""
+    previous = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {"version": 0, "history": {}}
+    files = _file_hashes()
+    digest = set_hash(files)
+    version = previous["version"]
+    history = dict(previous["history"])
+    if bump or version == 0:
+        version += 1
+        history[str(version)] = digest
+    elif history.get(str(version)) != digest:
+        raise SystemExit(
+            f"the vectors changed but version {version} is recorded with another hash: "
+            "run with --bump to publish a new version"
+        )
+    manifest = {
+        "name": "eira-rights-vectors",
+        "note": "Shared by eira-os (verifier) and eira-fleet-control (signer). TEST KEYS ONLY.",
+        "version": version,
+        "set_hash": digest,
+        "covers": list(VERSIONED),
+        "files": files,
+        "history": history,
+    }
+    MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    return manifest
+
+
 def main() -> None:
+    bump = "--bump" in sys.argv[1:]
     OUT.mkdir(parents=True, exist_ok=True)
     for old in OUT.glob("*.json"):
         old.unlink()
@@ -344,6 +436,14 @@ def main() -> None:
     }, indent=2) + "\n")
     for vector in key_vectors():
         (KEYS_OUT / f"{vector['name']}.json").write_text(json.dumps(vector, indent=2, ensure_ascii=False) + "\n")
+    SIGNING_OUT.mkdir(parents=True, exist_ok=True)
+    for old in SIGNING_OUT.glob("*.json"):
+        old.unlink()
+    for vector in signing_vectors():
+        (SIGNING_OUT / f"sign-{vector['name']}.json").write_text(
+            json.dumps(vector, indent=2, ensure_ascii=False) + "\n"
+        )
+    write_manifest(bump)
 
 
 if __name__ == "__main__":

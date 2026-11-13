@@ -132,7 +132,7 @@ Den aktuelle interne `ConversationContext` indeholder:
 
 Den aktuelle model-IPC accepterer:
 - påkrævet `session_id` og `text`
-- valgfri `conversation_id`, `me`, `participants[]`, `now` og `language_hint`
+- valgfri `conversation_id`, `me`, `participants[]`, `now`, `language_hint` (til sproggenkendelsen) og `lang` (sproget i gatens gengivelse, standard `da`)
 - valgfri `lang` til gate/UI-sprog
 
 Hvis `conversation_id` er udeladt, normaliserer modelprocessen den interne kontekst til tom samtale og tom `me`. I den situation er **kun systemhandlinger kandidater**. Samtalehandlinger kræver en samtale og en `me`-identitet. En tom samtale må ikke bruges til at opfinde en samtale, modtager eller medlemskab.

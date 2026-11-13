@@ -30,8 +30,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # here, and a new open write fails the test.
 KNOWN_OPEN_WRITES = {
     ("identityd", "identity.verify_production_certificate"): "F0b.4",
-    ("intentd", "intent.parse"): "F1.2",
-    ("intentd", "intent.plan"): "F1.2",
 }
 
 

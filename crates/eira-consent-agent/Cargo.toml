@@ -1,6 +1,6 @@
 [package]
 name = "eira-consent-agent"
-version = "0.1.0"
+version.workspace = true
 description = "EiraOS consent agent: the only process that may consent (EIRA-CONSENT-AGENT)"
 edition = "2024"
 rust-version = "1.85"

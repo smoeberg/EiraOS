@@ -1,20 +1,25 @@
 ---
-description: EIRA contract rules for AI-assisted development in phase1
-globs: app/**/*,tests/**/*,ui/src/**/*,ui/src-tauri/src/**/*
+description: EiraOS rules for AI-assisted development (see CONTRIBUTING.md)
+globs: app/**/*,tests/**/*,ui/src/**/*,ui/src-tauri/src/**/*,crates/**/*,packaging/**/*
 alwaysApply: false
 ---
 
-# EIRA Contract Rules (phase1)
+# EiraOS rules
 
-When implementing or modifying code under `app/`, `tests/` or `ui/`:
+Read `CONTRIBUTING.md` first. It names the documents that apply (plan,
+contracts in `specs/`, ADRs) and the path a new protected action takes.
+Anything under `docs/archive/` is history, not guidance.
 
-1. **Read the active contract prompt** in `contracts/prompts/` (CP-*.prompt.md) for the area you touch.
-2. **Never introduce** global session state, global presentation_mode, or in-memory pending intents.
-3. **Always scope** user state by `session_id` (DB table `sessions`).
-4. **IPC calls** must pass `session_id`; HTTP uses header `X-EIRA-Session-Id`.
-5. **Respect OUT OF SCOPE** sections in contract prompts — do not add vision features.
-6. **Error codes** must match contracts: -32001 assurance, -32002 cannot_execute, -32010 ipc_auth, -32014 capability_unavailable.
-7. **Match** existing Python style: typed functions, sqlite3 via `get_connection()`, pydantic models.
-8. **Do not create** new architecture or vision markdown files unless explicitly requested.
-
-Contract index: `contracts/prompts/README.md`
+1. **Everything that changes something goes through the gate** (`app/gate/`).
+   No button, daemon or model calls the system directly.
+2. **Only the consent agent consents and confirms.** The UI never shows the
+   gate's rendering as something to approve; it passes only the `action_id`.
+3. **Identity comes from the kernel** (`SO_PEERCRED`), never from a parameter.
+   A client cannot name another user's session; the presentation mode is per
+   OS user, not per session.
+4. **Rights come only from Fleet** through the rights API; no Fleet code here.
+5. **Every IPC method has an access class** (`app/ipc/access.py`); regenerate
+   the catalog with `python3 scripts/ipc_catalog.py --write`.
+6. **The model only proposes**, as `eira-model`, under a delegation.
+7. **No test is removed to make CI pass.** The owner merges.
+8. Python: typed functions, `sqlite3`, pydantic. Docs in Danish, code in English.

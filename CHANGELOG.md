@@ -7,7 +7,15 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 ### Model og AI-grænseflade
 - AI-INTERFACE 1.0 er afstemt mod runtime efter #190: `eira-modeld` ejer adapterkaldet, samtalekontekst kommer fra appen/EIRA-CONVERSATION (ikke `contextd`), forespørgsler uden samtale begrænses til systemhandlinger, og EDP/EiraSystemAPI beskrives som adskilte handlingsfamilier bag samme Gate Kernel. Den aktive adapter er fortsat regelbaseret; ingen sprogmodel eller modelruntime er tilføjet.
 
+### Model evaluation (F8.1 — draft)
+- Added the draft EIRA Model Evaluation 1.0 contract: versioned multilingual corpus, repeatable adapter runs, per-language reporting, offline verification, and independent Gate security acceptance. No evaluation harness or model selection is implemented by this documentation-only change.
+
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
+
+### Dokumentation
+- `CONTRIBUTING.md`: hvad der gælder, de hårde regler og vejen for en ny beskyttet handling (skema → policy →
+  gengivelse → executor → rettighed → AppArmor → model → UI → test → VM-check → audit). PR-skabelon. `.cursor`-reglen
+  pegede på arkiverede filer og sessionsbundet tilstand og er rettet.
 
 ### CI
 - Packaging Acceptance er kortere: ISO og VM-installation i samme job (CI-billedet uploades og hentes ikke længere),
@@ -50,6 +58,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - EIRA Fleet Rights API: grænseflade, rod- og driftsnøgler med tilbagekaldelse, HTTPS + mTLS, enroll
   og planlagt synkronisering (#146–#149); enhedsnøglen i TPM i kontrakten (#177).
 - `fleetd`: administratorkrav, `device_id` fra nøglen, gamle inventarmetoder fjernet (#176).
+- Rettighedsvektorerne er versioneret (`tests/vectors/MANIFEST.json`, version 1) og har nu også signer-vektorer
+  (`rights-signing/`) og et konformansscript, som `eira-fleet-control` kan køre mod sin egen signer
+  (`scripts/rights_vectors_conformance.py`); en ændret vektor uden ny version fejler i CI (udviklingsplan F1.9).
 
 ### Identitet, model og samtale
 - Installeret desktop-login (RFC 8252) gennem `identityd` (#151, #152); leverandørneutral OIDC,
@@ -68,6 +79,18 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Rent sessionsmiljø uden arvede `EIRA_*`- og loader-variabler (#159).
 - VM-testen installerer offline fra et lokalt pakkearkiv (#160); eksplicit modulliste i `.deb` (#183);
   apt-fallback til spejle uden for ubuntu.com og robusthed mod DNS- og keyserver-fejl (#175, #184).
+- Clippy med `-D warnings` på alle Rust-crates i CI, også `ui/src-tauri` og `eira-consent-agent`, og
+  `cargo fmt --check` på `ui/src-tauri`; IPC-broens genforsøg indekserer ikke længere med løkkevariablen
+  (udviklingsplan F1.1).
+- Én version for hele EiraOS i `VERSION` (`1.0.0-rc2`): pakken, Rust-workspacet, Tauri-appen, UI'et og
+  udviklingsbroen bruger den, og `tests/test_version.py` fejler, hvis de afviger. Pakken er `1.0.0~rc2-1` til
+  Ubuntu 26.04 (`resolute`) i stedet for `1.0~rc1` til `noble`; `build_deb.sh` læser versionen fra changelog'en,
+  og installer-ISO'et hedder `EiraOS-<version>-amd64.iso` i stedet for `EiraOS-1.0-RC1-amd64.iso` (udviklingsplan F1.3).
+  Versionsplanen var ejerens at afgøre: 13. nov. 2026 valgte ejeren `1.0.0-rc2` frem for `0.8.0`, fordi apt ser
+  0.8.0 som **ældre** end pilotens `1.0~rc1` — en pilotmaskine kunne ikke opgraderes, kun geninstalleres.
+- Upload og download af CI-artefakter prøves op til tre gange (30 s og 90 s imellem; genforsøg overskriver et
+  halvt oprettet artefakt) gennem `.github/actions/*-artifact-retry`; `tests/test_ci_artifact_retry.py` afviser
+  direkte kald (udviklingsplan F1.4).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
@@ -82,6 +105,12 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   registrering læser; på en rigtig maskine ville AppArmor have afvist begge (fundet af VM-checket
   `identityd-no-apparmor-denials` på #186).
 - Fleet auth-bypass, OIDC JWKS-URL, en flaky Rust-test og UI-tegnkodning (#129).
+- To rettighedssæt, der aktiveres samtidig, kan ikke længere fortryde hinandens versionstjek: cachen installerer kun,
+  mens det sæt, dommen blev fældet mod, stadig er aktivt, og agenten dømmer igen ellers. Samtidige aktiveringer
+  ender på den højeste version; to forskellige sæt med samme version afvises (`version_conflict`) (fundregister
+  S-23, udviklingsplan F1.7).
+- Gatens audit-lyttere logger en advarsel, når Fleet-ankeret fejler, i stedet for at sluge fejlen (S-13);
+  docstringen i `app/gate/consent_proof.py` beskriver samtykkeagentens model (D-8) (udviklingsplan F1.7).
 
 ### Oprydning
 - Fjernede `ui/node_modules`, `__pycache__`-filer, `data/run/*.port` og løse filer (`jid`, `rid`)
@@ -90,6 +119,22 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   som `.deb`-pakken og `scripts/deploy_systemd.sh` installerer.
 - README: rettede stier og links, opstartsvejledning fra repoets rod, korrekte socket-navne og en
   statustabel over alle ni daemons i stedet for de modstridende tal (6/7).
+- Prototyperne `walletd`, `presenced` og `contextd` er fjernet fra `runner.py`, `app/daemons/`, IPC-navnene,
+  Tauri-broen og testene; `contextd` modsagde EIRA-CONTEXT. Gate-processen indeholder kun gaten: `app/mistral.py`,
+  `app/intent_parser.py`, `intent.parse`/`intent.plan` med `build_agency` og ventende intentioner, og den døde
+  `IntentDaemonService` er væk (fundregister S-7, S-8, S-9); en test afviser, at `intentd` indlæser en
+  LLM-klient, parseren eller CEL-executoren. AI-INTERFACE §3 og §6 henter samtalekonteksten fra samtalelaget
+  (udviklingsplan F1.2).
+- Udviklingsbroen har ikke længere `wallet`-, `presence`- og `context`-ruterne, der skrev uden session eller gate,
+  eller `/v1/intent/parse` og `/plan`; `req.dict()` er erstattet af `model_dump()` (S-22), og den ubrugte
+  `ui/veritas-hud/index.html` er fjernet (D-10) (udviklingsplan F1.6).
+- Én vej til databaseskemaet: Alembic er fjernet (det kendte to af omkring tredive tabeller, kørte aldrig på en
+  installeret maskine og gav i CI `audit_events` en anden form). Hvert modul opretter og opgraderer sine egne tabeller
+  additivt; reglerne står i `docs/reference/databaseskema.md`, og `tests/test_schema_one_path.py` tjekker, at
+  initialiseringen er idempotent og opgraderer en gammel database (udviklingsplan F1.10).
+- Android-klienten er ikke med i 1.0 (ejerens beslutning) og er flyttet til `docs/archive/android/`; `build_ffi.sh`
+  bygger ikke længere til `aarch64-linux-android`. Hash-pariteten Python↔Rust testes fortsat over FFI
+  (udviklingsplan F1.8).
 
 ## [0.7.0] — released 2026-10-20
 

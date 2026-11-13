@@ -12,7 +12,7 @@ validate_mock_login_configuration()
 
 class Settings(BaseSettings):
     app_name: str = "EIRA HTTP Dev Bridge"
-    version: str = "0.3.0"
+    version: str = "1.0.0-rc2"
     debug: bool = False
 
     db_path: Path = Path(__file__).resolve().parent.parent / "data" / "eira.db"

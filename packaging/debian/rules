@@ -17,7 +17,7 @@ override_dh_auto_build:
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	python3 -m venv debian/.test-venv
-	debian/.test-venv/bin/python -m pip install -r requirements-dev.txt alembic
+	debian/.test-venv/bin/python -m pip install -r requirements-dev.txt
 	PYTHONPATH=. debian/.test-venv/bin/python -m pytest -q tests
 	npm test --prefix ui
 else

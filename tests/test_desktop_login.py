@@ -236,6 +236,22 @@ def test_expired_session_is_no_session(app_db, entra, loginuids, tmp_path):
         assert gate._actor(sid) is None
 
 
+def test_session_without_expiry_is_no_session(app_db, entra, loginuids, tmp_path):
+    """Fail closed: a pre-upgrade row without expires_at never counts."""
+    from app.session_store import get_connection, get_session, session_of_caller
+
+    start = call(login.login_start, HUMAN)
+    sid = call(login.login_complete, HUMAN, state=start["state"], code="abc")["session_id"]
+    with get_connection() as conn:
+        conn.execute("UPDATE sessions SET expires_at = NULL WHERE session_id = ?", (sid,))
+        conn.commit()
+    assert session_of_caller(HUMAN.uid, sid) is None
+    gate = Gate(GateStore(str(tmp_path / "g.db")), default_registry(str(tmp_path / "g.db")),
+                sessions=get_session, rights=TestFleet(tmp_path / "r", Clock()).cache)
+    with acting_as(HUMAN):
+        assert gate._actor(sid) is None
+
+
 def test_identityd_registers_login_with_the_peer(app_db):
     from app.daemons.identityd import register_identity_handlers
 
