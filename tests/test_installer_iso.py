@@ -185,6 +185,10 @@ def _build(tmp_path: Path, *extra: str) -> tuple[Path, str, str]:
     return iso, listing, grub.read_text(encoding="utf-8") + "\n#AUTOINSTALL\n" + autoinstall.read_text(encoding="utf-8")
 
 
+def _version() -> str:
+    return (Path(__file__).resolve().parents[1] / "VERSION").read_text(encoding="utf-8").strip()
+
+
 needs_xorriso = pytest.mark.skipif(shutil.which("xorriso") is None, reason="xorriso not installed")
 
 
@@ -192,7 +196,7 @@ needs_xorriso = pytest.mark.skipif(shutil.which("xorriso") is None, reason="xorr
 def test_build_iso_remasters_a_base_iso(tmp_path):
     iso, listing, text = _build(tmp_path)
     grub, autoinstall = text.split("\n#AUTOINSTALL\n")
-    assert iso.name == "EiraOS-1.0-RC1-amd64.iso"
+    assert iso.name == f"EiraOS-{_version()}-amd64.iso"
     for path in ("/autoinstall.yaml", "/eira/eira-os-core.deb",
                  "/eira/eira-postinstall.sh", "/eira/eira-firstboot"):
         assert f"'{path}'" in listing
@@ -209,7 +213,7 @@ def test_build_iso_remasters_a_base_iso(tmp_path):
 def test_build_iso_ci_variant_is_unattended_and_separately_named(tmp_path):
     iso, listing, text = _build(tmp_path, "--ci-unattended")
     grub, autoinstall = text.split("\n#AUTOINSTALL\n")
-    assert iso.name == "EiraOS-1.0-RC1-amd64-ci-unattended.iso"
+    assert iso.name == f"EiraOS-{_version()}-amd64-ci-unattended.iso"
     assert "'/eira/ci/eira-ci-report'" in listing
     assert "interactive-sections: []" in autoinstall
     assert "set timeout=1" in grub

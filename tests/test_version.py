@@ -59,6 +59,13 @@ def test_development_bridge_uses_the_version():
         assert found == [VERSION], (path, found)
 
 
+def test_installer_and_user_agent_use_the_version():
+    iso = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
+    assert "VERSION" in iso and "1.0-RC1" not in iso
+    verifier = (ROOT / "app" / "auth" / "production_cert_verifier.py").read_text(encoding="utf-8")
+    assert re.findall(r'"EiraOS/([^"]+)"', verifier) == [VERSION]
+
+
 def test_build_script_takes_the_version_from_the_changelog():
     script = (ROOT / "scripts" / "build_deb.sh").read_text(encoding="utf-8")
     assert "dpkg-parsechangelog" in script

@@ -13,6 +13,8 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "${SCRIPT_DIR}/.." && pwd)
+# One version for EiraOS (VERSION; tests/test_version.py).
+EIRA_VERSION=$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")
 OUTPUT_DIR=${EIRA_ISO_OUTPUT_DIR:-${REPO_ROOT}/dist}
 BASE_ISO=${EIRA_BASE_ISO:-}
 WORK_DIR=
@@ -162,11 +164,11 @@ if [[ $CI_UNATTENDED -eq 1 ]]; then
         [[ -f $OFFLINE_REPO/Packages.gz ]] || { echo "Not an offline repo: $OFFLINE_REPO" >&2; exit 66; }
         cp -r -- "$OFFLINE_REPO" "$STAGE/eira/repo"
     fi
-    ISO_NAME=EiraOS-1.0-RC1-amd64-ci-unattended.iso
+    ISO_NAME=EiraOS-${EIRA_VERSION}-amd64-ci-unattended.iso
 else
     [[ -z $OFFLINE_REPO ]] || { echo "--offline-repo is for the CI image only" >&2; exit 64; }
     install -m 0644 -- "$INSTALLER/autoinstall.yaml" "$STAGE/autoinstall.yaml"
-    ISO_NAME=EiraOS-1.0-RC1-amd64.iso
+    ISO_NAME=EiraOS-${EIRA_VERSION}-amd64.iso
 fi
 
 # Rename the default boot entry. The CI image also boots it immediately and
