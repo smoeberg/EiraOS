@@ -68,6 +68,12 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   registrering læser; på en rigtig maskine ville AppArmor have afvist begge (fundet af VM-checket
   `identityd-no-apparmor-denials` på #186).
 - Fleet auth-bypass, OIDC JWKS-URL, en flaky Rust-test og UI-tegnkodning (#129).
+- To rettighedssæt, der aktiveres samtidig, kan ikke længere fortryde hinandens versionstjek: cachen installerer kun,
+  mens det sæt, dommen blev fældet mod, stadig er aktivt, og agenten dømmer igen ellers. Samtidige aktiveringer
+  ender på den højeste version; to forskellige sæt med samme version afvises (`version_conflict`) (fundregister
+  S-23, udviklingsplan F1.7).
+- Gatens audit-lyttere logger en advarsel, når Fleet-ankeret fejler, i stedet for at sluge fejlen (S-13);
+  docstringen i `app/gate/consent_proof.py` beskriver samtykkeagentens model (D-8) (udviklingsplan F1.7).
 
 ### Oprydning
 - Fjernede `ui/node_modules`, `__pycache__`-filer, `data/run/*.port` og løse filer (`jid`, `rid`)

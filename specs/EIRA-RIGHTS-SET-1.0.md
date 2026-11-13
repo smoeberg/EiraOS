@@ -170,7 +170,7 @@ Et nyt sæt anvendes kun, hvis **alle** disse er opfyldt (i denne rækkefølge; 
 
 Afvisningsårsagerne er faste strenge (`Reason` i `contract.py`) og rapporteres ordret i `apply-result`.
 
-Sættet anvendes **atomart**: hele cachen erstattes i én transaktion. `rights_set_id`, `version`, `template`, `issued_by` og indholdshashet gemmes. Hvis et af kravene ikke er opfyldt, anvendes intet. Det aktive sæt forbliver aktivt, og fejlen rapporteres via `POST /v1/report/apply-result` og audit-loggen.
+Sættet anvendes **atomart**: hele cachen erstattes i én transaktion, og kun hvis det sæt, punkt 6 blev afgjort mod, stadig er det aktive (compare-and-swap). Ellers afgøres punkt 6 igen mod det nye aktive sæt, så to samtidige aktiveringer aldrig kan rulle versionen tilbage eller begge godtage samme version med forskelligt indhold. `rights_set_id`, `version`, `template`, `issued_by` og indholdshashet gemmes. Hvis et af kravene ikke er opfyldt, anvendes intet. Det aktive sæt forbliver aktivt, og fejlen rapporteres via `POST /v1/report/apply-result` og audit-loggen.
 
 ### 4.1 Effektiv tid — uret må ikke kunne skrues tilbage
 
@@ -254,6 +254,7 @@ Krav, der testes, når agenten og gatens lag 6 bygges ovenpå (ikke del af vekto
 3. Audit-poster indeholder rettighedssættets id og version, og ved PASS den autoriserende grant.
 4. Effektiv tid (§4.1): et tilbagestillet ur forlænger hverken sæt, grant eller samtykke.
 5. Agentens kontakt til Fleet virker med et udløbet sæt (§5.1).
+6. Samtidige aktiveringer ender på den højeste version; samme version med andet indhold afvises, også når de aktiveres samtidig (`tests/test_rights_concurrent_activation.py`, fundregister S-23).
 
 ## 9. Afklaret (7. november 2026)
 

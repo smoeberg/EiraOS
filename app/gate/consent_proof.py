@@ -1,18 +1,24 @@
 """Trusted path for consent (GATE-KERNEL bilag A pkt. 1).
 
 A session's uid says *which user* is on the socket, but every program the
-user runs has that uid. Consent and confirmation must come from the EiraOS
-desktop app itself, so they carry a proof only it can make:
+user runs has that uid. Consent and confirmation must come from the consent
+agent, so they carry a proof only it can make:
 
     proof = HMAC-SHA256(consent_key,
                         "EIRA-CONSENT-V1" 0 verb 0 uid 0 session 0 action 0 content_hash 0 rendering_hash)
 
-- `consent_key` is 32 random bytes created with the session at login and
-  returned only to the process that completed the login (the app's Rust
-  core). It lives there in memory and in the session row (/data, readable
-  only by the service user). It never reaches the webview or a file another
-  process could read; Yama ptrace protection keeps other same-uid programs
-  out of the app's memory.
+- `consent_key` is 32 random bytes created by identityd with the session at
+  login (``new_key``). It is kept in RAM only, tied to the current boot
+  (``app/consent_keys.py``: a tmpfs store under /run/eira, never the session
+  row on /data), and deleted at logout. On an installed system the only
+  process that gets it is the registered consent agent, ``eira-consent-agent``
+  (``app/auth/consent_agent.py``): identityd hands it over after checking the
+  agent's GID ``eira-consent`` and that its windows are on the session's own
+  compositor. The app's webview never holds the key, and on an installed
+  system neither does its Rust core: the agent computes the proof itself,
+  after showing the gate's rendering in its own window (EIRA-CONSENT-AGENT
+  §5.2–§5.3). Only a development machine (not ``installed()``, the same
+  condition as mock login) returns the key to the app at login.
 - The proof is bound to the verb, the uid, the session, the action, its
   content and the exact rendering the user saw: it cannot be reused for
   another action, another step or another user, nor replayed (consent and

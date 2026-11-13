@@ -66,17 +66,34 @@ def apply(
     registry: Iterable[str],
     wall_now: datetime,
 ) -> contract.Verdict:
-    """Verify against the active set and install atomically, or change nothing."""
-    # §4.1: never judge a set on a wall clock that went back past what this
-    # device has already seen.
-    high_water = cache.high_water()
-    now = max(wall_now, high_water) if high_water else wall_now
-    verdict = contract.verify(
-        raw, anchors=anchors, device=device, active=cache.active_meta(), now=now, registry=registry
-    )
-    if verdict.ok:
-        cache.install(raw, verdict, wall_now)
-    return verdict
+    """Verify against the active set and install atomically, or change nothing.
+
+    If another set is activated between the check and the install, the set is
+    judged again against that one (fundregister S-23): an older version is
+    then a rollback and the same version with other content a conflict, so
+    concurrent activations end on the highest version or are refused, never
+    on whichever happened to write last."""
+    from app.rights.cache import Superseded
+
+    registry = tuple(registry)
+    # Every Superseded means another set was installed, so this ends; the
+    # bound only guards against a cache that keeps changing under us.
+    for _ in range(32):
+        # §4.1: never judge a set on a wall clock that went back past what
+        # this device has already seen.
+        high_water = cache.high_water()
+        now = max(wall_now, high_water) if high_water else wall_now
+        verdict = contract.verify(
+            raw, anchors=anchors, device=device, active=cache.active_meta(), now=now, registry=registry
+        )
+        if not verdict.ok:
+            return verdict
+        try:
+            cache.install(raw, verdict, wall_now)
+        except Superseded:
+            continue
+        return verdict
+    return contract.Verdict(ok=False, reason=contract.Reason.VERSION_CONFLICT)
 
 
 def _log(event: str, **fields) -> None:
