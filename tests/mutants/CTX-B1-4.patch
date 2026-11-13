@@ -1,0 +1,21 @@
+Mutant CTX-B1-4: encrypt_block gets an optional block_id parameter
+Tests: tests/context/test_blocks.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -103,13 +103,13 @@
+         raise ContextError(E_CONTEXT_INTEGRITY, "authentication failed") from None
+ 
+ 
+-def encrypt_block(plaintext: bytes, context: Context) -> tuple[str, bytes]:
++def encrypt_block(plaintext: bytes, context: Context, block_id: str | None = None) -> tuple[str, bytes]:
+     """Returns ``(block_id, block)``.
+ 
+     B-1: the id is computed here, from exactly the plaintext encrypted here.
+     The function takes nothing else: no id, salt, nonce or key from a caller.
+     """
+-    block_id = _block_id(plaintext, context)
++    block_id = block_id or _block_id(plaintext, context)
+     return block_id, seal(context, BLOCK_LABEL, block_id, plaintext)
+ 
+ 

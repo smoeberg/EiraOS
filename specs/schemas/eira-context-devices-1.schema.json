@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eira-os.invalid/schemas/eira-context-devices-1.schema.json",
+  "title": "EIRA context device list, keys/devices.signed (EIRA-CONTEXT 1.0 §6.1, §8)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "list",
+    "signer",
+    "signature"
+  ],
+  "properties": {
+    "signer": {
+      "type": "string"
+    },
+    "signature": {
+      "type": "string"
+    },
+    "list": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eira_devices",
+        "context_id",
+        "version",
+        "issued_at",
+        "devices"
+      ],
+      "properties": {
+        "eira_devices": {
+          "const": "1"
+        },
+        "context_id": {
+          "type": "string",
+          "pattern": "^ctx_[a-z2-7]{26}$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "issued_at": {
+          "type": "string"
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "device_id",
+              "public_key",
+              "key_protection"
+            ],
+            "properties": {
+              "device_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "public_key": {
+                "type": "string"
+              },
+              "key_protection": {
+                "enum": [
+                  "tpm",
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

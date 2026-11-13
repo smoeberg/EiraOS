@@ -1,0 +1,15 @@
+Mutant CTX-M1-4: the audit event is left out (the test needs ignored *and* audited)
+Tests: tests/context/test_manifests.py
+
+--- a/app/context/manifest.py
++++ b/app/context/manifest.py
+@@ -120,8 +120,7 @@
+     name = manifest_name(device_id, seq)
+ 
+     def ignore(reason: str) -> None:
+-        audit("context.manifest_ignored", {"context_id": context.context_id, "manifest": name,
+-                                           "reason": reason})
++        pass
+ 
+     key = devices.key_of(device_id) if DEVICE_ID.match(device_id) else None
+     if key is None:

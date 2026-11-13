@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eira-os.invalid/schemas/eira-context-manifest-1.schema.json",
+  "title": "EIRA context manifest (EIRA-CONTEXT 1.0 §6.3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eira_manifest",
+    "context_id",
+    "device_id",
+    "seq",
+    "parents",
+    "issued_at",
+    "files",
+    "documents",
+    "merkle_root"
+  ],
+  "properties": {
+    "eira_manifest": {
+      "const": "1"
+    },
+    "context_id": {
+      "type": "string",
+      "pattern": "^ctx_[a-z2-7]{26}$"
+    },
+    "device_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}/[1-9][0-9]*$"
+      }
+    },
+    "issued_at": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "blocks",
+          "size",
+          "mtime",
+          "deleted"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mtime": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "automerge_heads",
+          "blocks"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "automerge_heads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "merkle_root": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

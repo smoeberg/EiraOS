@@ -1,0 +1,23 @@
+Mutant CTX-B3-3: empty AAD
+Tests: tests/context/test_blocks.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -84,7 +84,7 @@
+     salt = os.urandom(SALT_SIZE)
+     nonce = os.urandom(NONCE_SIZE)
+     key = _hkdf(context.cmk, salt, (label + name).encode())
+-    aad = (label + context.context_id + name).encode()
++    aad = b""
+     return bytes([FORMAT_VERSION]) + salt + nonce + ChaCha20Poly1305(key).encrypt(nonce, plaintext, aad)
+ 
+ 
+@@ -96,7 +96,7 @@
+     salt = sealed[1 : 1 + SALT_SIZE]
+     nonce = sealed[1 + SALT_SIZE : _HEADER]
+     key = _hkdf(context.cmk, salt, (label + name).encode())
+-    aad = (label + context.context_id + name).encode()
++    aad = b""
+     try:
+         return ChaCha20Poly1305(key).decrypt(nonce, sealed[_HEADER:], aad)
+     except InvalidTag:

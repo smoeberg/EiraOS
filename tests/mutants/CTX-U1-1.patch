@@ -1,0 +1,24 @@
+Mutant CTX-U1-1: uid is added to the manifest
+Tests: tests/context/test_uid.py
+
+--- a/app/context/home.py
++++ b/app/context/home.py
+@@ -112,6 +112,7 @@
+             "files": list(self.files.values()),
+             "documents": [],
+             "merkle_root": "",
++            "uid": os.getuid(),
+         }
+         name = f"{self.device_id}/{seq}"
+         if not self.home.put_if_absent(f"manifests/{name}", seal_manifest(manifest, self.context, self.signer)):
+--- a/app/context/manifest.py
++++ b/app/context/manifest.py
+@@ -34,7 +34,7 @@
+ MANIFEST_LABEL = "eira-ctx-manifest-v2"
+ RECORD_LABEL = "eira-ctx-record-v2"
+ MANIFEST_KEYS = {"eira_manifest", "context_id", "device_id", "seq", "parents", "issued_at",
+-                 "files", "documents", "merkle_root"}
++                 "files", "documents", "merkle_root", "uid"}
+ FILE_KEYS = {"path", "blocks", "size", "mtime", "deleted"}
+ DOCUMENT_KEYS = {"id", "automerge_heads", "blocks"}
+ DEVICE_ID = re.compile(r"^[0-9a-f]{64}$")

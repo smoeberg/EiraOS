@@ -1,0 +1,14 @@
+Mutant CTX-B2-1: a fixed nonce
+Tests: tests/context/test_blocks.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -82,7 +82,7 @@
+ def seal(context: Context, label: str, name: str, plaintext: bytes) -> bytes:
+     """AEAD with fresh salt and nonce from the CSPRNG on every call (B-2)."""
+     salt = os.urandom(SALT_SIZE)
+-    nonce = os.urandom(NONCE_SIZE)
++    nonce = bytes(NONCE_SIZE)
+     key = _hkdf(context.cmk, salt, (label + name).encode())
+     aad = (label + context.context_id + name).encode()
+     return bytes([FORMAT_VERSION]) + salt + nonce + ChaCha20Poly1305(key).encrypt(nonce, plaintext, aad)

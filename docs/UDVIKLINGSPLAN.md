@@ -110,7 +110,7 @@ Det største trin. Kontrakten og testplanen er accepteret, så der skal ikke skr
 
 | # | Leverance | Invarianter (testplan) | Niveau |
 |---|---|---|---|
-| F2.1 | **Lagerformatet** (§6): blokke med AEAD, manifester, Merkle-træ, og referenceværktøjet `eira-context-export`, der læser et hjem uden EiraOS. Scriptet `scripts/check-mutants.sh`. Senere en knap i skallen, "Tag dine data med", der bruger værktøjet (exit-garantien som synlig funktion) | B-1, B-2, B-3, M-1, U-1, X-1 | N1 |
+| F2.1 | **Leveret på N1:** lagerformatet i `app/context/` (blokke med AEAD og frisk salt og nonce, manifester med Merkle-rod og ECDSA P-256-signatur, enhedslisten, FastCDC, et lokalt hjem med opret-hvis-fraværende), referenceværktøjet `tools/eira-context-export/` uden EiraOS-kode, vektorer i `tests/vectors/context/`, 16 mutanter og `scripts/check-mutants.sh` (i `python-ci`, indtil `context-home` findes). Kontrakten har fået præciseringer i §6.6. **Tilbage:** knappen "Tag dine data med" i skallen; T-X1 i ren container og med genoprettelsesnøgle; Automerge som JSON (F2.6); ejerens svar på testplanens fund 5 (enhedslisten) | B-1, B-2, B-3, M-1, U-1, X-1 | N1 |
 | F2.2 | **Kontekst-hjem over S3 og WebDAV** med opret-hvis-fraværende; nyt CI-job `context-home` | H-1 | N2 |
 | F2.3 | **Enhedens nøgler i TPM** (§5.0): signerings- og ECDH-nøgle dannes i TPM'en og kan ikke eksporteres; Fleet-tilmelding bruger dem (FLEET-RIGHTS-API 1.3) | A-1 | N1, N3 |
 | F2.4 | **`eira-contextd`:** opretter, låser op, låser og glemmer kontekst-brugere; LUKS2 pr. kontekst; `systemd --user` pr. kontekst; `/proc` med `hidepid=invisible` | I-1, O-1, F-1 | N3 |

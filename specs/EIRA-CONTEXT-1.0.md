@@ -268,6 +268,18 @@ Universet (graphd), samtaler og andre strukturerede data er Automerge-dokumenter
 
 `eira-context-export` (separat, åbent repo) læser et kontekst-hjem med en CMK eller genoprettelsesnøgle og skriver almindelige filer og JSON-eksport af Automerge-dokumenterne. Det er en del af leverancen, ikke et senere ønske.
 
+### 6.6 Præciseringer fra implementeringen (F2.1)
+
+Disse detaljer var ikke fastlagt præcist nok til at implementere efter. De ændrer ingen semantik; de gør formatet entydigt, så det kan genimplementeres (exit-garantien). Referencen er `app/context/` og `tools/eira-context-export/`; vektorerne ligger i `tests/vectors/context/`.
+
+- **Bytes i nøgleafledning og AAD:** alle strenge er UTF-8 og sættes sammen uden separator. `block_id` er 64 små hex-tegn, og `context_id` har fast længde, så sammensætningen er entydig. `K_id` = HKDF-SHA256(CMK, intet salt, `eira-ctx-blockid-v1`). Versionsbyten er `0x02`.
+- **Manifestets kuvert:** manifestet er kanonisk JSON (sorterede nøgler, separatorerne `,` og `:`, UTF-8), forseglet som en blok med etiketten `eira-ctx-manifest-v2` og navnet `<device_id>/<seq>`. Det gemte objekt er `længde(sig)` (2 bytes big-endian) ‖ `sig` ‖ forseglingen, hvor `sig` er DER ECDSA-P256-SHA256 over forseglingen. Et manifest beskriver hele tilstanden fra den enhed (ikke en ændring), og det har præcis felterne i §6.3, intet andet (`specs/schemas/eira-context-manifest-1.schema.json`).
+- **Merkle-træet:** blade = SHA-256(`0x00` ‖ `block_id`-bytes) i manifestets rækkefølge (alle filers blokke i filrækkefølge, derefter dokumenternes); knuder = SHA-256(`0x01` ‖ venstre ‖ højre); en ulige knude føres uændret op; roden af ingen blokke er SHA-256 af den tomme streng. Rækkefølgen tæller, så blokke ikke kan byttes.
+- **Kontekst-posten** (`context`) forsegles med etiketten `eira-ctx-record-v2` og navnet `context` (`specs/schemas/eira-context-record-1.schema.json`).
+- **Enhedslisten** (`keys/devices.signed`) er JSON: `{"list": {…}, "signer": "<device_id>" | "org", "signature": "<base64 DER>"}`, hvor signaturen dækker kanonisk JSON af `list` (`specs/schemas/eira-context-devices-1.schema.json`). `device_id` = SHA-256 af den offentlige nøgle i DER SubjectPublicKeyInfo. En organisationskontekst's liste signeres af organisationens nøgle; en personlig konteksts af en enhed på den gældende liste; den første liste i en personlig kontekst godtages, hvis en enhed på listen selv har signeret den. En ny liste skal have et højere `version`.
+- **Stier i manifester** er relative og må ikke indeholde `..`, tomme segmenter, `\` eller NUL. En læser afviser andre (eksportværktøjet skriver aldrig uden for sin uddatamappe).
+- **FastCDC** bruger en fast gear-tabel: `GEAR[i]` = de første 8 bytes (big-endian) af SHA-256(`eira-ctx-gear-v1` ‖ i), normalisering niveau 2 omkring 2^20. Grænserne har kun betydning for deduplikering; en læser sætter blot en fils blokke sammen.
+
 ## 7. Synkronisering
 
 - **Skrive:** en åben kontekst lægger nye blokke op, derefter et nyt manifest med `seq` + 1. Fejler noget undervejs, er der højst efterladt ubrugte blokke.

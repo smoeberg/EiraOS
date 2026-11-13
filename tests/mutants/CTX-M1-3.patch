@@ -1,0 +1,14 @@
+Mutant CTX-M1-3: the current device list is fetched but not used to judge the new one
+Tests: tests/context/test_manifests.py
+
+--- a/app/context/devices.py
++++ b/app/context/devices.py
+@@ -144,7 +144,7 @@
+         # An organisation's context: only the organisation signs its list.
+         signer = org_key if signer_name == "org" else None
+     elif current is not None:
+-        signer = current.key_of(signer_name)
++        signer = keys.get(signer_name)
+     else:
+         signer = keys.get(signer_name)  # first list of a personal context
+     if signer is None:

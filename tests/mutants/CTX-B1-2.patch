@@ -1,0 +1,24 @@
+Mutant CTX-B1-2: block_id is taken from a sequence number
+Tests: tests/context/test_blocks.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -40,6 +40,7 @@
+ NONCE_SIZE = 12
+ CMK_SIZE = 32
+ _HEADER = 1 + SALT_SIZE + NONCE_SIZE
++_SEQ = 0
+ 
+ CONTEXT_ID = re.compile(r"^ctx_[a-z2-7]{26}$")
+ BLOCK_ID = re.compile(r"^[0-9a-f]{64}$")
+@@ -109,7 +110,9 @@
+     B-1: the id is computed here, from exactly the plaintext encrypted here.
+     The function takes nothing else: no id, salt, nonce or key from a caller.
+     """
+-    block_id = _block_id(plaintext, context)
++    global _SEQ
++    _SEQ += 1
++    block_id = sha256(str(_SEQ).encode()).hexdigest()
+     return block_id, seal(context, BLOCK_LABEL, block_id, plaintext)
+ 
+ 

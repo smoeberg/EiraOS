@@ -47,6 +47,13 @@ jobs:
       run: |
         python -m pytest tests/
 
+    # EIRA-CONTEXT testplan §2: every mutant must be caught. Moves to the
+    # context-home job when that exists (UDVIKLINGSPLAN F2.2).
+    - name: Context mutants (EIRA-CONTEXT N1)
+      if: matrix.python-version == '3.12'
+      run: |
+        PYTHON=python scripts/check-mutants.sh
+
   rust-ci:
     runs-on: ubuntu-latest
     steps:

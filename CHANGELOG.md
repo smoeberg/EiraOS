@@ -4,6 +4,12 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [Unreleased]
 
+### Kontekster (EIRA-CONTEXT 1.0)
+- F2.1: lagerformatet (§6) i `app/context/`: blokke, manifester, enhedsliste, FastCDC og et lokalt hjem; referenceværktøjet
+  `tools/eira-context-export/`, som læser et hjem uden EiraOS; testvektorer; B-1, B-2 og B-3 verificeret på N1 med 16
+  mutanter (`scripts/check-mutants.sh`). Kontrakten har fået præciseringer i §6.6, og testplanen har et nyt fund om
+  enhedslisten.
+
 ### Model evaluation (F8.1 — draft)
 - Added the draft EIRA Model Evaluation 1.0 contract: versioned multilingual corpus, repeatable adapter runs, per-language reporting, offline verification, and independent Gate security acceptance. No evaluation harness or model selection is implemented by this documentation-only change.
 
