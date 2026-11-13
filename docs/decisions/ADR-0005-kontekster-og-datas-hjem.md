@@ -72,6 +72,43 @@ En kontekst skal kunne bruges fuldt offline fra 1.0. Det betyder:
 - Fleet-administratoren bestemmer, om enheden er **lukket** (kun organisationens kontekster) eller **åben** for flere identiteter og kontekster (fx fritid på en arbejds-pc).
 - En enhed uden Fleet styres af personen.
 
+**To veje ved første opstart (besluttet af ejer, 12. november 2026).** Installationen spørger én gang, hvem enheden tilhører:
+
+| Vej | Hvad sker der | Hvem styrer enheden | Rettigheder |
+|---|---|---|---|
+| **Tilknyt en organisation** | Enheden enrolles hos organisationens Fleet (EIRA-FLEET-RIGHTS-API §8) | Organisationens Fleet | Organisationens rettighedssæt |
+| **Opret eller brug et Eira ID** | Personen opretter eller logger ind med sit Eira ID (ID-hjemmet, K11). Ingen Fleet | Personen | Pakkens standardsæt (RIGHTS-SET §5) |
+
+- På en organisations-enhed bestemmer Fleet-administratoren, om enheden er lukket eller åben (ovenfor). Det er ét flueben pr. enhed i Fleet (`device_mode`). Er det slået til, viser skallen menupunktet **"Log ind i en anden kontekst"**, og personer kan tilknytte deres private Eira ID ved siden af organisationens kontekster. Er det slået fra, findes menupunktet ikke.
+- Et privat Eira ID på en organisations-enhed giver ingen særstilling: dets kontekster får hver sin Linux-bruger efter K7, som alle andre kontekster. Et Eira ID med to kontekster (fx fritid og familie) giver altså to Linux-brugere.
+- Organisationen styrer enheden, ikke de private kontekster. Fleet ved, *at* enheden er åben, men aldrig, hvilke private Eira ID'er eller kontekster der bruger den (K2).
+- Uden sudo: et privat Eira ID på en organisations-enhed får ingen administratorrettigheder på enheden (ADR-0003, managed mode).
+- Rettigheder for private kontekster på en åben organisations-enhed: se O-9 (besluttet). Åbent punkt: O-8.
+
+**Fysisk maskine og kontekster holdes adskilt (besluttet af ejer, 12. november 2026).** Fleet styrer den fysiske maskine: opdateringer, diskkryptering, `device_mode` og om den er tilknyttet. Konteksterne er software og styres hver for sig af deres egen ejer (organisation, person eller værge). At en maskine forlader Fleet, og at en kontekst forlader en maskine, er to forskellige handlinger.
+
+Fleet registrerer ved enroll, hvem der ejer den fysiske maskine: `owner` = `organisation` | `employee`. Det afgør, hvad der sker ved fratrædelse:
+
+| Ejer | Ved fratrædelse | `slet disk` |
+|---|---|---|
+| `organisation` | *Aflevering* (nedenfor): enheden melder sig ud af alle kontekster, afleveres, og disken slettes | Tilladt |
+| `employee` | *Frigiv enhed*: Fleet fjerner maskinen fra organisationskonteksternes enhedslister, maskinen sletter sine kopier af dem og forlader Fleet. Den går tilbage til at være privat (pakkens standardsæt, personen styrer). Private kontekster røres ikke | Aldrig |
+
+**Aflevering af en organisations-enhed (besluttet af ejer, 12. november 2026).** Når en medarbejder stopper, lukker organisationen medarbejderens login, og enheden afleveres. Når Fleet-administratoren lukker enheden i Fleet, opdateres **alle** kontekster, der er tilknyttet enheden, også de private:
+
+1. Fleet fjerner enheden fra organisationskonteksternes enhedslister og roterer deres CMK (EIRA-CONTEXT §8).
+2. Fleet sender kommandoen *tilbagekald enhed* til enheden. Enheden melder sig selv ud af hver privat kontekst, den kender: den signerer en enhedsliste uden sig selv og sender den til kontekstens hjem (EIRA-CONTEXT §8.1). Fleet ser ikke, hvilke private kontekster det drejer sig om.
+3. Enheden sletter alle lokale kopier og nøgler (tilstand *fjernet*, EIRA-CONTEXT §4). Derefter kan administratoren køre *slet disk*.
+4. Personen logger ind med sit Eira ID på en ny maskine og henter sine private kontekster fra deres hjem. Intet er tabt, fordi originalen aldrig lå på maskinen; den lokale kopi var kun krypteret cache.
+
+**Husstands-Fleet (besluttet af ejer, 12. november 2026).** Private brugere kan vælge at tilknytte husstandens maskiner til Fleet som en tenant af typen `household`, hvor en forælder (eller anden voksen) er administrator. Det er samme Fleet og samme kodebase som for organisationer, og det er et tilvalg.
+
+- Husstands-Fleet styrer kun de **fysiske maskiner**: push af opdateringer, overblik over hvilke maskiner der er online og opdaterede, lås eller slet en bortkommen maskine, og børns maskiner uden sudo, så reglerne ikke kan omgås.
+- **Forældrestyring af tid, apps og indhold forbliver i familiens kontekst** (K12): regler signeret af værgerne, gemt krypteret i familiens hjem og læst i værgens egen browser. Husstands-Fleet ser hverken reglerne eller brugsoversigten.
+- Maskiner uden Fleet (hverken organisation eller husstand) opdateres ved træk: de henter hver time og ved opstart en lille signeret fil fra Eira, der siger, om der er en ny version, og hvornår de skal tjekke igen. Ved kritiske rettelser kan filen bede om et nyt tjek efter få minutter. Maskinen sender intet ID, og Eira holder ingen åben forbindelse til den (K11, minimal logning). Udrulning i ringe sker ved, at maskinen selv trækker lod om sin ring lokalt.
+
+Er enheden offline eller væk, når Fleet lukker den, kan den ikke melde sig ud. Så låses dens private kontekster senest efter `max_offline_days`, og personen kan fjerne den fra en anden enhed.
+
 ### K7 — Isolation: én Linux-bruger pr. kontekst bag én samlet oplevelse (besluttet)
 
 Hver kontekst kører som sin egen Linux-bruger, så kernen holder filer og processer adskilt (K2). Brugeren ser én EiraOS. Grænserne, der opstår, er netop dem, der alligevel skal kontrolleres:
@@ -172,6 +209,9 @@ Listen over en persons kontekster er følsom i sig selv (den afslører arbejdsgi
 **Rækkefølge (forslag):** ADR-0005 accepteres → kontrakt for kontekster og lagring → EIRA-IDENTITY 1.1 (identitet pr. kontekst) → Web App Manager. Web App Manager bygges ikke før konteksten, fordi dens profiler er konteksterne.
 
 ## Åbne spørgsmål
+
+- **O-8 Enroll ved installation.** I dag enrolles en enhed efter installationen: IT kører `eira-enroll` som root med en invitationsfil, der indeholder Fleets CA (EIRA-FLEET-RIGHTS-API §8). Vejen "Tilknyt en organisation" i installeren kræver, at personen kan indtaste en kort kode, og at enheden kan hente invitationen ud fra koden. Åbent: hvilket endpoint der slår koden op, og hvilket tillidsanker enheden bruger, før den kender organisationens CA (fx en Eira-CA indbygget i installeren).
+- ~~**O-9 Rettigheder for private kontekster på en åben organisations-enhed.**~~ Besluttet af ejer 12. november 2026: Fleet-administratorens eneste valg er fluebenet (K6). En privat kontekst på en åben organisations-enhed får pakkens standardsæt (RIGHTS-SET §5.2), som på en privat maskine, men **uden `system:`-handlinger på `device:local`**, fordi maskinen tilhører organisationen. Organisationens sæt gælder kun organisationens kontekster. Fleet udsteder intet for private kontekster og får ikke oplyst, hvilke der findes. Kræver RIGHTS-SET-revisionen (sæt pr. kontekst, F3.2); indtil da har private kontekster på en enrolled enhed ingen rettigheder (`awaiting_managed_set`).
 
 - ~~**O-7 Arbejds-pc'er uden ID-hjem.**~~ Besluttet: en lukket enhed kan køre helt uden ID-hjemmet (K11).
 

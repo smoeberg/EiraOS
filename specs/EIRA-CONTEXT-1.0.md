@@ -118,8 +118,9 @@ ukendt ──────────────► til stede ─────�
 
 ### 4.1 Første login på en enhed
 
+0. Ved første opstart er enheden enten tilknyttet en organisation (enrolled hos Fleet) eller oprettet med et Eira ID (ADR-0005 K6, "To veje ved første opstart"). På en åben organisationsenhed kan personer desuden tilknytte deres private Eira ID.
 1. Personen logger ind i skallen med en identitet (EIRA-IDENTITY).
-2. Skallen finder personens kontekster: fra ID-hjemmet (§9) eller, på en lukket organisationsenhed, fra Fleet (K11).
+2. Skallen finder personens kontekster: fra ID-hjemmet (§9) eller, på en lukket organisationsenhed, fra Fleet (K11). På en åben organisationsenhed kommer organisationens kontekster fra Fleet og personens private kontekster fra ID-hjemmet.
 3. For hver kontekst, personen vælger at åbne: `eira-contextd` opretter kontekst-brugeren, henter den krypterede post og kontekstens nøgle **pakket til denne enhed** (§5.1), forsegler nøglen i TPM'en og starter synkronisering.
 4. Kræver konteksten en anden identitet end den, der blev brugt ved log ind (fx arbejde), logger personen ind med den, før konteksten åbnes.
 
@@ -286,6 +287,13 @@ Universet (graphd), samtaler og andre strukturerede data er Automerge-dokumenter
   - for `personal`: en af personens eksisterende enheder (første enhed signerer sig selv ved oprettelse; genoprettelse (ADR-0005 K5) kan starte en ny liste).
 - **Tilbagekaldelse:** enheden fjernes fra listen, dens `keys/devices/<device_id>` slettes, og CMK roteres (§5.5). Næste gang den tilbagekaldte enhed er online, ser den, at den ikke er på listen, og fjerner konteksten (§4). Er den offline, låses konteksten senest, når `max_offline_days` udløber.
 
+### 8.1 Udmelding (en enhed fjerner sig selv)
+
+- En enhed må signere en enhedsliste, hvis den eneste ændring er, at den selv er fjernet. Kontekstens hjem og de øvrige enheder godtager en sådan liste, selv om enheden ikke ellers må ændre listen. Den kan kun formindske adgangen.
+- Udmelding sker, når Fleet sender *tilbagekald enhed* (ADR-0005 K6, "Aflevering"), og når personen selv vælger at fjerne enheden. Enheden melder sig ud af alle sine kontekster, organisationens og de private, og går derefter til tilstanden *fjernet* (§4).
+- CMK roteres af den næste af kontekstens øvrige enheder, der er online (§5.5). Den udmeldte enhed roterer ikke selv.
+- Fleet får ikke oplyst, hvilke private kontekster enheden meldte sig ud af; kvitteringen til Fleet siger kun, at udmeldingen er gennemført.
+
 ## 9. ID-hjemmet (K11)
 
 Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fastlægger kun, hvad det må indeholde:
@@ -310,6 +318,8 @@ Specificeres i detaljer i en separat kontrakt (EIRA-ID-HOME). Denne kontrakt fas
 Fleet leverer pr. organisationskontekst: kontekst-posten (§2), enhedslisten (§8), politik (`max_offline_days`, `glimt_allowed`, `devices`) og hjemmet (K3), samt for enheder: `device_mode` = `closed` | `open` (K6).
 
 **Revision krævet af RIGHTS-SET:** et rettighedssæt bindes i dag til (`tenant_id`, `device_id`). Med kontekster skal det kunne bindes til (`tenant_id`, `context_id`) og gælde på enhver enhed på kontekstens enhedsliste. Gaten vælger sæt efter den kontekst, kaldet kommer fra: peer-UID'en fra `SO_PEERCRED` slås op i `eira-contextd`s lokale tabel (§1), og sættet vælges på `context_id`. UID'en bruges aldrig selv som nøgle i et rettighedssæt. Revisionen af RIGHTS-SET er et separat dokument.
+
+**Private kontekster på en åben organisationsenhed** (ADR-0005 O-9): organisationens sæt gælder kun organisationens kontekster, og pakkens standardsæt gælder ikke på en enrolled enhed (EIRA-FLEET-RIGHTS-API §3.3, `awaiting_managed_set`). Besluttet (ADR-0005 O-9): den får pakkens standardsæt uden `system:`-handlinger på `device:local`. Fleet udsteder intet for private kontekster og må ikke få oplyst, hvilke der findes på enheden; det ser kun `device_mode`. Indtil revisionen findes, har en privat kontekst på en enrolled enhed ingen rettigheder til gate-handlinger.
 
 ## 11. Glimt (ADR-0006 L5)
 

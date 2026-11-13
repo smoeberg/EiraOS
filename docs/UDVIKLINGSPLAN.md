@@ -127,8 +127,11 @@ Kontraktrevisioner, som EIRA-CONTEXT og ADR-0005 kræver. De skrives, mens F2 by
 | # | Leverance |
 |---|---|
 | F3.1 | **EIRA-IDENTITY 1.1:** udbyder pr. kontekst og flere samtidige identiteter; tenant-migrering som nyt provider-id |
-| F3.2 | **RIGHTS-SET-revision:** et rettighedssæt bindes til (`tenant_id`, `context_id`) og ikke kun til en enhed; værgesignerede regler (`governance.source = guardian`) |
+| F3.2 | **RIGHTS-SET-revision:** et rettighedssæt bindes til (`tenant_id`, `context_id`) og ikke kun til en enhed; værgesignerede regler (`governance.source = guardian`); private kontekster på en åben organisations-enhed får standardsættet uden `system:`-handlinger (ADR-0005 O-9) |
 | F3.3 | **Sessioner pr. kontekst** i `identityd` og gaten; samtykkeagenten viser altid, i hvilken kontekst et samtykke gives |
+| F3.4 | **Enroll ved installation:** installeren spørger "Tilknyt en organisation" eller "Opret eller brug et Eira ID" (ADR-0005 K6); organisationsvejen enroller med en kort kode (ADR-0005 O-8). `device_mode` (lukket/åben, ét flueben i Fleet) føjes til desired state i FLEET-RIGHTS-API og OpenAPI-filen; skallen viser "Log ind i en anden kontekst" kun på en åben enhed. Enroll registrerer `owner` (`organisation`/`employee`); kommandoen *frigiv enhed* for medarbejder-ejede maskiner (ADR-0005 K6) |
+| F3.5 | **Push fra Fleet:** udgående MQTT over mTLS fra agenten til EMQX; samme kanal bærer EiraOS-opdateringer (apt); Fleet sender "hent nu", agenten henter og verificerer som ved polling; polling er fallback (FLEET-RIGHTS-API §6 pkt. 5) |
+| F3.6 | **Husstands-Fleet og opdatering uden Fleet:** tenant-type `household` i Fleet (kun fysiske maskiner; børns maskiner uden sudo); maskiner uden Fleet henter en signeret opdateringsfil hver time uden enheds-ID (ADR-0005 K6) |
 
 ### F4 — ID-hjemmet
 
@@ -237,6 +240,7 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | ADR-0006 O-1–O-3 | F6 |
 | Forslaget om et menneske- og fællesskabscentreret fundament (#165) | Formuleringer i F4–F6 |
 | Hvor ID-hjemmets tjeneste og genoprettelsen bor (repo og drift) | F4 |
+| ADR-0005 O-8 (tillidsanker for enroll ved installation) | F3.4 |
 | Én versionsplan for EiraOS (F1.3) | F9 |
 | Pilot (Arbejde eller Møde) | Prioritering af F6 og F7 |
 | Er `android/` med i 1.0? | F1.8 |

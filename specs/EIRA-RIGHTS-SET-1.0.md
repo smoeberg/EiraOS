@@ -209,7 +209,8 @@ Fleet fornyer sættet ved hver kontakt (ny `version`, nyt `expires_at`), når mi
 | Managed og offline | Det aktive `managed`-sæt indtil `expires_at` |
 | Managed, sættet er udløbet eller mangler | **Ingen grants** (§5.1) |
 | Unmanaged eller privat | Bundlens `default`-sæt, signeret af Fleet ved release |
-| Unmanaged, som enrolles senere | `managed`-sættet erstatter `default`-sættet og kan ikke gå tilbage |
+| Unmanaged, som enrolles senere | `managed`-sættet erstatter `default`-sættet og kan ikke gå tilbage, undtagen ved *frigiv enhed* |
+| Frigivet af Fleet (`owner` = `employee`, ADR-0005 K6) | Kun efter en signeret *frigiv enhed*-kommando fra Fleet for netop denne enhed: `enrollment.json` og managed-cachen fjernes, og `default`-sættet gælder igen. At slette `enrollment.json` lokalt er ikke en frigivelse |
 
 ### 5.1 Udløbet eller manglende sæt
 
