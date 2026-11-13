@@ -590,8 +590,8 @@ class Gate:
         if not session or not session.get("authenticated_at"):
             return None
         expires = session.get("expires_at")
-        if expires and datetime.fromisoformat(str(expires).replace("Z", "+00:00")) <= self._clock():
-            return None  # an expired session is no session
+        if not expires or datetime.fromisoformat(str(expires).replace("Z", "+00:00")) <= self._clock():
+            return None  # no expiry (pre-upgrade row) or expired: no session
         bound = session.get("os_uid")
         if bound is None:
             return None
