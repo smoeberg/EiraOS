@@ -3,8 +3,8 @@
 
 The home is "dumb" storage: objects are only ever added (append-only), and
 an object that exists is never overwritten (H-1). Here that is ``O_EXCL``;
-S3 and WebDAV homes (``If-None-Match: *``) come with F2.2 behind the same
-two methods.
+S3 and WebDAV homes (``If-None-Match: *``) are in ``app.context.remote``
+behind the same methods.
 
 Layout under the home's root (the context's pseudonymous prefix):
 
@@ -17,6 +17,7 @@ Layout under the home's root (the context's pseudonymous prefix):
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,9 +68,10 @@ class ContextWriter:
     """One device writing one context: blocks first, then the manifest (§7),
     so a failure leaves at most unused blocks."""
 
-    home: LocalHome
+    home: Any  # LocalHome, S3Home or WebDavHome (app/context/remote.py)
     context: Context
     signer: ec.EllipticCurvePrivateKey
+    audit: Callable[[str, dict[str, Any]], None] | None = None
     seq: int = 0
     parents: list[str] = field(default_factory=list)
     files: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -115,6 +117,11 @@ class ContextWriter:
         }
         name = f"{self.device_id}/{seq}"
         if not self.home.put_if_absent(f"manifests/{name}", seal_manifest(manifest, self.context, self.signer)):
+            # Someone already wrote this device's manifest number seq: never
+            # overwrite history (H-1, T-H1-d).
+            if self.audit is not None:
+                self.audit("context.manifest_collision", {"context_id": self.context.context_id,
+                                                          "manifest": name})
             raise ContextError(E_CONTEXT_INTEGRITY, f"manifest {name} already exists")
         self.seq = seq
         self.parents = [name]

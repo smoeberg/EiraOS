@@ -1,0 +1,14 @@
+Mutant CTX-H1-4: a manifest collision is ignored instead of refused
+Tests: tests/context/home/test_home.py::test_h1_d_a_second_manifest_at_the_same_path_is_refused_and_audited
+
+--- a/app/context/home.py
++++ b/app/context/home.py
+@@ -122,7 +122,7 @@
+             if self.audit is not None:
+                 self.audit("context.manifest_collision", {"context_id": self.context.context_id,
+                                                           "manifest": name})
+-            raise ContextError(E_CONTEXT_INTEGRITY, f"manifest {name} already exists")
++            pass
+         self.seq = seq
+         self.parents = [name]
+         return name
