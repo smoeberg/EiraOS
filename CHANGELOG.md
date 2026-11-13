@@ -6,6 +6,11 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
+### Dokumentation
+- `CONTRIBUTING.md`: hvad der gælder, de hårde regler og vejen for en ny beskyttet handling (skema → policy →
+  gengivelse → executor → rettighed → AppArmor → model → UI → test → VM-check → audit). PR-skabelon. `.cursor`-reglen
+  pegede på arkiverede filer og sessionsbundet tilstand og er rettet.
+
 ### CI
 - Packaging Acceptance er kortere: ISO og VM-installation i samme job (CI-billedet uploades og hentes ikke længere),
   ISO'er uploades uden ny komprimering, VM-disken bruger `cache=unsafe`, Rust-bygget har sccache, og testsuiterne

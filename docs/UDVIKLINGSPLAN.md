@@ -220,7 +220,7 @@ Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal generer
 | 2 | `SECURITY.md`: hvordan en sårbarhed rapporteres, og hvad der svares | Ejeren afgør kontakt og svartid |
 | 3 | `docs/reference/implementeringsmatrix.md`: krav → kode → test → VM-check → status | Genereres af kontrakternes statustabeller og VM-checkenes navne; README's statustabel peger herhen |
 | 4 | `docs/reference/miljoevariabler.md` | Genereres ved at søge efter `os.environ`/`getenv` i den pakkede kode |
-| 5 | `CONTRIBUTING.md` med "ny beskyttet handling fra ende til anden" (skema → policy-post → executor → test → VM-check → audit), plus PR- og issue-skabeloner | Skrives efter F1b, så den beskriver en vej, der virker |
+| 5 | ~~`CONTRIBUTING.md`~~ **Leveret** med "ny beskyttet handling fra ende til anden" (strøm som eksempel), PR-skabelon og en rettet `.cursor`-regel. Issue-skabeloner mangler | Skrevet efter F1b, så den beskriver en vej, der virker |
 
 ## 5. De næste tre PR'er
 
