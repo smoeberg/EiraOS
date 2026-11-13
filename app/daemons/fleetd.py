@@ -20,7 +20,7 @@ from app.fleet.device_registry import (
     DeviceRegistry,
     device_fingerprint,
 )
-from app.fleet.e2ee import PayloadIntegrityError, StatePayloadEncryptor
+from app.fleet.e2ee import PayloadIntegrityError, ReplayDetectedError, StatePayloadEncryptor
 from app.fleet.merkle_sync import MerkleSyncEngine, StateHeader
 from app.ipc.access import caller, read, signed
 from app.ipc.auth import PEER_KEY
@@ -121,9 +121,12 @@ class FleetSyncService:
 
         pending = []
         invalid = 0
+        replays = 0
         for block in raw_blocks:
             try:
                 pending.append(self.encryptor.decrypt_state(block))
+            except ReplayDetectedError:
+                replays += 1
             except PayloadIntegrityError:
                 invalid += 1
 
@@ -132,7 +135,7 @@ class FleetSyncService:
             snapshot = self.merkle.snapshot(self.store.list_states())
             return {
                 "accepted": 0,
-                "skipped": 0,
+                "skipped": replays,
                 "invalid": invalid,
                 "root": snapshot.root,
             }
@@ -192,7 +195,7 @@ class FleetSyncService:
         snapshot = self.merkle.snapshot(self.store.list_states())
         return {
             "accepted": len(ordered),
-            "skipped": skipped,
+            "skipped": skipped + replays,
             "invalid": 0,
             "root": snapshot.root,
         }

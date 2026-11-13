@@ -101,7 +101,7 @@ At adressere en `observer` som `member` forfremmer. Intet i en hændelse kan ned
 
 ## 5. IPC (intentd)
 
-Alle metoder ligger på `intentd.sock`, fordi gaten og dens database ligger dér. De flyttes til `presenced`, når den er en pakket daemon med egen procesidentitet.
+Alle metoder ligger på `intentd.sock`, fordi gaten og dens database ligger dér. De kan flyttes til en egen pakket daemon med egen procesidentitet senere. Prototypen `presenced` er fjernet (UDVIKLINGSPLAN F1.2).
 
 | Metode | Parametre | Svar |
 |---|---|---|

@@ -267,18 +267,21 @@ def session_of_caller(os_uid: int, session_id: str | None = None) -> dict | None
     Without: the caller's newest one. Never creates a session, and never
     returns another user's (fundregister S-5)."""
     # The same format expires_at is written in, so text comparison is time order.
+    # Fail closed: a session without expires_at (pre-upgrade row) is no session.
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with get_connection() as conn:
         if session_id:
             row = conn.execute(
                 """SELECT session_id FROM sessions WHERE session_id = ? AND os_uid = ?
-                   AND authenticated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?)""",
+                   AND authenticated_at IS NOT NULL
+                   AND expires_at IS NOT NULL AND expires_at > ?""",
                 (session_id, os_uid, now),
             ).fetchone()
         else:
             row = conn.execute(
                 """SELECT session_id FROM sessions WHERE os_uid = ?
-                   AND authenticated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?)
+                   AND authenticated_at IS NOT NULL
+                   AND expires_at IS NOT NULL AND expires_at > ?
                    ORDER BY authenticated_at DESC LIMIT 1""",
                 (os_uid, now),
             ).fetchone()

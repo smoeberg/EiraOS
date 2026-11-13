@@ -7,10 +7,12 @@ import os
 
 import pytest
 
+import app.fleet.e2ee as e2ee
 from app.core.state import State
 from app.fleet.e2ee import (
     NonceReuseError,
     PayloadIntegrityError,
+    ReplayDetectedError,
     StatePayloadEncryptor,
     _canonical_json,
 )
@@ -134,11 +136,110 @@ def test_nonce_is_never_reused_with_same_key():
         enc.encrypt_state(_state(title="second"), nonce=fixed)
 
 
+def test_nonce_window_stays_bounded(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    for i in range(4):
+        enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12)
+    assert len(enc._used_nonces) == 4
+
+    enc.encrypt_state(_state(title="fifth"), nonce=bytes([4]) * 12)
+    assert len(enc._used_nonces) == 4
+    assert bytes([0]) * 12 not in enc._used_nonces
+
+
+def test_evicted_nonce_can_be_used_again(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    for i in range(4):
+        enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12)
+
+    with pytest.raises(NonceReuseError):
+        enc.encrypt_state(_state(title="still-held"), nonce=bytes([0]) * 12)
+
+    enc.encrypt_state(_state(title="fifth"), nonce=bytes([4]) * 12)
+    envelope = enc.encrypt_state(_state(title="again"), nonce=bytes([0]) * 12)
+    assert enc.decrypt_state(envelope).payload["title"] == "again"
+
+
+def test_nonce_inside_window_still_rejected(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    for i in range(4):
+        enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12)
+
+    with pytest.raises(NonceReuseError):
+        enc.encrypt_state(_state(title="dup"), nonce=bytes([3]) * 12)
+
+
+def test_exact_replay_of_decrypted_envelope_rejected():
+    enc = _encryptor()
+    envelope = enc.encrypt_state(_state())
+    enc.decrypt_state(envelope)
+
+    with pytest.raises(ReplayDetectedError):
+        enc.decrypt_state(envelope)
+
+
+def test_replay_error_is_payload_integrity_error():
+    enc = _encryptor()
+    envelope = enc.encrypt_state(_state())
+    enc.decrypt_state(envelope)
+
+    with pytest.raises(PayloadIntegrityError):
+        enc.decrypt_state(envelope)
+
+
+def test_fresh_envelope_after_replay_still_decrypts():
+    enc = _encryptor()
+    first = enc.encrypt_state(_state(title="first"))
+    enc.decrypt_state(first)
+
+    with pytest.raises(ReplayDetectedError):
+        enc.decrypt_state(first)
+
+    second = enc.encrypt_state(_state(title="second"))
+    assert enc.decrypt_state(second).payload["title"] == "second"
+
+
+def test_replay_tracking_stays_bounded(monkeypatch):
+    monkeypatch.setattr(e2ee, "_NONCE_WINDOW", 4)
+    enc = _encryptor()
+    envelopes = [enc.encrypt_state(_state(title=str(i)), nonce=bytes([i]) * 12) for i in range(4)]
+    for envelope in envelopes:
+        enc.decrypt_state(envelope)
+    assert len(enc._seen_nonces) == 4
+
+    enc.encrypt_state(_state(title="fifth"), nonce=bytes([4]) * 12)
+    assert len(enc._seen_nonces) == 4
+
+
 def test_random_nonces_differ_across_encrypts():
     enc = _encryptor()
     a = enc.encrypt_state(_state(title="a"))
     b = enc.encrypt_state(_state(title="b"))
     assert a["nonce"] != b["nonce"]
+
+
+def test_device_pair_keys_are_directional():
+    master = os.urandom(32)
+    salt = os.urandom(16)
+    ab = StatePayloadEncryptor(
+        master, fleet_salt=salt, local_device_id="device-a", peer_device_id="device-b"
+    )
+    ba = StatePayloadEncryptor(
+        master, fleet_salt=salt, local_device_id="device-b", peer_device_id="device-a"
+    )
+
+    assert ab._aead is not ba._aead
+    assert len(ab._recv_aeads) == 2
+
+    shared_nonce = os.urandom(12)
+    env_ab = ab.encrypt_state(_state(title="ab"), nonce=shared_nonce)
+    env_ba = ba.encrypt_state(_state(title="ba"), nonce=shared_nonce)
+
+    assert ba.decrypt_state(env_ab).payload["title"] == "ab"
+    assert ab.decrypt_state(env_ba).payload["title"] == "ba"
 
 
 def test_device_pair_derives_distinct_keys():
