@@ -36,7 +36,7 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 - [AI Interface 1.0](AI-INTERFACE-1.0.md) — model adapter, EiraLang intent extraction, EiraAI action proposals, abstention and orchestration boundaries.
 
-**Status:** Draft, binding as an implementation target; not proof that model adapters or the full orchestration flow are implemented. Models propose; they do not authorize or execute.
+**Status:** Draft, afstemt mod runtime efter PR #190. Beskriver den implementerede `eira-modeld`-grænse og Gate-forløbet; den aktive adapter er fortsat regelbaseret. Ingen lokal sprogmodel er integreret. Modeller foreslår; de autoriserer eller udfører ikke.
 
 ## EiraOS Dialog Protocol (EDP)
 
