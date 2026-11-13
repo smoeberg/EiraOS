@@ -26,7 +26,7 @@ scripts/build_iso.sh --base-iso "$BASE" --deb dist/eira-os-core.deb --output-dir
 ## 2. Skriv ISO'et til en USB-nøgle
 
 ```bash
-sudo dd if=dist/EiraOS-0.8.0-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
+sudo dd if=dist/EiraOS-1.0.0-rc2-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
 Erstat `/dev/sdX` med USB-nøglen (tjek med `lsblk`). Alt på nøglen slettes. På Windows og macOS kan du bruge balenaEtcher.

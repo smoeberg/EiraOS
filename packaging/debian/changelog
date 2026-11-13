@@ -1,3 +1,11 @@
+eira-os-core (1.0.0~rc2-1) resolute; urgency=medium
+
+  * Versionsplanen (ejerbeslutning 13. nov. 2026): 1.0.0-rc2 afløser
+    0.8.0, saa pakken stiger i forhold til pilotpakken 1.0~rc1.
+    0.8.0 var lavere og kunne ikke opgradere en pilotmaskine.
+
+ -- EiraOS Maintainers <maintainers@eira-os.invalid>  Fri, 13 Nov 2026 10:05:00 +0100
+
 eira-os-core (0.8.0-1) resolute; urgency=medium
 
   * Ubuntu 26.04 LTS (resolute) package. One version for all of EiraOS

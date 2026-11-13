@@ -1,6 +1,6 @@
 [package]
 name = "eira-spatial-desktop"
-version = "0.8.0"
+version = "1.0.0-rc2"
 description = "EiraOS Spatial Canvas desktop shell"
 edition = "2024"
 rust-version = "1.85"

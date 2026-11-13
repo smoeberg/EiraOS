@@ -5,4 +5,4 @@ resolver = "3"
 
 # One version for all of EiraOS (VERSION; tests/test_version.py).
 [workspace.package]
-version = "0.8.0"
+version = "1.0.0-rc2"
