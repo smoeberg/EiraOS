@@ -1,0 +1,38 @@
+name: Download artifact with retry
+description: >
+  actions/download-artifact@v4 with up to three attempts, for the same
+  transient failures in GitHub's artifact service (UDVIKLINGSPLAN F1.4).
+inputs:
+  name:
+    description: Artifact name
+    required: true
+  path:
+    description: Destination directory
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: first
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+    - if: steps.first.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::download of ${{ inputs.name }} failed; retrying in 30 s" && sleep 30
+    - id: second
+      if: steps.first.outcome == 'failure'
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+    - if: steps.second.outcome == 'failure'
+      shell: bash
+      run: echo "::warning::download of ${{ inputs.name }} failed again; last attempt in 90 s" && sleep 90
+    - if: steps.second.outcome == 'failure'
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}

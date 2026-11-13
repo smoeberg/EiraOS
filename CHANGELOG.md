@@ -54,6 +54,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Rent sessionsmiljø uden arvede `EIRA_*`- og loader-variabler (#159).
 - VM-testen installerer offline fra et lokalt pakkearkiv (#160); eksplicit modulliste i `.deb` (#183);
   apt-fallback til spejle uden for ubuntu.com og robusthed mod DNS- og keyserver-fejl (#175, #184).
+- Upload og download af CI-artefakter prøves op til tre gange (30 s og 90 s imellem; genforsøg overskriver et
+  halvt oprettet artefakt) gennem `.github/actions/*-artifact-retry`; `tests/test_ci_artifact_retry.py` afviser
+  direkte kald (udviklingsplan F1.4).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
