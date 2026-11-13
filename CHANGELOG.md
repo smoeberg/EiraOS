@@ -6,6 +6,12 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
+### CI
+- Packaging Acceptance er kortere: ISO og VM-installation i samme job (CI-billedet uploades og hentes ikke længere),
+  ISO'er uploades uden ny komprimering, VM-disken bruger `cache=unsafe`, Rust-bygget har sccache, og testsuiterne
+  på Ubuntu 26.04's Python og Node kører i et parallelt job i stedet for inde i pakkebygget (`DEB_BUILD_OPTIONS=nocheck`).
+  Basis-ISO'ens cache gemmes kun, når ISO'en skifter.
+
 ### Gate Kernel og sikkerhed
 - F1b, første hele vej: IntentBar → `eira-modeld` → `gate.propose` → samtykkeagenten → gatens egen status. Modellen
   forstår strømkommandoer og foreslår dem som EiraSystemAPI-handlinger; mangler en delegation, beder UI'et om den gennem

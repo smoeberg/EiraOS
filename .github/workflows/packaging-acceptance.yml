@@ -54,9 +54,19 @@ jobs:
           apparmor_parser --version
           apparmor_parser -Q -K packaging/apparmor/usr.bin.eira-*
 
+      # Compiler cache for the Tauri app and the consent agent (GitHub's
+      # cache service); a miss only means a normal build.
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Build Debian package
         env:
           EIRA_DPKG_SKIP_BUILD_DEPS_CHECK: "1"
+          # The test suites run in tests-on-ubuntu-26.04 (below), in parallel,
+          # instead of inside the package build on the ISO's critical path.
+          DEB_BUILD_OPTIONS: nocheck
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: sccache
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           scripts/build_deb.sh --output-dir dist
@@ -87,6 +97,39 @@ jobs:
             dist/eira-os-core.deb.sha3-256
           if-no-files-found: error
           retention-days: 14
+
+  # The Python and UI test suites on Ubuntu 26.04's own Python and Node (the
+  # interpreter the package runs on; python-ci covers 3.11/3.12). Formerly run
+  # inside the package build, where they delayed the ISO by ~2 minutes.
+  tests-on-ubuntu-26-04:
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    timeout-minutes: 30
+    steps:
+      - name: Fetch CI scripts
+        uses: actions/checkout@v4
+
+      # The same tools the package build had: some tests use cargo, make,
+      # apparmor_parser and xorriso when present and skip without them.
+      - name: Install Python, Node and the tools the tests use
+        run: |
+          scripts/ci/apt-install.sh ca-certificates curl git build-essential pkg-config libssl-dev \
+            python3 python3-venv python3-pip nodejs npm apparmor xorriso
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Python tests
+        run: |
+          python3 --version
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/python -m pip install -q -r requirements-dev.txt alembic
+          PYTHONPATH=. /tmp/venv/bin/python -m pytest -q tests
+
+      - name: UI tests
+        run: |
+          npm ci --prefix ui --ignore-scripts
+          npm test --prefix ui
 
   # EiraOS' own labwc (>= 0.20.3, wlroots 0.20 static), built on the target
   # release. verify-globals.sh runs it headless and proves R-6.1 of
@@ -141,11 +184,25 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build-installer-iso:
+  # Builds both ISOs and installs the CI image in a KVM virtual machine in the
+  # same job, so the CI ISO never leaves the runner (uploading and downloading
+  # it cost ~10 minutes). Boots the installed disk and reads the acceptance
+  # results (eira-ci-report) from the serial console: daemons, IPC, first
+  # boot, GDM login into the EiraOS session, labwc and the EiraOS shell.
+  vm-install-acceptance:
     needs: [build-deb, build-eira-labwc]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
+      # Base ISO, two ISOs, the offline repo and the VM disk do not fit next
+      # to the runner's preinstalled toolchains, which this job never uses.
+      - name: Free disk space
+        run: |
+          df -h / /mnt 2>/dev/null || df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          df -h /
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -165,11 +222,14 @@ jobs:
         run: |
           scripts/ci/apt-install.sh xorriso gnupg curl
 
+      # Restored by prefix; saved again only when the verified ISO changed
+      # (a point release), not on every run.
       - name: Restore Ubuntu base ISO cache
-        uses: actions/cache@v4
+        id: iso-cache
+        uses: actions/cache/restore@v4
         with:
           path: .cache/ubuntu-iso
-          key: ubuntu-26.04-desktop-${{ github.run_id }}
+          key: ubuntu-26.04-desktop-none
           restore-keys: ubuntu-26.04-desktop-
 
       - name: Fetch and verify Ubuntu Desktop 26.04 ISO
@@ -177,6 +237,14 @@ jobs:
         run: |
           iso=$(scripts/fetch_ubuntu_iso.sh .cache/ubuntu-iso)
           echo "iso=$iso" >> "$GITHUB_OUTPUT"
+          echo "key=ubuntu-26.04-desktop-$(basename "$iso" .iso)-$(stat -c %s "$iso")" >> "$GITHUB_OUTPUT"
+
+      - name: Save Ubuntu base ISO cache
+        if: steps.iso-cache.outputs.cache-matched-key != steps.base.outputs.key
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/ubuntu-iso
+          key: ${{ steps.base.outputs.key }}
 
       - name: Build installer ISO and unattended CI ISO
         run: |
@@ -209,6 +277,7 @@ jobs:
           xorriso -indev dist/EiraOS-*-amd64-ci-unattended.iso -find /eira/repo/Packages.gz 2>/dev/null \
             | grep -q "'/eira/repo/Packages.gz'"
 
+      # The ISO is already compressed (squashfs); zipping it again only costs time.
       - name: Upload installer ISO
         uses: ./.github/actions/upload-artifact-retry
         with:
@@ -219,37 +288,12 @@ jobs:
             dist/EiraOS-*-amd64.iso.build-info.json
           if-no-files-found: error
           retention-days: 7
+          compression-level: 0
 
-      - name: Upload unattended CI ISO
-        uses: ./.github/actions/upload-artifact-retry
-        with:
-          name: eira-ci-iso
-          path: dist/EiraOS-*-amd64-ci-unattended.iso
-          if-no-files-found: error
-          retention-days: 1
-
-  # Installs the unattended CI image in a KVM virtual machine, boots the
-  # installed disk and reads the acceptance results (eira-ci-report) from the
-  # serial console: daemons, IPC, first boot, GDM login into the EiraOS
-  # session, labwc and the EiraOS shell.
-  vm-install-acceptance:
-    needs: build-installer-iso
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      # Checkout empties the workspace, so it must come before the download.
-      - name: Fetch CI scripts
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            scripts/ci
-            .github/actions
-
-      - name: Download CI ISO
-        uses: ./.github/actions/download-artifact-retry
-        with:
-          name: eira-ci-iso
-          path: dist
+      - name: Make room for the VM disk
+        run: |
+          rm -rf .cache/ubuntu-iso offline-repo dist/EiraOS-*-amd64.iso
+          df -h .
 
       - name: Install QEMU and enable KVM
         run: |
@@ -263,6 +307,8 @@ jobs:
       - name: Install EiraOS into a blank disk (UEFI)
         run: |
           cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+          # cache=unsafe below: the disk is thrown away after the job, and the
+          # installer's fsyncs (dpkg, apt) need not reach the runner's disk.
           qemu-img create -f qcow2 disk.qcow2 40G
           mkdir -p screens
           # No network (-nic none): the install must not depend on the Ubuntu
@@ -277,7 +323,7 @@ jobs:
           timeout 75m qemu-system-x86_64 -enable-kvm -monitor unix:qemu-mon.sock,server,nowait -machine q35 -cpu host -smp 4 -m 8192 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
-            -drive file=disk.qcow2,if=virtio,format=qcow2 \
+            -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
             -cdrom dist/EiraOS-*-amd64-ci-unattended.iso -boot order=d \
             -device virtio-vga -display none -nic none \
             -serial file:install-serial.log -no-reboot || status=$?
@@ -300,7 +346,7 @@ jobs:
           timeout 30m qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4096 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
-            -drive file=disk.qcow2,if=virtio,format=qcow2 \
+            -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
             -device virtio-vga -display none -nic user,model=virtio-net-pci \
             -serial file:boot-serial.log -no-reboot || true
           tr -d '\r' < boot-serial.log | grep -a "EIRA-CI" | tee acceptance.txt

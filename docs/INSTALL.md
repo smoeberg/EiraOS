@@ -10,7 +10,7 @@ EiraOS installeres fra et ISO, der er bygget på Ubuntu Desktop 26.04 LTS' offic
 
 ## 1. Hent eller byg ISO'et
 
-**Fra CI:** Kør workflowet *Ubuntu 26.04 Packaging Acceptance* (fanen Actions → Run workflow), og hent artefaktet `eira-installer-iso-ubuntu-26.04-amd64`. Brug aldrig artefaktet `eira-ci-iso`: det er et testbillede, som sletter den første disk uden at spørge.
+**Fra CI:** Kør workflowet *Ubuntu 26.04 Packaging Acceptance* (fanen Actions → Run workflow), og hent artefaktet `eira-installer-iso-ubuntu-26.04-amd64`. Det testbillede, CI installerer i sin VM (det sletter den første disk uden at spørge), forlader ikke CI-maskinen og kan ikke hentes.
 
 **Lokalt på Ubuntu 26.04:**
 
