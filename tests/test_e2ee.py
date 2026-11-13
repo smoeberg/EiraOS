@@ -221,6 +221,27 @@ def test_random_nonces_differ_across_encrypts():
     assert a["nonce"] != b["nonce"]
 
 
+def test_device_pair_keys_are_directional():
+    master = os.urandom(32)
+    salt = os.urandom(16)
+    ab = StatePayloadEncryptor(
+        master, fleet_salt=salt, local_device_id="device-a", peer_device_id="device-b"
+    )
+    ba = StatePayloadEncryptor(
+        master, fleet_salt=salt, local_device_id="device-b", peer_device_id="device-a"
+    )
+
+    assert ab._aead is not ba._aead
+    assert len(ab._recv_aeads) == 2
+
+    shared_nonce = os.urandom(12)
+    env_ab = ab.encrypt_state(_state(title="ab"), nonce=shared_nonce)
+    env_ba = ba.encrypt_state(_state(title="ba"), nonce=shared_nonce)
+
+    assert ba.decrypt_state(env_ab).payload["title"] == "ab"
+    assert ab.decrypt_state(env_ba).payload["title"] == "ba"
+
+
 def test_device_pair_derives_distinct_keys():
     master = os.urandom(32)
     salt = os.urandom(16)

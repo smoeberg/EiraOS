@@ -6,9 +6,12 @@ object) is encrypted.  Identifiers used for Merkle comparison — ``id``,
 header.
 
 Keys are derived with HKDF-SHA256 from the caller's master fleet-sync key and
-a per device-pair context.  Nonces are tracked in a bounded sliding window so
-the same (key, nonce) pair is not reused for encryption; with 96-bit random
-nonces a repeat inside the window is negligible.
+a per device-pair context, split into one key per direction: encryption always
+uses the local→peer key, so the two ends of a pair never encrypt under the
+same key and cannot collide on (key, nonce).  Decryption accepts both
+directions' keys.  Nonces are tracked in a bounded sliding window so the same
+(key, nonce) pair is not reused for encryption; with 96-bit random nonces a
+repeat inside the window is negligible.
 
 Decryption keeps its own bounded window of nonces from envelopes it has fully
 authenticated and rejects an exact replay of such an envelope.  Legitimate
@@ -62,14 +65,21 @@ def _canonical_json(value: Mapping[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _pair_context(local_device_id: str | None, peer_device_id: str | None) -> bytes:
-    """Stable HKDF info suffix for a directed device pair."""
-    if not local_device_id and not peer_device_id:
-        return b"state-payload"
+def _pair_context(
+    local_device_id: str | None, peer_device_id: str | None, direction: str
+) -> bytes:
+    """Stable HKDF info suffix for one direction of a device pair.
+
+    The pair is ordered canonically and the direction is bound in, so both
+    ends derive the same two keys: local→peer on one side equals peer→local
+    on the other.
+    """
     left = (local_device_id or "").strip()
     right = (peer_device_id or "").strip()
+    if not left and not right:
+        return b"state-payload"
     ordered = "\x1f".join(sorted((left, right)))
-    return f"state-payload\x00pair:{ordered}".encode("utf-8")
+    return f"state-payload\x00pair:{ordered}\x00dir:{direction}".encode("utf-8")
 
 
 class StatePayloadEncryptor:
@@ -92,20 +102,33 @@ class StatePayloadEncryptor:
         if len(fleet_salt) < 16:
             raise ValueError("fleet_salt must contain at least 128 bits")
 
-        if key_context is None:
-            key_context = _pair_context(local_device_id, peer_device_id)
-        if not isinstance(key_context, (bytes, bytearray)):
-            raise TypeError("key_context must be bytes")
-
         self._local_device_id = local_device_id
         self._peer_device_id = peer_device_id
-        self._key = HKDF(
-            algorithm=hashes.SHA256(),
-            length=_KEY_SIZE,
-            salt=fleet_salt,
-            info=b"eiraos-fleet-sync-v1\x00" + bytes(key_context),
-        ).derive(master_pairing_key)
-        self._aead = ChaCha20Poly1305(self._key)
+        if key_context is None:
+            contexts = (
+                _pair_context(local_device_id, peer_device_id, "out"),
+                _pair_context(local_device_id, peer_device_id, "in"),
+            )
+        else:
+            if not isinstance(key_context, (bytes, bytearray)):
+                raise TypeError("key_context must be bytes")
+            contexts = (bytes(key_context),)
+
+        def derive(context: bytes) -> bytes:
+            return HKDF(
+                algorithm=hashes.SHA256(),
+                length=_KEY_SIZE,
+                salt=fleet_salt,
+                info=b"eiraos-fleet-sync-v1\x00" + context,
+            ).derive(master_pairing_key)
+
+        keys: list[bytes] = []
+        for context in contexts:
+            key = derive(context)
+            if key not in keys:
+                keys.append(key)
+        self._aead = ChaCha20Poly1305(keys[0])
+        self._recv_aeads = tuple(ChaCha20Poly1305(key) for key in keys)
         self._used_nonces: set[bytes] = set()
         self._nonce_order: deque[bytes] = deque()
         self._seen_nonces: set[bytes] = set()
@@ -214,9 +237,17 @@ class StatePayloadEncryptor:
 
             nonce = base64.b64decode(str(envelope["nonce"]), validate=True)
             ciphertext = base64.b64decode(str(envelope["ciphertext"]), validate=True)
-            plaintext = self._aead.decrypt(
-                nonce, ciphertext, _canonical_json(protected_header)
-            )
+            plaintext = None
+            for aead in self._recv_aeads:
+                try:
+                    plaintext = aead.decrypt(
+                        nonce, ciphertext, _canonical_json(protected_header)
+                    )
+                    break
+                except InvalidTag:
+                    continue
+            if plaintext is None:
+                raise InvalidTag
             protected = json.loads(plaintext)
             if not isinstance(protected, dict):
                 raise PayloadIntegrityError("decrypted body must be an object")
