@@ -131,11 +131,11 @@ Den aktuelle interne `ConversationContext` indeholder:
 - `now` (ISO 8601-reference for relative datoer)
 
 Den aktuelle model-IPC accepterer:
-- påkrævet `session_id` og `text)
-- valgfri `conversation_id), `me`, `participants[]), `now` og `language_hint`
+- påkrævet `session_id` og `text`
+- valgfri `conversation_id`, `me`, `participants[]`, `now` og `language_hint`
 - valgfri `lang` til gate/UI-sprog
 
-Hvis `conversation_id` er udeladt, normaliserer modelprocessen den interne kontekst til tom samtale og tom `me`. I den situation er **kun systemhandlinger kandidater**. Samtalehandlinger kræver en samtale og en `me)-identitet. En tom samtale må ikke bruges til at opfinde en samtale, modtager eller medlemskab.
+Hvis `conversation_id` er udeladt, normaliserer modelprocessen den interne kontekst til tom samtale og tom `me`. I den situation er **kun systemhandlinger kandidater**. Samtalehandlinger kræver en samtale og en `me`-identitet. En tom samtale må ikke bruges til at opfinde en samtale, modtager eller medlemskab.
 
 Modellen kan ikke selv verificere, hvem der ejer `session_id`, eller om sessionen er gyldig. Den sender forslaget til gaten med session-id'et; gaten kontrollerer session, procesidentitet og delegation. Modellen må ikke læse sessionlageret eller udlede en brugeridentitet fra fritekst.
 
