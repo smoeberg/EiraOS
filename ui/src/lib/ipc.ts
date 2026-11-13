@@ -7,7 +7,8 @@ export type EiraDaemon =
   | "veritasd"
   | "intentd"
   | "graphd"
-  | "delegationd";
+  | "delegationd"
+  | "modeld";
 
 type TestIpc = (
   daemon: EiraDaemon,

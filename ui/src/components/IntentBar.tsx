@@ -1,64 +1,72 @@
 import { useState } from "react";
-import { sendIpcRequest } from "../lib/ipc";
+import { ask, decide, delegate, describe, type IntentOutcome } from "../lib/intent";
 
 interface IntentBarProps {
   onExecuted?: () => void | Promise<void>;
 }
 
-interface IntentExecuteResult {
-  state?: { id?: string; payload?: Record<string, unknown> };
-  knowledge?: Record<string, unknown>;
-}
+type NeedsDelegation = Extract<IntentOutcome, { kind: "needs_delegation" }>;
 
-function violationMessage(error: unknown): string | null {
-  const raw =
-    error instanceof Error && typeof (error as { message?: unknown }).message === "string"
-      ? (error as { message: string }).message
-      : error;
-  if (typeof raw !== "string") return null;
-  try {
-    const parsed = JSON.parse(raw) as {
-      code?: number;
-      data?: { user_message?: string; step_up_required?: boolean };
-    };
-    if (parsed?.data?.step_up_required) {
-      return parsed.data.user_message ?? "Step-up godkendelse påkrævet.";
-    }
-    if (parsed?.data?.user_message) return parsed.data.user_message;
-    if (parsed?.code === -32002) return "Intentionen skal præciseres — omformuler.";
-  } catch {
-    return null;
-  }
-  return null;
-}
+const GOOD = new Set(["done"]);
+const WAITING = new Set(["awaiting_consent"]);
 
+/**
+ * The central input (UDVIKLINGSPLAN F1b). The sentence goes to the model
+ * process, which may propose to the Gate; the person decides in the
+ * consent agent's window, never here. What is shown afterwards is the
+ * Gate's own record of what happened.
+ */
 export function IntentBar({ onExecuted }: IntentBarProps) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<IntentOutcome | null>(null);
 
-  async function submit() {
-    const intent = text.trim();
-    if (!intent || busy) return;
+  async function follow(first: IntentOutcome): Promise<IntentOutcome> {
+    setOutcome(first);
+    if (first.kind !== "awaiting_consent") return first;
+    const final = await decide(first.proposal);
+    setOutcome(final);
+    return final;
+  }
+
+  async function run(work: () => Promise<IntentOutcome>) {
+    if (busy) return;
     setBusy(true);
-    setMessage(null);
-    setError(null);
     try {
-      await sendIpcRequest<IntentExecuteResult>("intentd", "intent.execute", { intent });
-      setText("");
-      setMessage("Intentionen er eksekveret.");
-      await onExecuted?.();
-    } catch (caught) {
-      const violation = violationMessage(caught);
-      if (violation) setError(violation);
-      else if (String(caught).includes("CLARIFICATION_REQUIRED")) {
-        setError("Intentionen skal præciseres — omformuler.");
-      } else setError("Intentionen kunne ikke eksekveres.");
+      const final = await follow(await work());
+      if (final.kind === "done" && final.state === "executed") {
+        setText("");
+        await onExecuted?.();
+      }
+    } catch {
+      setOutcome({ kind: "failed", message: "" });
     } finally {
       setBusy(false);
     }
   }
+
+  async function submit() {
+    const intent = text.trim();
+    if (!intent) return;
+    await run(() => ask(intent));
+  }
+
+  async function allow(needed: NeedsDelegation) {
+    const intent = text.trim();
+    await run(async () => {
+      const given = await delegate(needed);
+      // With the permission in place, the same sentence goes again.
+      return given.kind === "done" ? ask(intent) : given;
+    });
+  }
+
+  const tone = outcome
+    ? GOOD.has(outcome.kind)
+      ? "intent-ok"
+      : WAITING.has(outcome.kind)
+        ? "intent-waiting"
+        : "intent-error"
+    : "";
 
   return (
     <form
@@ -78,10 +86,18 @@ export function IntentBar({ onExecuted }: IntentBarProps) {
         onChange={(event) => setText(event.target.value)}
       />
       <button type="submit" disabled={busy || !text.trim()}>
-        {busy ? "Eksekverer…" : "Eksekvér"}
+        {busy ? "Venter…" : "Spørg Eira"}
       </button>
-      {message ? <p className="intent-status intent-ok">{message}</p> : null}
-      {error ? <p className="intent-status intent-error">{error}</p> : null}
+      {outcome ? (
+        <p className={`intent-status ${tone}`} role="status">
+          {describe(outcome)}
+        </p>
+      ) : null}
+      {outcome?.kind === "needs_delegation" ? (
+        <button type="button" className="intent-allow" disabled={busy} onClick={() => void allow(outcome)}>
+          Giv Eira lov til at forberede det
+        </button>
+      ) : null}
     </form>
   );
 }
