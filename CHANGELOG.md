@@ -4,6 +4,12 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [Unreleased]
 
+### Kontekster (EIRA-CONTEXT 1.0)
+- F2.1: lagerformatet (§6) i `app/context/`: blokke, manifester, enhedsliste, FastCDC og et lokalt hjem; referenceværktøjet
+  `tools/eira-context-export/`, som læser et hjem uden EiraOS; testvektorer; B-1, B-2 og B-3 verificeret på N1 med 16
+  mutanter (`scripts/check-mutants.sh`). Kontrakten har fået præciseringer i §6.6, og testplanen har et nyt fund om
+  enhedslisten.
+
 ### Model og AI-grænseflade
 - AI-INTERFACE 1.0 er afstemt mod runtime efter #190: `eira-modeld` ejer adapterkaldet, samtalekontekst kommer fra appen/EIRA-CONVERSATION (ikke `contextd`), forespørgsler uden samtale begrænses til systemhandlinger, og EDP/EiraSystemAPI beskrives som adskilte handlingsfamilier bag samme Gate Kernel. Den aktive adapter er fortsat regelbaseret; ingen sprogmodel eller modelruntime er tilføjet.
 

@@ -1,0 +1,14 @@
+Mutant CTX-M1-2: the Merkle check is removed
+Tests: tests/context/test_manifests.py
+
+--- a/app/context/manifest.py
++++ b/app/context/manifest.py
+@@ -139,7 +139,7 @@
+         return ignore("integrity")
+     if (manifest["context_id"], manifest["device_id"], manifest["seq"]) != (context.context_id, device_id, seq):
+         return ignore("does_not_match_its_path")
+-    if manifest["merkle_root"] != merkle_root(manifest_block_ids(manifest)):
++    if False:
+         return ignore("merkle_root")
+     return manifest
+ 

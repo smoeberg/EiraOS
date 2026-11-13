@@ -1,0 +1,32 @@
+Mutant CTX-B1-1: block_id is taken from the file path
+Tests: tests/context/test_blocks.py tests/context/test_manifests.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -103,13 +103,13 @@
+         raise ContextError(E_CONTEXT_INTEGRITY, "authentication failed") from None
+ 
+ 
+-def encrypt_block(plaintext: bytes, context: Context) -> tuple[str, bytes]:
++def encrypt_block(plaintext: bytes, context: Context, path: str = "") -> tuple[str, bytes]:
+     """Returns ``(block_id, block)``.
+ 
+     B-1: the id is computed here, from exactly the plaintext encrypted here.
+     The function takes nothing else: no id, salt, nonce or key from a caller.
+     """
+-    block_id = _block_id(plaintext, context)
++    block_id = sha256(path.encode()).hexdigest() if path else _block_id(plaintext, context)
+     return block_id, seal(context, BLOCK_LABEL, block_id, plaintext)
+ 
+ 
+--- a/app/context/home.py
++++ b/app/context/home.py
+@@ -86,7 +86,7 @@
+             raise ValueError(f"not a path inside the context: {path!r}")
+         block_ids = []
+         for piece in chunks(data):
+-            block_id, block = encrypt_block(piece, self.context)
++            block_id, block = encrypt_block(piece, self.context, path)
+             # Already there (dedup, or another device): the first one stays.
+             self.home.put_if_absent(block_path(block_id), block)
+             block_ids.append(block_id)

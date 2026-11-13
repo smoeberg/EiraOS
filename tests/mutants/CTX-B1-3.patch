@@ -1,0 +1,13 @@
+Mutant CTX-B1-3: the HMAC check on read is removed
+Tests: tests/context/test_blocks.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -119,6 +119,6 @@
+     if not BLOCK_ID.match(block_id):
+         raise ContextError(E_CONTEXT_INTEGRITY, "malformed block_id")
+     plaintext = unseal(context, BLOCK_LABEL, block_id, block)
+-    if not hmac.compare_digest(_block_id(plaintext, context), block_id):
++    if False:
+         raise ContextError(E_CONTEXT_INTEGRITY, "block_id does not match the content")
+     return plaintext

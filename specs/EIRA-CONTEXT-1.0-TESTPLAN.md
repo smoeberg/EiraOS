@@ -10,19 +10,19 @@
 
 | Invariant | Tests | Implementeret | Verificeret |
 |---|---|---|---|
-| B-1 | T-B1-a … T-B1-f | Nej | Nej |
-| B-2 | T-B2-a, T-B2-b | Nej | Nej |
-| B-3 | T-B3-a … T-B3-c | Nej | Nej |
+| B-1 | T-B1-a … T-B1-f | Ja (F2.1) | **Ja, N1**: alle tests og mutanterne CTX-B1-1…4 |
+| B-2 | T-B2-a, T-B2-b | Ja (F2.1) | **Ja, N1**: alle tests og mutanterne CTX-B2-1…3 |
+| B-3 | T-B3-a … T-B3-c | Ja (F2.1) | Delvist: T-B3-a, T-B3-b og mutanterne CTX-B3-1…3 på N1; T-B3-c kræver et rigtigt hjem (N2, F2.2) |
 | H-1 | T-H1-a … T-H1-e | Nej | Nej |
-| M-1 | T-M1-a … T-M1-e | Nej | Nej |
+| M-1 | T-M1-a … T-M1-e | Ja (F2.1) | Delvist: T-M1-a, b, c, e og mutanterne CTX-M1-1…4 på N1; T-M1-d kræver tilbagekaldelse (N2) |
 | S-1 | T-S1-a … T-S1-d | Nej | Nej |
-| U-1 | T-U1-a, T-U1-b | Nej | Nej |
+| U-1 | T-U1-a, T-U1-b | Ja for formatet (F2.1) | Delvist: T-U1-a over alle skemaer i repo'et; T-U1-b's N1-del (hjemmet og dekrypterede manifester); mutant CTX-U1-1. Glimt, audit-eksport og Fleet-kald, når de findes (N2/N3) |
 | I-1 | T-I1-0 … T-I1-j | Nej | Nej |
 | O-1 | T-O1-a … T-O1-d | Nej | Nej |
 | G-1 | T-G1-a … T-G1-d | Nej | Nej |
 | E-1 | T-E1-a … T-E1-e | Nej | Nej |
 | V-1 | T-V1-a … T-V1-d | Nej | Nej |
-| X-1 | T-X1-a, T-X1-b | Nej | Nej |
+| X-1 | T-X1-a, T-X1-b | Ja for filer (F2.1) | Delvist: T-X1-a for filer med værktøjet i en separat Python-proces uden EiraOS (`python -I`, ingen `PYTHONPATH`); mutant CTX-X1-1. Mangler: ren container (N2), Automerge som JSON (F2.6), T-X1-b (genoprettelsesnøglens format, §5.1) |
 | R-1 | T-R1-a … T-R1-d | Nej | Nej |
 | F-1 | T-F1-a … T-F1-c | Nej | Nej |
 | A-1 | T-A1-a … T-A1-g | Nej | Nej |
@@ -278,3 +278,4 @@ Hver afvisning auditeres. Ingen kombination må give adgang til den oprindelige 
 2. **Den eksisterende `app/daemons/contextd.py` modsiger kontrakten.** Den har en fast liste af seks kontekster, én "aktiv" kontekst og en beløbsgrænse for automatisk godkendelse i wallet pr. kontekst. Den skal erstattes af `eira-contextd`, ikke udbygges. Beløbsgrænsen hører under gaten og rettighedssættet, ikke under kontekstlaget. *Løst:* prototypen er fjernet (udviklingsplan F1.2).
 3. **`/proc` manglede i §3.3.** Som standard kan alle brugere læse alle processers kommandolinje. Tilføjet i kontrakten: `hidepid=invisible` for hele systemet med undtagelsesgruppen `eira-procview` (besluttet af ejer). Testes i T-I1-i og T-I1-j.
 4. **Tilbagekaldelse og glemsel** manglede i §12a. Tilføjet som R-1 og F-1 (besluttet af ejer).
+5. **`keys/devices.signed` er ikke kun tilføjelse** (fundet under F2.1). §6.1 siger, at intet i hjemmet overskrives, men enhedslisten ligger på én sti og skal ændres, når en enhed tilføjes eller tilbagekaldes (§8). På et hjem med opret-hvis-fraværende (H-1) kan den slet ikke opdateres. **Forslag til ejeren:** versionerede stier, `keys/devices/<version>.signed`, hvor en læser bruger den højeste version, der er signeret af en nøgle med ret (reglerne i §6.6), og en ny version kun kan skrives én gang. F2.1 læser og skriver i dag én fil; ændres stien, ændres det med F2.2 sammen med H-1.

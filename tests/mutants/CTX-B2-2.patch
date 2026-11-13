@@ -1,0 +1,22 @@
+Mutant CTX-B2-2: the salt is reused per context
+Tests: tests/context/test_blocks.py
+
+--- a/app/context/blocks.py
++++ b/app/context/blocks.py
+@@ -40,6 +40,7 @@
+ NONCE_SIZE = 12
+ CMK_SIZE = 32
+ _HEADER = 1 + SALT_SIZE + NONCE_SIZE
++_SALTS: dict = {}
+ 
+ CONTEXT_ID = re.compile(r"^ctx_[a-z2-7]{26}$")
+ BLOCK_ID = re.compile(r"^[0-9a-f]{64}$")
+@@ -81,7 +82,7 @@
+ 
+ def seal(context: Context, label: str, name: str, plaintext: bytes) -> bytes:
+     """AEAD with fresh salt and nonce from the CSPRNG on every call (B-2)."""
+-    salt = os.urandom(SALT_SIZE)
++    salt = _SALTS.setdefault(context.context_id, os.urandom(SALT_SIZE))
+     nonce = os.urandom(NONCE_SIZE)
+     key = _hkdf(context.cmk, salt, (label + name).encode())
+     aad = (label + context.context_id + name).encode()

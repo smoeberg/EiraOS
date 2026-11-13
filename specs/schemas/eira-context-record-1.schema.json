@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eira-os.invalid/schemas/eira-context-record-1.schema.json",
+  "title": "EIRA context record (EIRA-CONTEXT 1.0 §2)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eira_context",
+    "context_id",
+    "display_name",
+    "kind"
+  ],
+  "properties": {
+    "eira_context": {
+      "const": "1"
+    },
+    "context_id": {
+      "type": "string",
+      "pattern": "^ctx_[a-z2-7]{26}$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "organisation",
+        "personal"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider_id": {
+          "type": "string"
+        },
+        "subject_hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "fleet",
+            "person",
+            "guardian"
+          ]
+        },
+        "tenant_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "s3",
+            "webdav"
+          ]
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_offline_days": {
+          "type": "integer"
+        },
+        "glimt_allowed": {
+          "type": "boolean"
+        },
+        "glimt_level": {
+          "enum": [
+            "activity",
+            "calendar"
+          ]
+        },
+        "forget_after_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90
+        },
+        "versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "keep_days": {
+              "type": "integer"
+            },
+            "trash_days": {
+              "type": "integer"
+            }
+          }
+        },
+        "devices": {
+          "enum": [
+            "managed_only",
+            "personal_and_managed"
+          ]
+        }
+      }
+    },
+    "created_at": {
+      "type": "string"
+    }
+  }
+}

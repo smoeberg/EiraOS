@@ -1,0 +1,14 @@
+Mutant CTX-M1-1: the signature check is removed
+Tests: tests/context/test_manifests.py
+
+--- a/app/context/manifest.py
++++ b/app/context/manifest.py
+@@ -130,7 +130,7 @@
+         return ignore("malformed")
+     size = int.from_bytes(stored[:2], "big")
+     signature, sealed = stored[2 : 2 + size], stored[2 + size :]
+-    if not verify(key, signature, sealed):
++    if False:
+         return ignore("bad_signature")
+     try:
+         manifest = json.loads(unseal(context, MANIFEST_LABEL, name, sealed))
