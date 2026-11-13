@@ -3,7 +3,7 @@ Tests: tests/context/test_uid.py
 
 --- a/app/context/home.py
 +++ b/app/context/home.py
-@@ -112,6 +112,7 @@
+@@ -114,6 +114,7 @@
              "files": list(self.files.values()),
              "documents": [],
              "merkle_root": "",

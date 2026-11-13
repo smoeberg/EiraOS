@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 T = "tests/context"
+HOME = f"{T}/home/test_home.py::"
 
 MUTANTS: dict[str, dict] = {
     # B-1: block_id is computed from exactly the encrypted plaintext.
@@ -157,6 +158,34 @@ MUTANTS: dict[str, dict] = {
         "tests": [f"{T}/test_export.py"],
         "edits": [("app/context/home.py", "        for piece in chunks(data):\n",
                    "        import zlib\n        for piece in chunks(zlib.compress(data)):\n")],
+    },
+    # H-1: an existing object is never overwritten; a home that cannot
+    # promise that is refused before use.
+    "CTX-H1-1": {
+        "why": "S3 PUT is sent without If-None-Match",
+        "tests": [HOME + "test_h1_a_an_existing_block_is_never_overwritten"],
+        "edits": [("app/context/remote.py",
+                   'self._signed("PUT", self._path(name), data, {"If-None-Match": "*"})',
+                   'self._signed("PUT", self._path(name), data, {})')],
+    },
+    "CTX-H1-2": {
+        "why": "WebDAV PUT is sent without If-None-Match",
+        "tests": [HOME + "test_h1_a_an_existing_block_is_never_overwritten"],
+        "edits": [("app/context/remote.py",
+                   'content=data, headers={"If-None-Match": "*"})',
+                   'content=data, headers={})')],
+    },
+    "CTX-H1-3": {
+        "why": "attach trusts a 412 without reading the probe back",
+        "tests": [HOME + "test_h1_c_a_home_that_overwrites_is_refused"],
+        "edits": [("app/context/remote.py", "        if home.get(probe) != first:", "        if False:")],
+    },
+    "CTX-H1-4": {
+        "why": "a manifest collision is ignored instead of refused",
+        "tests": [HOME + "test_h1_d_a_second_manifest_at_the_same_path_is_refused_and_audited"],
+        "edits": [("app/context/home.py",
+                   '            raise ContextError(E_CONTEXT_INTEGRITY, f"manifest {name} already exists")',
+                   '            pass')],
     },
 }
 

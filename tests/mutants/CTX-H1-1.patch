@@ -1,0 +1,14 @@
+Mutant CTX-H1-1: S3 PUT is sent without If-None-Match
+Tests: tests/context/home/test_home.py::test_h1_a_an_existing_block_is_never_overwritten
+
+--- a/app/context/remote.py
++++ b/app/context/remote.py
+@@ -98,7 +98,7 @@
+             raise HomeError(f"create bucket: HTTP {response.status_code}")
+ 
+     def put_if_absent(self, name: str, data: bytes) -> bool:
+-        response = _retry(lambda: self._signed("PUT", self._path(name), data, {"If-None-Match": "*"}))
++        response = _retry(lambda: self._signed("PUT", self._path(name), data, {}))
+         if response.status_code in (200, 201):
+             return True
+         if response.status_code == 412:

@@ -21,7 +21,7 @@ Tests: tests/context/test_blocks.py tests/context/test_manifests.py
  
 --- a/app/context/home.py
 +++ b/app/context/home.py
-@@ -86,7 +86,7 @@
+@@ -88,7 +88,7 @@
              raise ValueError(f"not a path inside the context: {path!r}")
          block_ids = []
          for piece in chunks(data):

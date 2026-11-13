@@ -1,0 +1,14 @@
+Mutant CTX-H1-2: WebDAV PUT is sent without If-None-Match
+Tests: tests/context/home/test_home.py::test_h1_a_an_existing_block_is_never_overwritten
+
+--- a/app/context/remote.py
++++ b/app/context/remote.py
+@@ -145,7 +145,7 @@
+ 
+     def put_if_absent(self, name: str, data: bytes) -> bool:
+         self._mkcols(name)
+-        response = _retry(lambda: self.client.put(self._url(name), content=data, headers={"If-None-Match": "*"}))
++        response = _retry(lambda: self.client.put(self._url(name), content=data, headers={}))
+         if response.status_code in (200, 201, 204):
+             return True
+         if response.status_code == 412:

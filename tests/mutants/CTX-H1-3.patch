@@ -1,0 +1,14 @@
+Mutant CTX-H1-3: attach trusts a 412 without reading the probe back
+Tests: tests/context/home/test_home.py::test_h1_c_a_home_that_overwrites_is_refused
+
+--- a/app/context/remote.py
++++ b/app/context/remote.py
+@@ -172,7 +172,7 @@
+             raise ContextError(E_CONTEXT_HOME_UNSUPPORTED, "a fresh probe path already existed")
+         if home.put_if_absent(probe, second):
+             raise ContextError(E_CONTEXT_HOME_UNSUPPORTED, "an existing object was overwritten")
+-        if home.get(probe) != first:
++        if False:
+             raise ContextError(E_CONTEXT_HOME_UNSUPPORTED, "the server refused, but overwrote anyway")
+     except HomeError as exc:
+         raise ContextError(E_CONTEXT_HOME_UNSUPPORTED, str(exc)) from exc
