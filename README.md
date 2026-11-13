@@ -73,7 +73,6 @@ Krav: Linux (daemon-IPC'en bruger `SO_PEERCRED`), Python 3.11+, Node.js 20+ og R
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-alembic upgrade head
 
 # Daemons i deres egen proces, som i produktion
 python -m app.daemons.runner --socket-dir data/run

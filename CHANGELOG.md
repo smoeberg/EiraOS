@@ -101,6 +101,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Udviklingsbroen har ikke længere `wallet`-, `presence`- og `context`-ruterne, der skrev uden session eller gate,
   eller `/v1/intent/parse` og `/plan`; `req.dict()` er erstattet af `model_dump()` (S-22), og den ubrugte
   `ui/veritas-hud/index.html` er fjernet (D-10) (udviklingsplan F1.6).
+- Én vej til databaseskemaet: Alembic er fjernet (det kendte to af omkring tredive tabeller, kørte aldrig på en
+  installeret maskine og gav i CI `audit_events` en anden form). Hvert modul opretter og opgraderer sine egne tabeller
+  additivt; reglerne står i `docs/reference/databaseskema.md`, og `tests/test_schema_one_path.py` tjekker, at
+  initialiseringen er idempotent og opgraderer en gammel database (udviklingsplan F1.10).
 
 ## [0.7.0] — released 2026-10-20
 
