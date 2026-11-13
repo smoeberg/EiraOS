@@ -60,7 +60,7 @@ Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verifi
 
 - **Fundregister fra eksterne gennemgange:** [`docs/reviews/`](docs/reviews/GENNEMGANG-2026-11-12.md)
 - **Udviklingsplan:** [`docs/UDVIKLINGSPLAN.md`](docs/UDVIKLINGSPLAN.md) (hvad der bygges i hvilken rækkefølge)
-- **Kontrakter:** [`specs/`](specs/README.md)
+- **Kontrakter:** [`specs/`](specs/README.md), including the draft [EIRA Model Evaluation 1.0](specs/EIRA-MODEL-EVALUATION-1.0.md) for F8.1
 - **Beslutninger:** [`docs/decisions/`](docs/decisions/) (ADR-0001–0007)
 - **Arkitektur og GUI:** [`docs/architecture/`](docs/architecture/)
 - **Installation på en pc:** [`docs/INSTALL.md`](docs/INSTALL.md)
