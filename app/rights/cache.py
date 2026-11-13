@@ -40,6 +40,11 @@ SYNC_FILE = "sync.json"
 REJECTED_KEEP = 32
 
 
+class Superseded(RuntimeError):
+    """Another set was activated after this one was verified. Verify again
+    against the new active set; never install on the old judgement."""
+
+
 @dataclass(frozen=True)
 class ActiveRights:
     rights_set: dict[str, Any]
@@ -116,7 +121,9 @@ class RightsCache:
 
     def install(self, raw: bytes, verdict: contract.Verdict, wall_now: datetime) -> None:
         """Replace the active set atomically. Only a verdict from
-        `contract.verify` on exactly these bytes may be installed."""
+        `contract.verify` on exactly these bytes may be installed, and only
+        while the set it was judged against is still the active one:
+        otherwise `Superseded` (two activations at once, fundregister S-23)."""
         if not verdict.ok or verdict.rights_set is None:
             raise ValueError("refusing to install a rejected rights set")
         if verdict.noop:
@@ -126,6 +133,8 @@ class RightsCache:
             raise ValueError("verdict does not belong to these bytes")
         boot = self._boot_clock()
         with self._locked():
+            if self._active_meta_unlocked() != verdict.against:
+                raise Superseded(doc["rights_set_id"])
             state = self._read_state() or {}
             state.update(
                 {
@@ -173,6 +182,9 @@ class RightsCache:
 
     def active_meta(self) -> contract.Active | None:
         """What `contract.verify` needs to judge the next set (§4 rule 6)."""
+        return self._active_meta_unlocked()
+
+    def _active_meta_unlocked(self) -> contract.Active | None:
         state = self._read_state()
         if not state:
             return None

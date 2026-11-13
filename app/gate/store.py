@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -16,6 +17,8 @@ from datetime import datetime, timezone
 from typing import Any, Iterator
 
 from app.session_store import get_db_path
+
+log = logging.getLogger("eira.gate.audit")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS gate_actions (
@@ -300,8 +303,14 @@ class GateStore:
         for listener in list(self.audit_listeners):
             try:
                 listener()
-            except Exception:  # noqa: BLE001 - anchoring must never fail a decision
-                pass
+            except Exception as exc:  # noqa: BLE001 - anchoring must never fail a decision
+                # The decision stands, but the anchor (journal, Fleet) is now
+                # behind: say so instead of swallowing it (fundregister S-13).
+                log.warning(
+                    "audit listener %s failed after entry %s; the chain is not anchored: %s: %s",
+                    getattr(listener, "__qualname__", repr(listener)), entry_hash,
+                    type(exc).__name__, exc,
+                )
         return entry_hash
 
     def audit_entries(self) -> list[dict[str, Any]]:

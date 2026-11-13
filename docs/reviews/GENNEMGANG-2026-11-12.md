@@ -30,7 +30,7 @@
 | S-10 | **HTTP-broen har skriveruter uden session** (wallet, presence, context) | G0, G5 | **Bekræftet**, kun udviklingsmiljø | `app/http_bridge.py:61-71`; ikke i pakken (`scripts/app_modules.py:43-44`, `tests/test_no_http_bridge_prod.py`) | Lav | F1.6 |
 | S-11 | **IPC-tokenet er valgfrit** | G5 | **Delvist**: værre end beskrevet, for tokenet ligger i `/etc/eira/eira.conf` som `root:eira-clients 0640` og beskytter derfor ikke mod desktop-brugeren. Grænsen er socket-rettigheder plus `SO_PEERCRED`, og det står ingen steder | `packaging/debian/postinst:64-71`, `app/ipc/auth.py:14-35` | Mellem (dokumentation; S-3 er den rigtige rettelse) | F0b.2, D-3 |
 | S-12 | **Root har altid IPC-adgang** | G5 | **Bekræftet**, bevidst (EIRA-CONSENT-AGENT §9: root er uden for trusselsmodellen) | `app/ipc/socket_security.py:114` | Info | D-3 |
-| S-13 | **Stille `except … pass`** | G2 | **Delvist**: 22 steder i den pakkede kode; ingen skjuler en sikkerhedsfejl. Ét bør logge: gatens audit-lyttere (Fleet-ankeret) sluges uden spor | `app/gate/store.py:300-303` | Lav | F1.7 |
+| S-13 | **Stille `except … pass`** | G2 | **Rettet** i F1.7; var *Delvist*: 22 steder i den pakkede kode; ingen skjuler en sikkerhedsfejl. Ét bør logge: gatens audit-lyttere (Fleet-ankeret) sluges uden spor | `app/gate/store.py:300-303` | Lav | F1.7 |
 | S-14 | **Executors er tynde; `Executor.run` rejser `NotImplementedError`** | G2, G3 | **Afvist som fejl**: bevidst. Ukendte handlinger afvises (fail-closed), og der er to executors (outbox og strøm) | `app/gate/executors.py:54-71`, `tests/test_gate_kernel.py:534` | — | F7 |
 | S-15 | **Samtidighed, engangsbillet og crash skal testes** | G3 | **Dækket** | `tests/test_gate_kernel.py:349, 358, 444, 455, 643, 667, 688`; `tests/test_gate_system.py:197, 206` | — | — |
 | S-16 | **Hash-paritet Python/Rust/Kotlin** | G2 | **Delvist**: Python↔Rust testes over FFI (`tests/test_android_ffi_state.py`); Android bygges og testes slet ikke i CI | `.github/workflows/` har intet Android-job | Mellem | F1.8 |
@@ -40,7 +40,7 @@
 | S-20 | **Fleet-interoperabilitet er ikke bevist** mod `eira-fleet-control` | G4 | **Bekræftet**: testvektorerne ligger her, men intet afprøver den anden side | `tests/vectors/rights-set/` | Mellem | F1.9 |
 | S-21 | **To veje til databaseskemaet:** Alembic og `init_db()` med `ALTER TABLE` ved opstart | G5 | **Bekræftet** | `alembic/versions/001_initial_schema.py`, `app/session_store.py:38-95` | Lav | F1.10 |
 | S-22 | **Forældet Pydantic-API** `req.dict()` | G5 | **Rettet** i F1.6; var *Bekræftet*, kun i udviklingsbroen | `app/routers/veritas.py:27, 32, 38` | Lav | F1.6 |
-| S-23 | **Gate-politik: samtidig aktivering og rollback, "tvetydig politik → afvis"** bør dækkes bedre | G2 | **Uafklaret**: gaten afviser en ændret politik siden forslaget (`E_POLICY`, GATE-KERNEL §8), men samtidig aktivering er ikke testet særskilt | `tests/test_gate_kernel.py` | Lav | F1.7 |
+| S-23 | **Gate-politik: samtidig aktivering og rollback, "tvetydig politik → afvis"** bør dækkes bedre | G2 | **Rettet** i F1.7; var *Uafklaret*: gaten afviser en ændret politik siden forslaget (`E_POLICY`, GATE-KERNEL §8), men samtidig aktivering er ikke testet særskilt | `tests/test_gate_kernel.py` | Lav | F1.7 |
 
 ## 2. Dokumentation
 
@@ -53,7 +53,7 @@
 | D-5 | **Ingen samlet JSON-RPC-katalog** over sockets, metoder, adgangsklasse og fejlkoder | G1, G2, G5 | **Bekræftet**. Skal genereres fra koden, ellers bliver det forældet; hænger sammen med S-3 | F0b.2 |
 | D-6 | **Ingen implementeringsmatrix** (krav → kode → test → VM-test → status) | G2, G3, G4 | **Bekræftet** | Plan §4.3 |
 | D-7 | **Ingen miljøvariabel-reference** (`EIRA_IPC_TOKEN`, `EIRA_STRICT_SOCKET_GROUP`, `EIRA_BUILDER_MODE_ALLOWED`, …) | G5 | **Bekræftet** | Plan §4.4 |
-| D-8 | **`app/gate/consent_proof.py`-docstringen** beskriver den gamle model (nøglen i appen og i sessionsrækken) | G4 | **Bekræftet**; koden følger den nye model | F1.7 |
+| D-8 | **`app/gate/consent_proof.py`-docstringen** beskriver den gamle model (nøglen i appen og i sessionsrækken) | G4 | **Rettet** i F1.7; var *Bekræftet*; koden følger den nye model | F1.7 |
 | D-9 | **`android/` er udokumenteret** og uden CI | G1, G5 | **Bekræftet** | F1.8 |
 | D-10 | **`ui/veritas-hud/index.html`** er udokumenteret | G5 | **Rettet** i F1.6; var *Bekræftet*: en løs fil, som intet bruger (Veritas-HUD'en er `ui/src/components/VeritasHUD.tsx`) | F1.6 |
 | D-11 | **Ingen `CONTRIBUTING.md`**, ingen PR- og issue-skabeloner; ingen guide til "ny beskyttet handling fra ende til anden" | G2, G5 | **Bekræftet** | Plan §4.5 |

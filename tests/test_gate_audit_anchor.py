@@ -195,3 +195,25 @@ def test_a_failing_anchor_never_fails_a_decision(store):
     store.audit_listeners.append(lambda: 1 / 0)
     store.append_audit({"step": "still recorded"})
     assert store.audit_head()[0] == 6
+
+
+def test_a_failing_anchor_is_logged_and_never_fails_the_decision(tmp_path, caplog):
+    """Fundregister S-13: the listener's error used to be swallowed without a
+    trace. The entry is still written; the failure is logged as a warning."""
+    import logging
+
+    store = GateStore(str(tmp_path / "gate.db"))
+
+    def fleet_anchor() -> None:
+        raise ConnectionError("fleet unreachable")
+
+    store.audit_listeners.append(fleet_anchor)
+    with caplog.at_level(logging.WARNING, logger="eira.gate.audit"):
+        entry_hash = store.append_audit({"event": "test"})
+    assert store.audit_entries()[-1]["entry_hash"] == entry_hash
+    assert store.verify_audit_chain()
+    [record] = [r for r in caplog.records if r.name == "eira.gate.audit"]
+    assert record.levelno == logging.WARNING
+    assert "fleet_anchor" in record.getMessage()
+    assert "ConnectionError: fleet unreachable" in record.getMessage()
+    assert entry_hash in record.getMessage()
