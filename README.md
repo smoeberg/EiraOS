@@ -53,7 +53,7 @@ Den samlede arkitektur er beskrevet i [EiraOS Architecture Baseline 1.0](docs/ar
 | Kontekster (`eira-contextd`) | Kontrakt og testplan accepteret; ikke implementeret. Den gamle prototype `app/daemons/contextd.py` er fjernet (udviklingsplan F1.2) | Nej |
 | Web App Manager, livets indbakke | Besluttet i ADR-0004 og ADR-0006; ingen kontrakt endnu | Nej |
 
-Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verificeret. Kendte fund fra de eksterne gennemgange, herunder at desktop-brugeren i dag kan skrive i `stated` (S-1), står i [fundregistret](docs/reviews/GENNEMGANG-2026-11-12.md) med plan for rettelse.
+Hver kontrakt har sin egen statustabel over, hvad der er implementeret og verificeret. Kendte fund fra de eksterne gennemgange står i [fundregistret](docs/reviews/GENNEMGANG-2026-11-12.md) med plan for rettelse og status.
 
 ## Dokumentation
 
