@@ -248,6 +248,8 @@ Hvordan et sæt kommer fra Fleet til enheden, og hvordan resultatet meldes tilba
 
 Vektorerne i `tests/vectors/rights-set/` dækker (`apply-*.json`): gyldigt managed- og default-sæt, udløbet, endnu ikke gyldigt, lavere version, samme version med samme og med andet indhold, forkert device, forkert tenant, gyldig signatur over forkert domæne (`EIRAOS-EVENT-V1`), ændret efter signering, ukendt `key_id`, managed-sæt signeret med release-nøglen, manglende `template`, TTL over loftet, ukendt handlingsnøgle, `*` i `actions`, ukendt felt, float, dobbelt nøgle, grant der overlever sættet, default-sæt på enrolled enhed og managed-sæt på uenrolled enhed. `authorize.json` dækker: gruppe-grant, gruppe uden grant, deny vinder, jokertegn-grænser, midlertidig grant der udløber, skærpet assurance og udløbet sæt.
 
+**Versioneret og delt med Fleet** (udviklingsplan F1.9). `tests/vectors/MANIFEST.json` giver sættet (`rights-set/`, `rights-keys/`, `rights-signing/`) et versionsnummer og en hash pr. fil; et ændret sæt kræver en ny version (`scripts/gen_rights_vectors.py --bump`). `rights-signing/` er Fleets side: det usignerede dokument og testnøglen ind, det kanoniske signerede dokument ud, byte for byte, for rettighedssæt, nøglecertifikat og tilbagekaldelsesliste. `eira-fleet-control` kører `scripts/rights_vectors_conformance.py --signer "<Fleets signer>" --expect-version <N>` i sin CI; `scripts/rights_reference_signer.py` er referencen.
+
 Krav, der testes, når agenten og gatens lag 6 bygges ovenpå (ikke del af vektorerne):
 1. Et afvist sæt efterlader det aktive sæt uændret (atomar apply).
 2. Gaten har ingen IPC-metode, der skriver til rettighedscachen (metodeklassifikationstesten).

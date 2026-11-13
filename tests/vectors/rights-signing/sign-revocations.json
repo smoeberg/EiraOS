@@ -1,0 +1,21 @@
+{
+  "name": "revocations",
+  "description": "Tilbagekaldelseslisten signeret med tenantens rod (EIRAOS-RIGHTS-REVOKE-V1).",
+  "kind": "revocations",
+  "seed_hex": "6666666666666666666666666666666666666666666666666666666666666666",
+  "document": {
+    "eira_rights_revocations": "1",
+    "tenant_id": "kk",
+    "sequence": 2,
+    "issued_at": "2026-11-07T10:00:00Z",
+    "revoked": [
+      "old-1",
+      "old-2"
+    ],
+    "signature": {
+      "alg": "ed25519",
+      "key_id": "test-root-kk"
+    }
+  },
+  "expect_raw": "{\"eira_rights_revocations\":\"1\",\"issued_at\":\"2026-11-07T10:00:00Z\",\"revoked\":[\"old-1\",\"old-2\"],\"sequence\":2,\"signature\":{\"alg\":\"ed25519\",\"key_id\":\"test-root-kk\",\"value\":\"6nmY-rV9LAJIHrfjg5CckkUKMYJW_8bPkJ2KpO2FVJWx9dvBzUqEqQMhG4Gp29UNiNDwQc5moXI-QQzJtfTSCw\"},\"tenant_id\":\"kk\"}"
+}
