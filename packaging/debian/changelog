@@ -1,5 +1,6 @@
-eira-os-core (1.0~rc1-1) noble; urgency=medium
+eira-os-core (0.8.0-1) resolute; urgency=medium
 
-  * Initial Ubuntu 24.04 LTS pilot package.
+  * Ubuntu 26.04 LTS (resolute) package. One version for all of EiraOS
+    (VERSION); replaces the unreleased 1.0~rc1 pilot entry for Ubuntu 24.04.
 
- -- EiraOS Maintainers <maintainers@eira-os.invalid>  Sat, 01 Aug 2026 12:00:00 +0200
+ -- EiraOS Maintainers <maintainers@eira-os.invalid>  Fri, 13 Nov 2026 09:00:00 +0100

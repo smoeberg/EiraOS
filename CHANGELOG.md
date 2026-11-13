@@ -54,6 +54,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Rent sessionsmiljø uden arvede `EIRA_*`- og loader-variabler (#159).
 - VM-testen installerer offline fra et lokalt pakkearkiv (#160); eksplicit modulliste i `.deb` (#183);
   apt-fallback til spejle uden for ubuntu.com og robusthed mod DNS- og keyserver-fejl (#175, #184).
+- Én version for hele EiraOS i `VERSION` (0.8.0, næste efter det taggede 0.7.0): pakken, Rust-workspacet, Tauri-appen,
+  UI'et og udviklingsbroen bruger den, og `tests/test_version.py` fejler, hvis de afviger. Pakken er `0.8.0-1` til
+  Ubuntu 26.04 (`resolute`) i stedet for `1.0~rc1` til `noble`; `build_deb.sh` læser versionen fra changelog'en
+  (udviklingsplan F1.3).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),

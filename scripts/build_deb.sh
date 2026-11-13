@@ -27,7 +27,7 @@ while (($#)); do
     esac
 done
 
-for tool in dpkg-buildpackage dpkg-deb python3; do
+for tool in dpkg-buildpackage dpkg-deb dpkg-parsechangelog python3; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "Missing required build tool: $tool" >&2
         exit 69
@@ -35,7 +35,10 @@ for tool in dpkg-buildpackage dpkg-deb python3; do
 done
 
 BUILD_ROOT=$(mktemp -d -t eira-deb-build.XXXXXXXX)
-SOURCE_ROOT=${BUILD_ROOT}/eira-os-core-1.0~rc1
+# The upstream version comes from the package changelog (one version for
+# EiraOS: VERSION, tests/test_version.py).
+DEB_VERSION=$(dpkg-parsechangelog -l "${REPO_ROOT}/packaging/debian/changelog" -S Version)
+SOURCE_ROOT=${BUILD_ROOT}/eira-os-core-${DEB_VERSION%-*}
 cleanup() {
     rm -rf -- "$BUILD_ROOT"
 }

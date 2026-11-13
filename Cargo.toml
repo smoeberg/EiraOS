@@ -2,3 +2,7 @@
 members = ["crates/eira-core", "crates/eira-ipc", "crates/eira-stated", "crates/eira-consent-agent"]
 exclude = ["ui/src-tauri"]
 resolver = "3"
+
+# One version for all of EiraOS (VERSION; tests/test_version.py).
+[workspace.package]
+version = "0.8.0"
