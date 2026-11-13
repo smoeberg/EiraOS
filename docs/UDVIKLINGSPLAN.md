@@ -22,7 +22,7 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 | Desktop | Explorer og Builder Mode, rigtig terminal, strøm via EiraSystemAPI; login gennem GDM |
 | Pakning | `.deb`, `eira-labwc`, installer-ISO på Ubuntu 26.04, offline VM-test |
 
-**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået).
+**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået).
 
 **Ikke besluttet:** økonomi. Det eneste af personens kerneområder uden en ADR (§3, spor P).
 
@@ -115,7 +115,7 @@ Det største trin. Kontrakten og testplanen er accepteret, så der skal ikke skr
 | F2.3 | **Enhedens nøgler i TPM** (§5.0): signerings- og ECDH-nøgle dannes i TPM'en og kan ikke eksporteres; Fleet-tilmelding bruger dem (FLEET-RIGHTS-API 1.3) | A-1 | N1, N3 |
 | F2.4 | **`eira-contextd`:** opretter, låser op, låser og glemmer kontekst-brugere; LUKS2 pr. kontekst; `systemd --user` pr. kontekst; `/proc` med `hidepid=invisible` | I-1, O-1, F-1 | N3 |
 | F2.5 | **Neutral skal-bruger og greetd** (ADR-0005 K7, K9) i stedet for GDM med en fast bruger; én Wayland-socket pr. kontekst (`wp_security_context_v1`) i `eira-labwc` | I-1 (Wayland-delen) | N3 |
-| F2.6 | **Synkronisering:** filer med konfliktobjekter, strukturerede data med et åbent CRDT (fx Automerge); tilbagekaldelse og rotation | S-1, R-1 | N1, N2 |
+| F2.6 | **Synkronisering:** filer med konfliktobjekter, strukturerede data med et åbent CRDT (Automerge eller Yrs bag en grænseflade, ADR-0009 N1/N5); tilbagekaldelse og rotation, hvor nøgler følger Fleets rettigheder og aldrig er kilden til dem (ADR-0009 N2). NextGraphs sync-protokol og nøglerotation bruges som forlæg, ikke som afhængighed | S-1, R-1 | N1, N2 |
 | F2.7 | **Organisation og familie:** escrow med fire øjne, værgestyret kontekst, glimt og "overfør glimt" | E-1, V-1, G-1 | N1, N3 |
 
 Et delpunkt er færdigt, når invarianternes tests og mutanter består på det angivne niveau (testplan §0).
@@ -248,4 +248,5 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | Listen over hverdagsrejser og deres mål | U.1–U.2 |
 | Accept af ADR-0007 (adgangskoder) og dens åbne spørgsmål O-1–O-5 (EU-wallet som passkey-udbyder, læk-tjek, digital arv, familiens koder, koder uden for webapps) | P.4 |
 | Grundspørgsmålene til ADR-0008 (økonomi) | P.3 |
+| Accept af ADR-0009 (datalagets byggesten; NextGraph som forlæg, ikke afhængighed) og O-3 (RDF for graphd) | F2.6 |
 | Hvem der deltager i brugertests | U.5–U.6 |
