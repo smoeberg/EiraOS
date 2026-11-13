@@ -4,6 +4,9 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [Unreleased]
 
+### Model og AI-grænseflade
+- AI-INTERFACE 1.0 er afstemt mod runtime efter #190: `eira-modeld` ejer adapterkaldet, samtalekontekst kommer fra appen/EIRA-CONVERSATION (ikke `contextd`), forespørgsler uden samtale begrænses til systemhandlinger, og EDP/EiraSystemAPI beskrives som adskilte handlingsfamilier bag samme Gate Kernel. Den aktive adapter er fortsat regelbaseret; ingen sprogmodel eller modelruntime er tilføjet.
+
 ### Model evaluation (F8.1 — draft)
 - Added the draft EIRA Model Evaluation 1.0 contract: versioned multilingual corpus, repeatable adapter runs, per-language reporting, offline verification, and independent Gate security acceptance. No evaluation harness or model selection is implemented by this documentation-only change.
 
