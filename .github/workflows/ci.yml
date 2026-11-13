@@ -48,7 +48,8 @@ jobs:
         python -m pytest tests/
 
   # EIRA-CONTEXT N2 (testplan §1): context homes against real storage.
-  # MinIO (S3) and Apache mod_dav (WebDAV) run as containers; moto and
+  # MinIO (S3; Chainguard's build, since MinIO stopped publishing
+  # minio/minio) and Apache mod_dav (WebDAV) run as containers; moto and
   # WsgiDAV run as a second, independent pair. The mutants live here because
   # the H-1 mutants need the servers.
   context-home:
@@ -70,7 +71,7 @@ jobs:
       run: |
         docker run -d --name minio -p 9000:9000 \
           -e MINIO_ROOT_USER=eira -e MINIO_ROOT_PASSWORD=eira-secret-key \
-          minio/minio:latest server /data
+          cgr.dev/chainguard/minio:latest server /data
         docker run -d --name webdav -p 8080:80 \
           -e AUTH_TYPE=Basic -e USERNAME=eira -e PASSWORD=eira \
           bytemark/webdav:latest
