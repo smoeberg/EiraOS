@@ -54,6 +54,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Rent sessionsmiljø uden arvede `EIRA_*`- og loader-variabler (#159).
 - VM-testen installerer offline fra et lokalt pakkearkiv (#160); eksplicit modulliste i `.deb` (#183);
   apt-fallback til spejle uden for ubuntu.com og robusthed mod DNS- og keyserver-fejl (#175, #184).
+- Clippy med `-D warnings` på alle Rust-crates i CI, også `ui/src-tauri` og `eira-consent-agent`, og
+  `cargo fmt --check` på `ui/src-tauri`; IPC-broens genforsøg indekserer ikke længere med løkkevariablen
+  (udviklingsplan F1.1).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
