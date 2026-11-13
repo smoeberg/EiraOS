@@ -11,7 +11,13 @@ OTHER_HUMAN = Caller(uid=1001, pid=4343, model=False)
 MODEL = Caller(uid=990, pid=4444, model=True)
 
 # What an authenticated login leaves in the session store, for HUMAN_UID.
-HUMAN_SESSION = {"authenticated_at": "2026-11-09T06:00:00Z", "os_uid": HUMAN_UID}
+# expires_at is always written by create_session_from_claims; the gate fails
+# closed on a session without it.
+HUMAN_SESSION = {
+    "authenticated_at": "2026-11-09T06:00:00Z",
+    "expires_at": "2099-01-01T00:00:00Z",
+    "os_uid": HUMAN_UID,
+}
 
 
 class Peer:
