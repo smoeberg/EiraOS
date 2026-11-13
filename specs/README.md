@@ -38,6 +38,12 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 **Status:** Draft, binding as an implementation target; not proof that model adapters or the full orchestration flow are implemented. Models propose; they do not authorize or execute.
 
+## Model evaluation
+
+- [EIRA Model Evaluation 1.0](EIRA-MODEL-EVALUATION-1.0.md) — versioned multilingual corpus format, repeatable adapter evaluation, reporting, offline verification, and separation of model quality from Gate security.
+
+**Status:** Draft for owner review (F8.1). No harness or model-selection decision is implied.
+
 ## EiraOS Dialog Protocol (EDP)
 
 - [EDP 1.0 specification](EDP-1.0.md) — proposed internal semantic envelope for conversation actions, independent of transport.
