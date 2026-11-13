@@ -61,6 +61,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   UI'et og udviklingsbroen bruger den, og `tests/test_version.py` fejler, hvis de afviger. Pakken er `0.8.0-1` til
   Ubuntu 26.04 (`resolute`) i stedet for `1.0~rc1` til `noble`; `build_deb.sh` læser versionen fra changelog'en,
   og installer-ISO'et hedder `EiraOS-<version>-amd64.iso` i stedet for `EiraOS-1.0-RC1-amd64.iso` (udviklingsplan F1.3).
+- Upload og download af CI-artefakter prøves op til tre gange (30 s og 90 s imellem; genforsøg overskriver et
+  halvt oprettet artefakt) gennem `.github/actions/*-artifact-retry`; `tests/test_ci_artifact_retry.py` afviser
+  direkte kald (udviklingsplan F1.4).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
