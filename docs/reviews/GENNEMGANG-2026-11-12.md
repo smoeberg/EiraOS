@@ -12,7 +12,7 @@
 | G4 | Statisk, sikkerhedsgrænser og dokumentation mod kode | Nej |
 | G5 | Statisk og kørsel (877 Python-, 92 UI-tests, cargo) | Ja |
 
-**Vurderinger:** *Bekræftet* (holder som beskrevet), *Delvist* (holder, men alvor eller årsag er en anden), *Afvist* (holder ikke), *Rettet* (rettet i PR #185 eller tidligere), *Dækket* (findes allerede, med belæg).
+**Vurderinger:** *Bekræftet* (holder som beskrevet), *Delvist* (holder, men alvor eller årsag er en anden), *Afvist* (holder ikke), *Rettet* (rettet i PR #185 eller tidligere), *Afklaret* (lukket ved en ejerbeslutning i stedet for en rettelse), *Dækket* (findes allerede, med belæg).
 
 ## 1. Sikkerhed og korrekthed
 
@@ -33,7 +33,7 @@
 | S-13 | **Stille `except … pass`** | G2 | **Delvist**: 22 steder i den pakkede kode; ingen skjuler en sikkerhedsfejl. Ét bør logge: gatens audit-lyttere (Fleet-ankeret) sluges uden spor | `app/gate/store.py:300-303` | Lav | F1.7 |
 | S-14 | **Executors er tynde; `Executor.run` rejser `NotImplementedError`** | G2, G3 | **Afvist som fejl**: bevidst. Ukendte handlinger afvises (fail-closed), og der er to executors (outbox og strøm) | `app/gate/executors.py:54-71`, `tests/test_gate_kernel.py:534` | — | F7 |
 | S-15 | **Samtidighed, engangsbillet og crash skal testes** | G3 | **Dækket** | `tests/test_gate_kernel.py:349, 358, 444, 455, 643, 667, 688`; `tests/test_gate_system.py:197, 206` | — | — |
-| S-16 | **Hash-paritet Python/Rust/Kotlin** | G2 | **Delvist**: Python↔Rust testes over FFI (`tests/test_android_ffi_state.py`); Android bygges og testes slet ikke i CI | `.github/workflows/` har intet Android-job | Mellem | F1.8 |
+| S-16 | **Hash-paritet Python/Rust/Kotlin** | G2 | **Afklaret** i F1.8: Android er ikke med i 1.0 og er arkiveret, så Kotlin-delen bortfalder; var *Delvist*: Python↔Rust testes over FFI (`tests/test_android_ffi_state.py`); Android bygges og testes slet ikke i CI | `.github/workflows/` har intet Android-job | Mellem | F1.8 |
 | S-17 | **Ingen evidens for ren boot på Ubuntu 26.04** | G2 | **Afvist**: `packaging-acceptance` installerer ISO'et i en VM og kører 72 checks på den installerede pakke | `packaging/installer/ci/eira-ci-report` | — | — |
 | S-18 | **`walletd`, `presenced`, `contextd` mangler socket og handlers** | G2 | **Afvist som beskrevet**: de registreres af `runner.py`, men er bevidst ikke pakket. Rigtigt er, at de skal væk | `app/daemons/runner.py:16-27`, `packaging/daemon-policy.json` | — | F1.2 |
 | S-19 | **Step-up afviser MitID Erhverv** | G4 | **Bekræftet**, bevidst fail-closed, indtil en betroet udbyder er tilsluttet | `app/daemons/identityd.py:40` | Mellem (funktion mangler) | F4.3 |
@@ -54,7 +54,7 @@
 | D-6 | **Ingen implementeringsmatrix** (krav → kode → test → VM-test → status) | G2, G3, G4 | **Bekræftet** | Plan §4.3 |
 | D-7 | **Ingen miljøvariabel-reference** (`EIRA_IPC_TOKEN`, `EIRA_STRICT_SOCKET_GROUP`, `EIRA_BUILDER_MODE_ALLOWED`, …) | G5 | **Bekræftet** | Plan §4.4 |
 | D-8 | **`app/gate/consent_proof.py`-docstringen** beskriver den gamle model (nøglen i appen og i sessionsrækken) | G4 | **Bekræftet**; koden følger den nye model | F1.7 |
-| D-9 | **`android/` er udokumenteret** og uden CI | G1, G5 | **Bekræftet** | F1.8 |
+| D-9 | **`android/` er udokumenteret** og uden CI | G1, G5 | **Afklaret** i F1.8: arkiveret i `docs/archive/android/` med en linje i arkivets README; var *Bekræftet* | F1.8 |
 | D-10 | **`ui/veritas-hud/index.html`** er udokumenteret | G5 | **Bekræftet**: en løs fil, som intet bruger (Veritas-HUD'en er `ui/src/components/VeritasHUD.tsx`) | F1.6 |
 | D-11 | **Ingen `CONTRIBUTING.md`**, ingen PR- og issue-skabeloner; ingen guide til "ny beskyttet handling fra ende til anden" | G2, G5 | **Bekræftet** | Plan §4.5 |
 | D-12 | **Migrationsstrategi udokumenteret** | G5 | **Bekræftet** (S-21) | F1.10 |

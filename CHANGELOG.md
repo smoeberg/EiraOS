@@ -76,6 +76,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   som `.deb`-pakken og `scripts/deploy_systemd.sh` installerer.
 - README: rettede stier og links, opstartsvejledning fra repoets rod, korrekte socket-navne og en
   statustabel over alle ni daemons i stedet for de modstridende tal (6/7).
+- Android-klienten er ikke med i 1.0 (ejerens beslutning) og er flyttet til `docs/archive/android/`; `build_ffi.sh`
+  bygger ikke længere til `aarch64-linux-android`. Hash-pariteten Python↔Rust testes fortsat over FFI
+  (udviklingsplan F1.8).
 
 ## [0.7.0] — released 2026-10-20
 
