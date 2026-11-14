@@ -32,6 +32,20 @@ def test_t_a1_f_the_key_is_a_tpm_blob_that_cannot_be_exported(tpm, tmp_path):
     assert {"fixedTPM", "fixedParent", "sensitiveDataOrigin"} <= devicekey.attributes(key)
 
 
+def test_the_key_is_made_in_the_tpm_with_the_installed_openssl_conf(tpm, tmp_path, monkeypatch):
+    """As installed (eira-enroll, eira-rights-sync), OPENSSL_CONF loads the
+    default provider next to tpm2. genpkey must still use the TPM; it did not,
+    and the VM acceptance (device-key-in-tpm) caught it."""
+    from pathlib import Path
+
+    conf = Path(__file__).resolve().parents[1] / "packaging" / "rights" / "openssl-tpm2.cnf"
+    monkeypatch.setenv("OPENSSL_CONF", str(conf))
+    key = tmp_path / "device.key"
+    devicekey.create(key)
+    assert key.read_bytes().startswith(b"-----BEGIN TSS2 PRIVATE KEY-----")
+    assert {"fixedTPM", "fixedParent", "sensitiveDataOrigin"} <= devicekey.attributes(key)
+
+
 def test_the_csr_is_signed_by_the_tpm_key(tpm, tmp_path):
     key = tmp_path / "device.key"
     devicekey.create(key)
