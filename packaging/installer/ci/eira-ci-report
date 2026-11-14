@@ -434,6 +434,21 @@ PY
     rm -rf "$dir"
     return $status
 }
+# A failing TPM check says why (checks discard their output).
+explain() {
+    name=$1
+    shift
+    log=$(mktemp)
+    "$@" >"$log" 2>&1
+    status=$?
+    [ "$status" -eq 0 ] || say "diag $name: exit $status: $(tail -n 8 "$log" | tr '\n' ' ' | cut -c1-900)"
+    rm -f "$log"
+    return $status
+}
+tpm_sandbox_writable() {
+    systemd-run --quiet --wait --pipe -p User=eira -p Group=eira \
+        -p SupplementaryGroups=tss -p DevicePolicy=closed -p "DeviceAllow=/dev/tpmrm0 rw" test -w /dev/tpmrm0
+}
 # What the TPM checks below need, so a failure can be read from the job log.
 say "diag tpm-devices: $(ls -l /dev/tpm* 2>&1 | tr '\n' ' ')"
 say "diag tpm-group: $(getent group tss 2>&1) / eira: $(id eira 2>&1)"
@@ -448,9 +463,8 @@ say "diag tpm-sandbox: $(systemd-run --quiet --wait --pipe -p User=eira -p Group
     sh -c 'id; ls -l /dev/tpmrm0; test -w /dev/tpmrm0 && echo writable' 2>&1 | tr '\n' ' ' | cut -c1-600)"
 say "diag tpm-kernel: $(journalctl -k -b --no-pager 2>&1 | grep -i tpm | tail -n 5 | tr '\n' ' ' | cut -c1-600)"
 check tpm-present test -c /dev/tpmrm0
-check device-key-in-tpm device_key_in_tpm
-check rights-sync-sandbox-reaches-tpm systemd-run --quiet --wait --pipe -p User=eira -p Group=eira \
-    -p SupplementaryGroups=tss -p DevicePolicy=closed -p "DeviceAllow=/dev/tpmrm0 rw" test -w /dev/tpmrm0
+check device-key-in-tpm explain device-key-in-tpm device_key_in_tpm
+check rights-sync-sandbox-reaches-tpm explain rights-sync-sandbox-reaches-tpm tpm_sandbox_writable
 # The desktop user can read neither the cache nor change it.
 check user-cannot-touch-rights-cache sh -c "! runuser -u $USER_NAME -- test -r /data/rights/active.json && ! runuser -u $USER_NAME -- test -w /data/rights"
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
