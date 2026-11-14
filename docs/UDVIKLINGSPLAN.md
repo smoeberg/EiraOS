@@ -252,7 +252,7 @@ Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal generer
 | # | Dokument | Hvordan |
 |---|---|---|
 | 1 | `docs/security/` som samlet sikkerhedsmodel | F0b.3 |
-| 2 | `SECURITY.md`: hvordan en sårbarhed rapporteres, og hvad der svares | Ejeren afgør kontakt og svartid |
+| 2 | `SECURITY.md`: hvordan en sårbarhed rapporteres, og hvad der svares | Leveret 14. november, da repoet blev offentligt: GitHubs private sårbarhedsrapportering, kvittering inden 5 arbejdsdage, vurdering inden 14 dage, koordineret offentliggørelse senest efter 90 dage. Fristerne er et forslag, som ejeren bekræfter |
 | 3 | `docs/reference/implementeringsmatrix.md`: krav → kode → test → VM-check → status | Genereres af kontrakternes statustabeller og VM-checkenes navne; README's statustabel peger herhen |
 | 4 | `docs/reference/miljoevariabler.md` | Genereres ved at søge efter `os.environ`/`getenv` i den pakkede kode |
 | 5 | ~~`CONTRIBUTING.md`~~ **Leveret** med "ny beskyttet handling fra ende til anden" (strøm som eksempel), PR-skabelon og en rettet `.cursor`-regel. Issue-skabeloner mangler | Skrevet efter F1b, så den beskriver en vej, der virker |
@@ -281,7 +281,7 @@ Fra 14. november: **F0c.1** (paknings-CI på `app/**` og `crates/**`, samlet slu
 | Én versionsplan for EiraOS (F1.3) | F9 |
 | Pilot (Arbejde eller Møde) | Prioritering af F6 og F7 |
 | ~~Er `android/` med i 1.0?~~ Nej (13. november 2026) | F1.8 |
-| Kontakt og svartid for sårbarhedsrapporter | `SECURITY.md` (§4) |
+| Kontakt og svartid for sårbarhedsrapporter: bekræft forslaget i `SECURITY.md` | `SECURITY.md` (§4) |
 | Listen over hverdagsrejser og deres mål | U.1–U.2 |
 | Accept af ADR-0007 (adgangskoder) og dens åbne spørgsmål O-1–O-5 (EU-wallet som passkey-udbyder, læk-tjek, digital arv, familiens koder, koder uden for webapps) | P.4 |
 | Grundspørgsmålene til ADR-0008 (økonomi) | P.3 |
