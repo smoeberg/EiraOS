@@ -519,6 +519,80 @@ reply = json.loads(s.makefile().readline())
 if reply.get("error", {}).get("message") != "E_ACCESS_DAEMON_ONLY":
     sys.exit(f"verify_production_certificate: {reply}")'
 check user-cannot-make-identityd-audit runuser -u "$USER_NAME" -- python3 -c "$IDENTITY_AUDIT_PY"
+# F1c.3 (G-3, G-35): the same UID is not a daemon. stated asks the kernel
+# which daemon calls (AppArmor label, else systemd unit): as eira but not a
+# daemon, every write is refused; under fleetd's profile state.append gets
+# past the access check (and fails on the incomplete state, so nothing is
+# written); under graphd's it is refused; under intentd's profile the socket
+# itself is out of reach.
+ONEXEC_PY='import os, sys
+profile, argv = sys.argv[1], sys.argv[2:]
+for attr in ("/proc/self/attr/apparmor/exec", "/proc/self/attr/exec"):
+    try:
+        with open(attr, "w") as f:
+            f.write("exec " + profile)
+        break
+    except OSError:
+        continue
+else:
+    sys.exit("change_onexec failed")
+os.execvp(argv[0], argv)'
+DAEMON_WRITE_PY='import json, socket, sys
+method, want = sys.argv[1], sys.argv[2]
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(10)
+try:
+    s.connect("/run/eira/stated.sock")
+except PermissionError:
+    sys.exit(0 if want == "unreachable" else "stated.sock unreachable")
+if want == "unreachable":
+    sys.exit("stated.sock reachable")
+params = {"type": "Forged", "_eira": {"ipc_token": token}}
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+refused = reply.get("error", {}).get("message") == "E_ACCESS_DAEMON_ONLY"
+ok = refused if want == "refused" else ("error" in reply and not refused)
+print(json.dumps(reply)[:300])
+if not ok:
+    a, b = socket.socketpair()
+    try:
+        own = a.getsockopt(socket.SOL_SOCKET, 31, 1024)
+    except OSError as exc:
+        own = repr(exc)
+    try:
+        current = open("/proc/self/attr/apparmor/current").read().strip()
+    except OSError as exc:
+        current = repr(exc)
+    print("peersec-of-self=%r attr=%r" % (own, current))
+sys.exit(0 if ok else 1)'
+daemon_write_as() {
+    # daemon_write_as <name> <profile|-> <method> <refused|accepted|unreachable>
+    name=$1 profile=$2 method=$3 want=$4
+    if [ "$profile" = - ]; then
+        out=$(runuser -u eira -- python3 -c "$DAEMON_WRITE_PY" "$method" "$want" 2>&1)
+    else
+        out=$(runuser -u eira -- python3 -c "$ONEXEC_PY" "$profile" python3 -c "$DAEMON_WRITE_PY" "$method" "$want" 2>&1)
+    fi
+    status=$?
+    if [ $status -eq 0 ]; then
+        say "$name PASS"
+    else
+        say "$name FAIL"
+        say "diag $name: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-600)"
+        say "diag $name-stated: $(journalctl -u eira-stated.service -b -o cat --no-pager 2>&1 | grep 'daemon_write' | tail -n 3 | tr '\n' ' ' | cut -c1-600)"
+        failed=1
+    fi
+}
+daemon_write_as eira-uid-is-not-a-daemon - state.append refused
+daemon_write_as eira-uid-cannot-audit - audit.append refused
+daemon_write_as fleetd-may-append-state /usr/bin/eira-fleetd state.append accepted
+daemon_write_as graphd-cannot-append-state /usr/bin/eira-graphd state.append refused
+daemon_write_as fleetd-cannot-audit /usr/bin/eira-fleetd audit.append refused
+daemon_write_as intentd-cannot-reach-stated /usr/bin/eira-intentd state.append unreachable
 # F1.5 (fundregister S-4/S-5): the mode belongs to the OS user on the socket,
 # so the desktop user can read and set it with no session; a claimed actor
 # gets neither a session nor a name.

@@ -7,7 +7,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | Klasse | Betydning |
 |---|---|
 | `read` | Læser kun. Enhver klient på socketen. |
-| `daemon_write` | Ændrer tilstand. Kun EiraOS' egne tjenester (samme UID); serveren tjekker det. |
+| `daemon_write` | Ændrer tilstand. Kun de navngivne daemons (som tjenestebrugeren, og som kernen siger er den daemon); serveren tjekker det. |
 | `caller` | Handleren afgør ud fra kalderen fra kernen (`SO_PEERCRED`). |
 | `signed` | Handleren tjekker et kryptografisk bevis i forespørgslen. |
 | `refused` | Afviser altid; gammel vej, der skal gennem gaten. |
@@ -17,16 +17,16 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 
 | Metode | Klasse | Bemærkning |
 |---|---|---|
-| `audit.append` | `daemon_write` |  |
+| `audit.append` | `daemon_write` | Lukkes af Kun delegationd, identityd |
 | `audit.verify` | `read` |  |
 | `health` | `read` |  |
-| `state.append` | `daemon_write` |  |
+| `state.append` | `daemon_write` | Lukkes af Kun fleetd |
 | `state.get` | `read` |  |
 | `state.get_by_hash` | `read` |  |
 | `state.get_history` | `read` |  |
 | `state.list` | `read` |  |
 | `state.sync_pull` | `read` |  |
-| `state.sync_push` | `daemon_write` |  |
+| `state.sync_push` | `daemon_write` | Lukkes af Ingen daemon kalder den endnu |
 
 ## `identityd` — `/run/eira/identityd.sock`
 
@@ -41,7 +41,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `identity.providers` | `read` |  |
 | `identity.session` | `caller` |  |
 | `identity.step_up` | `refused` |  |
-| `identity.verify_production_certificate` | `daemon_write` |  |
+| `identity.verify_production_certificate` | `daemon_write` | Lukkes af Ingen daemon kalder den endnu |
 
 ## `fleetd` — `/run/eira/fleetd.sock`
 

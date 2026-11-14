@@ -1,9 +1,9 @@
 Mutant IPC-REG-1: a method without an access class can be registered
-Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py
 
 --- a/app/daemons/base.py
 +++ b/app/daemons/base.py
-@@ -45,8 +45,7 @@
+@@ -56,8 +56,7 @@
  
      def register(self, method: str, handler: Handler) -> None:
          kind = access_of(handler)

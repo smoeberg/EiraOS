@@ -1,0 +1,14 @@
+Mutant IPC-DW-5: a daemon profile in complain mode counts as the daemon
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py
+
+--- a/app/ipc/access.py
++++ b/app/ipc/access.py
+@@ -138,7 +138,7 @@
+     if not label:
+         return None
+     name, _, mode = label.strip().rpartition(" ")
+-    if mode != "(enforce)":
++    if mode not in {"(enforce)", "(complain)"}:
+         return None
+     # A stack with "unconfined" (X//&unconfined, what a profile change from
+     # an unconfined task can give) is confined exactly by X. Any other stack

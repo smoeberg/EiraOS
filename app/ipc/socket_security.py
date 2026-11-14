@@ -27,6 +27,9 @@ class PeerCredentials:
     # Supplementary groups as the kernel recorded them at connect() time
     # (SO_PEERGROUPS). None means unknown; then /proc is consulted.
     groups: frozenset[int] | None = None
+    # The peer's security label as the kernel recorded it at connect()
+    # (SO_PEERSEC), e.g. "/usr/bin/eira-fleetd (enforce)". None if unknown.
+    label: str | None = None
 
 
 # Linux 4.13+: SO_PEERGROUPS returns the peer's supplementary GIDs from the
@@ -50,6 +53,22 @@ def peer_groups(sock: Any) -> frozenset[int] | None:
         count = len(raw) // 4
         return frozenset(struct.unpack(f"{count}I", raw[: count * 4]))
     return None
+
+
+SO_PEERSEC = getattr(socket, "SO_PEERSEC", 31)
+
+
+def peer_label(sock: Any) -> str | None:
+    """The connected Unix peer's LSM label (AppArmor on Ubuntu), or None."""
+    try:
+        # Python caps buflen at 1024; an AppArmor label is far shorter.
+        raw = sock.getsockopt(socket.SOL_SOCKET, SO_PEERSEC, 1024)
+    except Exception:
+        return None
+    if not isinstance(raw, bytes):
+        return None
+    text = raw.split(b"\0", 1)[0].decode("utf-8", "replace").strip()
+    return text or None
 
 
 def resolve_group_gid(group_name: str) -> int | None:
@@ -226,7 +245,9 @@ def validate_peer_credentials(
     try:
         creds = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
         pid, uid, gid = struct.unpack("3i", creds)
-        peer = PeerCredentials(pid=pid, uid=uid, gid=gid, groups=peer_groups(sock))
+        peer = PeerCredentials(
+            pid=pid, uid=uid, gid=gid, groups=peer_groups(sock), label=peer_label(sock)
+        )
     except Exception as exc:
         raise PeerCredentialError(f"Failed to validate peer credentials: {exc}") from exc
 

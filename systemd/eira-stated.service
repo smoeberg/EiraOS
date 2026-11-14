@@ -24,8 +24,6 @@ RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes
 StateDirectory=eira
 StateDirectoryMode=0770
-LogsDirectory=eira
-LogsDirectoryMode=0770
 UMask=0117
 ProtectSystem=strict
 ProtectHome=true
@@ -40,7 +38,7 @@ ProtectControlGroups=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=true
-ReadWritePaths=/data /run/eira /var/log/eira
+ReadWritePaths=/data /run/eira
 AppArmorProfile=/usr/bin/eira-stated
 
 [Install]

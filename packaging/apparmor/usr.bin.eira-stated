@@ -14,9 +14,11 @@
   /etc/eira/eira.conf r,
 
   /run/eira/ rw,
-  /run/eira/*.sock rwk,
-  /var/log/eira/ rw,
-  /var/log/eira/** rw,
+  # F1c.3: its own socket, and only the sockets of the daemons it calls.
+  /run/eira/stated.sock rwk,
+  # app/ipc/access.py: which daemon a daemon_write caller is, if it has no
+  # AppArmor label (its systemd unit's cgroup).
+  @{PROC}/[0-9]*/cgroup r,
   /data/eira.db rwk,
   /data/eira.db-{journal,shm,wal} rwk,
 

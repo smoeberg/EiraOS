@@ -93,6 +93,13 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   `consent_keys.forget()` ingen kald, og en nøgle levede til næste opstart. `delegationd` tjekker nu også, om sessionen er
   udløbet. Kun `identityd` kan skrive samtykkenøglerne; gaten og `delegationd` læser dem skrivebeskyttet (AppArmor `rk`).
   Ny gate-test og mutant `GATE-S-1` for en afsluttet session (udviklingsplan F1c.2, gennemgang G-2, G-15, G-34).
+- Daemons er isoleret fra hinanden. Samme UID gør ikke længere en kalder til en daemon: `daemon_write` navngiver de
+  daemons, der må kalde (`state.append` kun `fleetd`, `audit.append` kun `identityd` og `delegationd`, `state.sync_push`
+  og `identity.verify_production_certificate` ingen), og serveren spørger kernen, hvilken daemon kalderen er (AppArmor-
+  etiket fra `SO_PEERSEC`, ellers systemd-unit fra cgroup). Rettighedssynkroniseringen og andre processer som `eira`
+  afvises. AppArmor: hver daemon kan kun oprette sin egen socket og forbinde til dem, den kalder; den fælles logmappe
+  `/var/log/eira` er fjernet. Nye tests, mutanter `IPC-DW-3` til `IPC-DW-6` og seks VM-checks (udviklingsplan F1c.3,
+  gennemgang G-3, G-35). `fleetd` må stadig tilføje synkroniserede tilstande.
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

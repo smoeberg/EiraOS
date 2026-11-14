@@ -199,15 +199,21 @@ def audit_verify(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def register_state_handlers(server: Any) -> None:
-    # Writes only from the daemons' own service user (fundregister S-1): the
-    # desktop user is in eira-clients and may reach this socket.
-    server.register("state.append", daemon_write(state_append))
+    # Writes only from named daemons running as the service user (fundregister
+    # S-1, UDVIKLINGSPLAN F1c.3): the desktop user is in eira-clients and may
+    # reach this socket, and the same UID does not make a caller a daemon.
+    # fleetd writes the states it receives from paired devices (sync.push_blocks).
+    server.register("state.append", daemon_write(state_append, callers=("fleetd",)))
     server.register("state.get", read(state_get))
     server.register("state.get_by_hash", read(state_get_by_hash))
     server.register("state.get_history", read(state_get_history))
     server.register("state.list", read(state_list))
-    server.register("state.sync_push", daemon_write(state_sync_push))
+    # No daemon calls the batch path today (fleetd appends one state at a time).
+    server.register("state.sync_push", daemon_write(state_sync_push, callers=()))
     server.register("state.sync_pull", read(state_sync_pull))
-    server.register("audit.append", daemon_write(audit_append))
+    # identityd audits certificate checks; delegationd creates and revokes.
+    server.register(
+        "audit.append", daemon_write(audit_append, callers=("identityd", "delegationd"))
+    )
     server.register("audit.verify", read(audit_verify))
     server.register("health", read(lambda _: {"daemon": "eira-stated", "ok": True}))

@@ -30,8 +30,6 @@ RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes
 StateDirectory=eira
 StateDirectoryMode=0770
-LogsDirectory=eira
-LogsDirectoryMode=0770
 UMask=0117
 ProtectSystem=strict
 ProtectHome=true
@@ -48,7 +46,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 IPAddressDeny=any
 IPAddressAllow=localhost
 RestrictSUIDSGID=true
-ReadWritePaths=/data/eira-fleet /run/eira /var/log/eira
+ReadWritePaths=/data/eira-fleet /run/eira
 AppArmorProfile=/usr/bin/eira-fleetd
 
 [Install]

@@ -1,0 +1,14 @@
+Mutant IPC-DW-6: a confined non-daemon falls back to its cgroup
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py
+
+--- a/app/ipc/access.py
++++ b/app/ipc/access.py
+@@ -182,7 +182,7 @@
+     """Which EiraOS daemon the kernel says the caller is, or None."""
+     label = getattr(peer, "label", None)
+     if label_is_confined(label):
+-        return daemon_from_label(label)
++        return daemon_from_label(label) or daemon_from_cgroup(getattr(peer, "pid", None))
+     return daemon_from_cgroup(getattr(peer, "pid", None))
+ 
+ 

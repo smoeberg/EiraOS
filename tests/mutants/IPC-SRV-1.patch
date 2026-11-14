@@ -1,14 +1,14 @@
 Mutant IPC-SRV-1: the server does not check daemon_write before the handler
-Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py
 
 --- a/app/daemons/base.py
 +++ b/app/daemons/base.py
-@@ -112,7 +112,7 @@
+@@ -123,7 +123,7 @@
              # The caller comes from the kernel (SO_PEERCRED), never from the
              # request: a client-supplied "_peer" is dropped (bilag A pkt. 1).
              params.pop(PEER_KEY, None)
--            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(peer):
-+            if False:
-                 raise JsonRpcError(
-                     ACCESS_DENIED,
-                     "E_ACCESS_DAEMON_ONLY",
+-            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(
++            if False and not daemon_write_allowed(
+                 peer, callers_of(self._handlers[method])
+             ):
+                 if getattr(peer, "uid", None) == service_uid():

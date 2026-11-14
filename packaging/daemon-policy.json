@@ -10,5 +10,25 @@
     "delegationd"
   ],
   "prototype_daemons": [],
-  "policy": "Only production_daemons are installed and enabled by the Ubuntu package. The former prototype daemons (walletd, presenced, contextd) were removed in UDVIKLINGSPLAN F1.2; a new prototype daemon must be listed here and must not be represented as a production service."
+  "policy": "Only production_daemons are installed and enabled by the Ubuntu package. The former prototype daemons (walletd, presenced, contextd) were removed in UDVIKLINGSPLAN F1.2; a new prototype daemon must be listed here and must not be represented as a production service.",
+  "ipc_connects": {
+    "stated": [],
+    "identityd": [
+      "stated"
+    ],
+    "fleetd": [
+      "stated"
+    ],
+    "veritasd": [
+      "graphd"
+    ],
+    "intentd": [],
+    "graphd": [
+      "stated"
+    ],
+    "delegationd": [
+      "stated"
+    ]
+  },
+  "ipc_connects_policy": "UDVIKLINGSPLAN F1c.3: each daemon may create only its own socket in /run/eira and connect only to the daemons listed here. The AppArmor profiles must match; tests/test_daemon_isolation.py checks both against the code's IpcClient calls."
 }
