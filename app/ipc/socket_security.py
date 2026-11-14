@@ -61,7 +61,8 @@ SO_PEERSEC = getattr(socket, "SO_PEERSEC", 31)
 def peer_label(sock: Any) -> str | None:
     """The connected Unix peer's LSM label (AppArmor on Ubuntu), or None."""
     try:
-        raw = sock.getsockopt(socket.SOL_SOCKET, SO_PEERSEC, 4096)
+        # Python caps buflen at 1024; an AppArmor label is far shorter.
+        raw = sock.getsockopt(socket.SOL_SOCKET, SO_PEERSEC, 1024)
     except Exception:
         return None
     if not isinstance(raw, bytes):

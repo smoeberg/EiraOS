@@ -304,3 +304,19 @@ def test_the_servers_that_take_daemon_writes_can_read_the_callers_cgroup():
     for daemon in ("stated", "identityd"):
         text = (APPARMOR / f"usr.bin.eira-{daemon}").read_text(encoding="utf-8")
         assert "@{PROC}/[0-9]*/cgroup r," in text, daemon
+
+
+def test_the_peer_label_is_read_within_pythons_buffer_limit():
+    # socket.getsockopt refuses a buflen above 1024 ("buflen out of range");
+    # the first VM run read no label at all because of it.
+    from app.ipc.socket_security import SO_PEERSEC, peer_label
+
+    class Sock:
+        def getsockopt(self, level, option, buflen):
+            assert option == SO_PEERSEC
+            if not 0 < buflen <= 1024:
+                raise OSError("getsockopt buflen out of range")
+            return b"/usr/bin/eira-fleetd (enforce)\n\0"
+
+    assert peer_label(Sock()) == "/usr/bin/eira-fleetd (enforce)"
+    assert access.daemon_from_label(peer_label(Sock())) == "fleetd"

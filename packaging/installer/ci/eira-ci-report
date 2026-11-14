@@ -560,7 +560,7 @@ print(json.dumps(reply)[:300])
 if not ok:
     a, b = socket.socketpair()
     try:
-        own = a.getsockopt(socket.SOL_SOCKET, 31, 4096)
+        own = a.getsockopt(socket.SOL_SOCKET, 31, 1024)
     except OSError as exc:
         own = repr(exc)
     try:
