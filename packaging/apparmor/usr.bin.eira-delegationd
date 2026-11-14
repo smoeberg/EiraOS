@@ -14,14 +14,15 @@
   /etc/eira/eira.conf r,
 
   /run/eira/ rw,
-  /run/eira/*.sock rwk,
+  # F1c.3: its own socket, and only the sockets of the daemons it calls.
+  /run/eira/delegationd.sock rwk,
+  /run/eira/stated.sock rw,
   /run/eira/consent-keys.db rk,
   # app/consent_keys.py: the store must be on tmpfs and keys are tied to the boot.
   @{PROC}/@{pid}/mounts r,
   @{PROC}/sys/kernel/random/boot_id r,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
-  /var/log/eira/** rw,
 
   network unix stream,
   deny network inet,

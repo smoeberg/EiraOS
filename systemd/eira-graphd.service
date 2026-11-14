@@ -26,8 +26,6 @@ RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes
 StateDirectory=eira
 StateDirectoryMode=0770
-LogsDirectory=eira
-LogsDirectoryMode=0770
 UMask=0117
 ProtectSystem=strict
 ProtectHome=true
@@ -43,7 +41,7 @@ LockPersonality=true
 RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=true
 ReadOnlyPaths=-/data/eira-app.db -/data/eira-app.db-shm -/data/eira-app.db-wal
-ReadWritePaths=/run/eira /var/log/eira
+ReadWritePaths=/run/eira
 AppArmorProfile=/usr/bin/eira-graphd
 
 [Install]

@@ -26,7 +26,6 @@ if ! getent passwd eira >/dev/null; then
 fi
 
 install -d -m 0770 -o eira -g eira /run/eira
-install -d -m 0770 -o eira -g eira /var/log/eira
 
 shopt -s nullglob
 units=( "${SYSTEMD_SOURCE}"/* )

@@ -6,7 +6,13 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from app.ipc.access import ACCESS_DENIED, Access, access_of, daemon_write_allowed
+from app.ipc.access import (
+    ACCESS_DENIED,
+    Access,
+    access_of,
+    callers_of,
+    daemon_write_allowed,
+)
 from app.ipc.auth import PEER_KEY, strip_and_validate_ipc_auth
 from app.ipc.jsonrpc import (
     INTERNAL_ERROR,
@@ -112,7 +118,9 @@ class JsonRpcServer:
             # The caller comes from the kernel (SO_PEERCRED), never from the
             # request: a client-supplied "_peer" is dropped (bilag A pkt. 1).
             params.pop(PEER_KEY, None)
-            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(peer):
+            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(
+                peer, callers_of(self._handlers[method])
+            ):
                 raise JsonRpcError(
                     ACCESS_DENIED,
                     "E_ACCESS_DAEMON_ONLY",

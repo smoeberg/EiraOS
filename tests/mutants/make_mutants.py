@@ -234,7 +234,8 @@ MUTANTS: dict[str, dict] = {
 G = "tests/test_gate_kernel.py"
 GATE_TESTS = [G, "tests/test_gate_invariants.py", "tests/test_gate_consent_proof.py", "tests/test_consent_agent_path.py", "tests/test_gate_rights.py",
               "tests/test_gate_clock.py", "tests/test_gate_audit_anchor.py", "tests/test_gate_ipc.py"]
-IPC_TESTS = ["tests/test_ipc_access.py", "tests/test_gate_caller.py", "tests/test_s1_daemons_ipc.py"]
+IPC_TESTS = ["tests/test_ipc_access.py", "tests/test_gate_caller.py", "tests/test_s1_daemons_ipc.py",
+             "tests/test_daemon_isolation.py"]
 K = "app/gate/kernel.py"
 
 MUTANTS.update({
@@ -350,23 +351,47 @@ MUTANTS.update({
     },
     # IPC access classes (F0b): the server enforces them before the handler.
     "IPC-DW-1": {
-        "why": "daemon_write accepts any caller",
+        "why": "daemon_write accepts any UID",
         "tests": IPC_TESTS,
-        "edits": [("app/ipc/access.py", "    return isinstance(uid, int) and uid == service_uid()",
-                   "    return True")],
+        "edits": [("app/ipc/access.py",
+                   "    if not (isinstance(uid, int) and uid == service_uid()):\n        return False\n", "")],
     },
     "IPC-DW-2": {
         "why": "daemon_write accepts a request without a kernel-verified caller",
         "tests": IPC_TESTS,
-        "edits": [("app/ipc/access.py", "    return isinstance(uid, int) and uid == service_uid()",
-                   "    return uid is None or uid == service_uid()")],
+        "edits": [("app/ipc/access.py", "    if not (isinstance(uid, int) and uid == service_uid()):",
+                   "    if not (uid is None or uid == service_uid()):")],
+    },
+    # F1c.3 (G-3): the same UID does not make a caller a daemon, nor every
+    # daemon a caller of every write.
+    "IPC-DW-3": {
+        "why": "daemon_write accepts any daemon, not just the named callers",
+        "tests": IPC_TESTS,
+        "edits": [("app/ipc/access.py", "        return name in frozenset(callers)", "        return True")],
+    },
+    "IPC-DW-4": {
+        "why": "an installed system accepts a service-UID caller that is no daemon",
+        "tests": IPC_TESTS,
+        "edits": [("app/ipc/access.py", "    return not strict_daemon_identity()", "    return True")],
+    },
+    "IPC-DW-5": {
+        "why": "a daemon profile in complain mode counts as the daemon",
+        "tests": IPC_TESTS,
+        "edits": [("app/ipc/access.py", '    if mode != "(enforce)":',
+                   '    if mode not in {"(enforce)", "(complain)"}:')],
+    },
+    "IPC-DW-6": {
+        "why": "a confined non-daemon falls back to its cgroup",
+        "tests": IPC_TESTS,
+        "edits": [("app/ipc/access.py", "        return daemon_from_label(label)\n",
+                   "        return daemon_from_label(label) or daemon_from_cgroup(getattr(peer, \"pid\", None))\n")],
     },
     "IPC-SRV-1": {
         "why": "the server does not check daemon_write before the handler",
         "tests": IPC_TESTS,
         "edits": [("app/daemons/base.py",
-                   "            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(peer):",
-                   "            if False:")],
+                   "            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(",
+                   "            if False and not daemon_write_allowed(")],
     },
     "IPC-SRV-2": {
         "why": "a client-supplied caller is trusted",

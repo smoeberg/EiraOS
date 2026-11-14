@@ -59,8 +59,10 @@ case "${1:-configure}" in
         # FSS verification key until handover: root writes it, the rights
         # sync (eira) hands it to Fleet and deletes it. setgid: files are eira's group.
         install -d -o root -g eira -m 2770 /var/lib/eira-audit-seal
+        # No shared log directory (UDVIKLINGSPLAN F1c.3): the daemons log to
+        # the journal, each under its own unit.
         install -d -o eira -g eira -m 0770 \
-            /data /data/eira-fleet /var/lib/eira /var/log/eira
+            /data /data/eira-fleet /var/lib/eira
         if [ ! -e /etc/eira/eira.conf ]; then
             umask 0027
             token=$(python3 -c 'import secrets; print(secrets.token_hex(32))')

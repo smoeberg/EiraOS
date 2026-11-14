@@ -98,8 +98,10 @@ def test_all_daemons_have_least_privilege_apparmor_profiles() -> None:
         profile = APPARMOR_DIR / f"usr.bin.eira-{daemon}"
         text = profile.read_text(encoding="utf-8")
         assert f"/usr/bin/eira-{daemon}" in text
-        assert "/run/eira/*.sock rwk," in text
-        assert "/var/log/eira/** rw," in text
+        # F1c.3: its own socket only, no shared log directory.
+        assert f"/run/eira/{daemon}.sock rwk," in text
+        assert "*.sock" not in text
+        assert "/var/log/eira" not in text
         assert "deny @{HOME}/** rwklx," in text
         assert "flags=(attach_disconnected,mediate_deleted)" in text
 

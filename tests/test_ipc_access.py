@@ -105,7 +105,9 @@ def _call(server: JsonRpcServer, peer, method: str = "w") -> dict:
 def _write_server() -> tuple[JsonRpcServer, list]:
     calls: list = []
     server = JsonRpcServer("test", "test")
-    server.register("w", access.daemon_write(lambda params: calls.append(params) or {"ok": True}))
+    server.register(
+        "w", access.daemon_write(lambda params: calls.append(params) or {"ok": True}, callers=("fleetd",))
+    )
     return server, calls
 
 

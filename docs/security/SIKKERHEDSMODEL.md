@@ -41,6 +41,8 @@ Beviser: VM-checkene `user-in-eira-clients`, `user-not-in-eira`, `user-cannot-wr
 
 **Root** får altid forbindelse (`socket_access_allowed`, fundregister S-12). Root er dog ikke en daemon: `daemon_write` kræver tjenestebrugerens UID, også for root.
 
+**Hvilken daemon kalder.** Alle syv daemons og rettighedssynkroniseringen kører som `eira`, så UID'et siger ikke, hvilken daemon der kalder. Til `daemon_write` spørger serveren derfor også kernen (`app/ipc/access.py`, F1c.3): kalderens AppArmor-etiket fra `SO_PEERSEC` (`/usr/bin/eira-fleetd (enforce)`), eller, hvis kalderen ikke er under en profil, den systemd-unit, kalderens cgroup ligger i (`eira-fleetd.service`). En proces under en anden profil (fx `eira-rights-apply`) falder ikke tilbage til sin cgroup, og en profil i complain-tilstand tæller ikke. Begge dele sætter kernen; en daemon kan ikke skifte profil (profilerne tillader det ikke) eller flytte sig til en anden unit (cgroup-træet er roots). Desktop-brugeren kan godt sætte sig under en daemons profil, men får ikke UID'et, og derfor kræves begge. I udvikling (sockets uden for `/run/eira`) er der hverken profiler eller units; der gælder UID'et alene, medmindre kalderen er en navngiven daemon.
+
 ## 4. Adgangsklasser pr. IPC-metode
 
 Hver metode har præcis én klasse (`app/ipc/access.py`), og `JsonRpcServer.register` afviser en metode uden klasse. Kataloget over alle metoder genereres fra daemonernes egne registreringer: [`docs/reference/ipc-katalog.md`](../reference/ipc-katalog.md) (`scripts/ipc_catalog.py --check` i CI).
@@ -49,14 +51,16 @@ Hver metode har præcis én klasse (`app/ipc/access.py`), og `JsonRpcServer.regi
 |---|---|---|---|---|
 | `read` | 24 | Alle på socketen | Ændrer intet | `graph.spatial_snapshot`, `graph.temporal_query`, `health` |
 | `caller` | 28 | Alle, men handleren får kernens kalder og handler kun på dennes vegne | Handleren (`wants_peer`) | `dashboard.get`, `presentation.mode_set`, `identity.session`, `gate.propose`; `gate.consent`/`gate.confirm`, hvor gaten desuden kræver agentens gruppe |
-| `daemon_write` | 4 | Kun tjenestebrugeren (en anden daemon) | Serveren, før handleren: `E_ACCESS_DAEMON_ONLY` | `state.append`, `state.sync_push`, `audit.append`, `identity.verify_production_certificate` |
+| `daemon_write` | 4 | Kun de navngivne daemons, som tjenestebrugeren (§3) | Serveren, før handleren: `E_ACCESS_DAEMON_ONLY` | `state.append` (kun `fleetd`), `audit.append` (kun `identityd`, `delegationd`), `state.sync_push` og `identity.verify_production_certificate` (ingen kalder i dag, så ingen må) |
 | `signed` | 4 | Den, der kan bevise sin ret med en signatur | Handleren | Fleets `fleet.device.enroll` og `sync.*` |
 | `refused` | 4 | Ingen | Svarer altid med en afvisning | `intent.execute`, `intent.confirm`, `journey.advance` (`E_GATE_REQUIRED`), `identity.step_up` |
 | `open_write` | **0** | Alle, uden kontrol: **et kendt hul** | Kun tilladt med et plantrin | Ingen tilbage siden F0b.4 |
 
 Tallene er for de syv produktionsdaemons pr. denne PR; kataloget er den aktuelle kilde.
 
-Beviser: `tests/test_ipc_access.py` (hver metode har en klasse; `open_write` er præcis de kendte huller, og listen er tom; `daemon_write` afvises fra en anden bruger og uden kalder; root er ikke daemon-skriver; desktop-brugeren kan hverken skrive i `stated` eller få `identityd` til at skrive audit). VM: `user-cannot-write-stated`, `user-cannot-make-identityd-audit`, `user-mode-without-session`.
+Beviser: `tests/test_ipc_access.py` (hver metode har en klasse; `open_write` er præcis de kendte huller, og listen er tom; `daemon_write` afvises fra en anden bruger og uden kalder; root er ikke daemon-skriver; desktop-brugeren kan hverken skrive i `stated` eller få `identityd` til at skrive audit) og `tests/test_daemon_isolation.py` (kun de navngivne daemons; samme UID er ikke nok; etiket før cgroup; complain-tilstand tæller ikke; hvert kald i koden står i politikken, og profilerne svarer til den). Mutanter `IPC-DW-1` til `IPC-DW-6`. VM: `user-cannot-write-stated`, `user-cannot-make-identityd-audit`, `user-mode-without-session`, `eira-uid-is-not-a-daemon`, `eira-uid-cannot-audit`, `fleetd-may-append-state`, `graphd-cannot-append-state`, `fleetd-cannot-audit`, `intentd-cannot-reach-stated`.
+
+**Tilbage:** `fleetd` taler med netværket og må stadig skrive tilstande i `stated`, fordi det er dens opgave at modtage synkroniserede blokke fra parrede enheder (`sync.push_blocks`, som tjekker signaturen og hashkæden). En kompromitteret `fleetd` kan altså stadig tilføje tilstande, men ikke skrive audit og ikke bruge batch-vejen.
 
 ## 5. Gaten
 
@@ -75,7 +79,7 @@ Beviser: `tests/test_gate_kernel.py`, `tests/test_gate_system.py`, `tests/test_i
 Kun `eira-consent-agent` kan samtykke og bekræfte (EIRA-CONSENT-AGENT):
 
 - Den er installeret setgid `eira-consent`, en gruppe uden medlemmer. Gaten genkender den på den effektive GID ved `connect()`.
-- Samtykkenøglen ligger aldrig på disk. Den dannes af `identityd` ved login og ligger i RAM: i agentens hukommelse og i `/run/eira/consent-keys.db` (tmpfs, ejet af `eira`, `0600`). Kun `identityd` kan skrive den; gaten (`intentd`) og `delegationd` kan kun læse den (AppArmor `rk`, skrivebeskyttet forbindelse), fordi de efterprøver beviserne med den. Da alle daemons kører som `eira`, er det AppArmor og ikke filrettighederne, der holder skrivningen til `identityd` (F1c.3 binder resten). En nøgle fra en tidligere opstart bruges aldrig.
+- Samtykkenøglen ligger aldrig på disk. Den dannes af `identityd` ved login og ligger i RAM: i agentens hukommelse og i `/run/eira/consent-keys.db` (tmpfs, ejet af `eira`, `0600`). Kun `identityd` kan skrive den; gaten (`intentd`) og `delegationd` kan kun læse den (AppArmor `rk`, skrivebeskyttet forbindelse), fordi de efterprøver beviserne med den. Da alle daemons kører som `eira`, er det AppArmor og ikke filrettighederne, der holder skrivningen til `identityd` (F1c.3 binder `daemon_write` til navngivne daemons, §3). En nøgle fra en tidligere opstart bruges aldrig.
 - **Logout** (`identity.logout`, knappen "Log ud") afslutter sessionen med det samme og sletter dens nøgle. Gaten, `delegationd` og agenten afviser derefter sessionen, og et samtykke givet i den kan ikke længere bekræftes. Ved næste login slettes også nøglerne for alle udløbne sessioner. Kun den OS-bruger, sessionen er bundet til, kan logge den ud.
 - `intentd` og `identityd` nægter at starte, hvis gruppen `eira-consent` får medlemmer.
 - Dens vindue ligger øverst og har fokus, mens det vises (`<trustedGroup>` i `eira-labwc`, R-6.2). Ingen klient har privilegerede Wayland-protokoller (R-6.1).
@@ -86,7 +90,7 @@ Beviser: `tests/test_consent_agent_path.py`, `tests/test_logout.py`, `tests/test
 
 ## 7. Indeslutning
 
-- **AppArmor** har en profil pr. daemon (`packaging/apparmor/`), som indlæses ved installation. VM: `modeld-profile-enforced`, `identityd-no-apparmor-denials`.
+- **AppArmor** har en profil pr. daemon (`packaging/apparmor/`), som indlæses ved installation. Hver daemon kan kun oprette sin egen socket i `/run/eira` og kun forbinde til de daemons, den kalder (`ipc_connects` i `packaging/daemon-policy.json`: `identityd`, `delegationd`, `graphd` og `fleetd` kalder `stated`; `veritasd` kalder `graphd`; `stated` og `intentd` kalder ingen). Ingen daemon deler en logmappe; de logger til journalen under deres egen unit (F1c.3). Tilbage: AppArmor skelner ikke mellem at forbinde til og at slette en sti-socket, så en daemon kan slette socketen for en daemon, den kalder. VM: `modeld-profile-enforced`, `identityd-no-apparmor-denials`, `intentd-cannot-reach-stated`.
 - **systemd** hærder alle tjenester (`NoNewPrivileges`, `ProtectSystem=strict` m.fl.). Modelprocessen har intet net. VM: `modeld-confined`, `modeld-no-network`.
 - **Sessionen** er kun EiraOS: andre login-sessioner skjules, og miljøet renses (`packaging/session/`). VM: `only-eira-session`, `gnome-session-hidden`.
 

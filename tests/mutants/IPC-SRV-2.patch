@@ -1,13 +1,13 @@
 Mutant IPC-SRV-2: a client-supplied caller is trusted
-Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py
 
 --- a/app/daemons/base.py
 +++ b/app/daemons/base.py
-@@ -111,7 +111,6 @@
+@@ -117,7 +117,6 @@
              params = strip_and_validate_ipc_auth(dict(params))
              # The caller comes from the kernel (SO_PEERCRED), never from the
              # request: a client-supplied "_peer" is dropped (bilag A pkt. 1).
 -            params.pop(PEER_KEY, None)
-             if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(peer):
-                 raise JsonRpcError(
-                     ACCESS_DENIED,
+             if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(
+                 peer, callers_of(self._handlers[method])
+             ):

@@ -18,12 +18,11 @@
   /etc/eira/enrollment.json r,
 
   /run/eira/ rw,
-  /run/eira/*.sock rwk,
+  # F1c.3: its own socket, and only the sockets of the daemons it calls.
+  /run/eira/intentd.sock rwk,
   /run/eira/consent-keys.db rk,
   # app/consent_keys.py: the store must be on tmpfs and keys are tied to the boot.
   @{PROC}/@{pid}/mounts r,
-  /var/log/eira/ rw,
-  /var/log/eira/** rw,
   # SQLite fsyncs the directory after removing a journal.
   /data/ r,
   /data/eira-app.db rwk,

@@ -259,8 +259,9 @@ def register_identity_handlers(
         "identity.verify_production_certificate",
         # Every attempt writes an audit event. Only another EiraOS daemon may
         # ask (UDVIKLINGSPLAN F0b.4): the desktop user cannot fill the audit
-        # chain with failed attempts. No client calls it today.
-        daemon_write(service.verify_production_certificate),
+        # chain with failed attempts. No daemon calls it today, so none is
+        # named (F1c.3): a future caller must be added here.
+        daemon_write(service.verify_production_certificate, callers=()),
     )
     server.register(
         "health",
