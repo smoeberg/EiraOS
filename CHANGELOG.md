@@ -28,6 +28,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - `CONTRIBUTING.md`: hvad der gælder, de hårde regler og vejen for en ny beskyttet handling (skema → policy →
   gengivelse → executor → rettighed → AppArmor → model → UI → test → VM-check → audit). PR-skabelon. `.cursor`-reglen
   pegede på arkiverede filer og sessionsbundet tilstand og er rettet.
+- Vurdering af den uafhængige gennemgang 13. november ([`docs/reviews/GENNEMGANG-2026-11-13.md`](docs/reviews/GENNEMGANG-2026-11-13.md)):
+  25 fund efterprøvet mod `main`, de fleste bekræftet, og forslag til to nye trin, F0c (bevisets
+  tillid i CI) og F1c (sikkerhedsgæld), til ejerens accept.
 
 ### CI
 - Packaging Acceptance er kortere: ISO og VM-installation i samme job (CI-billedet uploades og hentes ikke længere),
