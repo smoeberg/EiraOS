@@ -4,15 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     branches: ["main"]
-    paths:
-      - "scripts/build_deb.sh"
-      - "scripts/build_iso.sh"
-      - "scripts/fetch_ubuntu_iso.sh"
-      - "packaging/**"
-      - "tests/test_eira_labwc_packaging.py"
-      - "systemd/**"
-      - "ui/**"
-      - ".github/workflows/packaging-acceptance.yml"
+    # Everything that can change the installed system runs the acceptance:
+    # app/** (the gate, IPC access), crates/** (the consent agent), the
+    # packaging and the tests. Only documentation is skipped (UDVIKLINGSPLAN
+    # F0c.1, review G-20). A list of included paths missed app/** before.
+    paths-ignore:
+      - "docs/**"
+      - "specs/**"
+      - "**/*.md"
 
 permissions:
   contents: read
@@ -123,8 +122,12 @@ jobs:
         run: |
           python3 --version
           python3 -m venv /tmp/venv
-          /tmp/venv/bin/python -m pip install -q -r requirements-dev.txt alembic
+          /tmp/venv/bin/python -m pip install -q -r requirements-dev.txt
           PYTHONPATH=. /tmp/venv/bin/python -m pytest -q tests
+
+      # The Rust workspace includes the consent agent that is in the package.
+      - name: Rust tests
+        run: cargo test --workspace --all-features
 
       - name: UI tests
         run: |
@@ -376,3 +379,20 @@ jobs:
             screens/*.png
           if-no-files-found: ignore
           retention-days: 14
+
+  # The one verdict for a PR (UDVIKLINGSPLAN F0c.1, review G-19). The package
+  # is built with nocheck so the ISO is not held up by the test suites; they
+  # run in parallel in tests-on-ubuntu-26-04 instead. This job is red unless
+  # the tests on 26.04 AND the installed-system acceptance both passed, so a
+  # green workflow means "the code is right and it works installed".
+  acceptance:
+    if: always()
+    needs: [build-deb, tests-on-ubuntu-26-04, build-eira-labwc, vm-install-acceptance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All acceptance jobs passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          echo "$RESULTS" | python3 -c 'import json,sys; r=json.load(sys.stdin); sys.exit(0 if r and all(x == "success" for x in r) else 1)'
