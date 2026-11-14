@@ -50,7 +50,7 @@ class TlsFiles:
 
     ca: Path            # Fleet's server CA, the only trusted root (root, 0644)
     certificate: Path   # device certificate (root, 0644)
-    key: Path           # device private key (root:eira, 0640)
+    key: Path           # TPM-wrapped device key, TSS2 blob (root:eira, 0640; devicekey.py)
     token: Path         # tenant token, optional (root:eira, 0640)
 
     @classmethod
@@ -63,7 +63,15 @@ def tls_context(files: TlsFiles) -> ssl.SSLContext:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # check_hostname + CERT_REQUIRED
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_verify_locations(cafile=str(files.ca))  # Fleet's CA only, no system store
-    ctx.load_cert_chain(certfile=str(files.certificate), keyfile=str(files.key))
+    try:
+        ctx.load_cert_chain(certfile=str(files.certificate), keyfile=str(files.key))
+    except OSError as exc:  # ssl.SSLError, or an errno OpenSSL left behind
+        if files.key.is_file() and files.key.read_bytes().startswith(b"-----BEGIN TSS2"):
+            # The handshake is signed by the TPM. Either OpenSSL lacks the tpm2
+            # provider (OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf), or
+            # this is not the TPM that made the key (a cloned disk, A-1).
+            raise ssl.SSLError(f"cannot use the TPM device key (tpm2 provider loaded? same TPM?): {exc}") from exc
+        raise
     return ctx
 
 

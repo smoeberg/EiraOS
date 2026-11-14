@@ -10,6 +10,8 @@ os.environ["EIRA_OIDC_MOCK"] = "1"
 
 import pytest  # noqa: E402
 
+from tests.tpm import other_tpm, tpm  # noqa: E402, F401 (software TPM fixtures, EIRA-CONTEXT §5.0)
+
 
 @pytest.fixture(autouse=True)
 def _human_caller():

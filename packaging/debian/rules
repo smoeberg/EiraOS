@@ -72,6 +72,8 @@ override_dh_auto_install:
 	# Rights sync with Fleet (oneshot + timer) and enrollment (FLEET-RIGHTS-API §7-8).
 	install -m 0644 packaging/rights/eira-rights-sync.service packaging/rights/eira-rights-sync.timer \
 		debian/eira-os-core/usr/lib/systemd/system/
+	install -D -m 0644 packaging/rights/openssl-tpm2.cnf \
+		debian/eira-os-core/usr/share/eira-os/openssl-tpm2.cnf
 	install -m 0644 packaging/rights/usr.bin.eira-rights-apply \
 		debian/eira-os-core/etc/apparmor.d/usr.bin.eira-rights-apply
 	install -m 0755 packaging/bin/eira-enroll debian/eira-os-core/usr/bin/eira-enroll
