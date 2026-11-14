@@ -2,7 +2,7 @@
 
 **Status:** Forslag til ejerens accept, 12. november 2026
 **Afløser:** rækkefølgen i [MASTER-PLAN-1.0](MASTER-PLAN-1.0.md) §4, §5 og §8 (principperne, statusordene og definition of done dér gælder fortsat)
-**Bygger på:** [ADR-0001–0006](decisions/), kontrakterne i [`specs/`](../specs/README.md), koden på `main` efter #184 , [fundregistret fra de eksterne gennemgange](reviews/GENNEMGANG-2026-11-12.md) og [vurderingen af rådene om intuitivt design](reviews/RAAD-UX-2026-11-12.md)
+**Bygger på:** [ADR-0001–0006](decisions/), kontrakterne i [`specs/`](../specs/README.md), koden på `main` efter #184 , [fundregistret fra de eksterne gennemgange](reviews/GENNEMGANG-2026-11-12.md), [vurderingen af gennemgangen 13.–14. november](reviews/GENNEMGANG-2026-11-13.md) og [vurderingen af rådene om intuitivt design](reviews/RAAD-UX-2026-11-12.md)
 
 > **AI'en foreslår. Gaten afgør. Systemet udfører.**
 
@@ -49,6 +49,7 @@ F1 Teknisk gæld ────┼──► F1b Hele vejen ──► F2 Kontekster
                     │
                     └──► F7 EiraSystemAPI (mellem de store trin)    F8 Sprogmodel    F9 Release 1.0
 
+F0c Bevisets tillid kommer før næste store trin; F1c Sikkerhedsgæld lægges ind mellem F2-trinnene
 U Brugerbevis løber ved siden af alle trin fra F1b
 P Personens områder: beslutninger og kontrakter skrives parallelt med F2; bygges i takt med F2–F6
 ```
@@ -103,6 +104,40 @@ IntentBar kalder i dag kun `intent.execute`, som svarer `E_GATE_REQUIRED` (ekste
 | F1b.2 | **Leveret undtagen VM-delen:** samtykke og bekræftelse går gennem samtykkeagenten (appen sender kun `action_id`); UI'et viser gatens egen status bagefter (`gate.status`) og aldrig gengivelsen. Hele kæden tekst → model → gate → delegation → samtykke → logind er afprøvet i processen. **Tilbage:** VM-testen af hele vejen kræver installeret login (F0.3) og en grafisk session (F0.2); VM'en tjekker indtil da, at brugerens forespørgsel når gaten og afvises uden session (`intent-power-reaches-gate-and-is-refused`). `utterance` fra IntentBar kræver en samtale og kommer med samtalelaget | En VM-test kører hele vejen for strøm og for en `utterance`, og UI'et viser den reelle tilstand (`requested`, `pending`, afvist) |
 
 Trinnet forudsætter F1.5 (sessionen) og bør komme før F2, fordi det er første gang, hele kæden afprøves sammen (MASTER-PLAN WS-7).
+
+### F0c — Bevisets tillid
+
+Fra gennemgangen 13.–14. november (G-19–G-25, G-30, G-36, G-38), accepteret af ejeren 14. november 2026. Kommer før næste store trin: i dag beviser et grønt CI ikke, at gaten virker på den installerede pakke.
+
+| # | Leverance | Færdig når |
+|---|---|---|
+| F0c.1 | Paknings-CI'en starter også på `app/**`, `crates/**` og `requirements*.txt`; et samlet slutjob kræver både testene på 26.04 og VM-acceptancen (G-19, G-20) | En PR, der kun ændrer `app/gate/`, kører VM-acceptancen, og en fejlende test gør hele workflowet rødt |
+| F0c.2 | Mutationstest af gaten og IPC-adgangen (fx lag 5–7, `_rendering_intact`, `daemon_write_allowed`, adgangsklasser); kun exit 1 tæller som dræbt, andre exitkoder fejler kørslen (G-21) | `check-mutants.sh` kører `GATE-*` og `IPC-*` i CI; en mutant, der ødelægger importen, afvises |
+| F0c.3 | En liste over sikkerhedsinvarianter med den test, der afprøver dem i produktionstilstand, og VM-checket (G-22); kan blive en del af implementeringsmatricen (plan §4 nr. 3) | Matricen viser for hver invariant: test, mutant, VM-check |
+| F0c.4 | Negative checks i `eira-ci-report` får en positiv kontrol og `pipefail`; `postinst` indlæser alle profiler, også agentens (G-24, G-25) | Et check fejler, når dets værktøj mangler |
+| F0c.5 | Merge kræver grønne checks: enten GitHub Pro eller et offentligt repo, så branch protection virker. Ellers en skrevet regel om, at ejeren kun merger med grønt slutjob | Ejeren har valgt |
+| F0c.6 | En committet `Cargo.lock` for workspacet, `--locked` i CI og i `debian/rules`; den forældede kommentar i `ci.yml` rettet (G-30) | En ændret afhængighed kræver en ændret låsefil |
+| F0c.7 | Opgraderingstest i VM: forrige udgivne pakke installeres, opgraderes til den nye, og de samme checks køres; profilerne er de nye (G-36, G-38) | Opgraderingen kører i `vm-install-acceptance` |
+
+### F1c — Sikkerhedsgæld fra gennemgangen 13.–14. november
+
+Accepteret af ejeren 14. november 2026. Små PR'er mellem F2-trinnene; F1c.2 og F1c.3 først, fordi de afgør, om én kompromitteret daemon kan forfalske samtykke eller slette sporet. Fundene står i [vurderingen](reviews/GENNEMGANG-2026-11-13.md).
+
+| # | Leverance | Fund |
+|---|---|---|
+| F1c.1 | Synkronisering med challenge og signatur med enhedens nøgle (fra F2.3) i stedet for bearer-token, eller klassen omdøbes til `token`, og dokumentationen siger det | G-1 |
+| F1c.2 | Logout: sessionen slettes, `consent_keys.forget()` kaldes, og en session kan tilbagekaldes. Kun `identityd` kan skrive samtykkenøglerne; gaten og `delegationd` kan kun læse dem. SIKKERHEDSMODEL §6 beskriver, hvem der kan læse nøglen | G-2, G-15, G-34 |
+| F1c.3 | `daemon_write` bundet til navngivne tjenester (egne brugere pr. daemon, eller kalderens systemd-unit via cgroup), så `fleetd` og `rights-sync` ikke kan skrive i `stated`. AppArmor: hver daemon lytter kun på sin egen socket og forbinder kun til dem, den kalder; logmappen deles ikke | G-3, G-35 |
+| F1c.4 | `gate_audit` i sin egen database, som kun `intentd` kan skrive i (AppArmor); på sigt en kæde med nøgle (TPM eller Fleet) | G-4 |
+| F1c.5 | `capabilityd`, `app/routers/capability.py`, `app/services/*veritas*`, `veritas-shield/` fjernet eller arkiveret; projektbeskrivelsen opdateret | G-8, G-9 |
+| F1c.6 | `fleetd`s WebSocket-lytter slået fra i pakken, indtil en klient findes og er beskrevet | G-10 |
+| F1c.7 | C2PA: `untrusted` matcher ikke `trusted`; `trust_score` siger, hvilke lag der er vurderet, og tæller ikke et manglende lag som 0 | G-12, G-18 |
+| F1c.8 | `confirm` kræver den foreslående identitet; `delegation.check` kræver en session og svarer kun om kalderens egne delegationer (modellen som nu) | G-13, G-14 |
+| F1c.9 | Forældede sætninger: README og `specs/README.md` om kontekster og R-6.2, `databaseskema.md` om `stated`, kommentaren i `system_api/mod.rs`, `fleetd.py:529` | G-6, G-7, G-40–G-42 |
+| F1c.10 | Samtykkeagenten: læsetimeout pr. forbindelse og stop med en klar fejl, når IPC-tokenet ikke kan læses. Ejerens beslutning om grænser: hvor mange forslag modellen må sende, hvor tit agenten må vise en dialog, og hvor længe beskedtekst og audit gemmes | G-16, G-17, G-28, G-29 |
+| F1c.11 | Ejerens beslutning om Rust-lageret: enten bygges og installeres `libeira_stated.so`, og `stated` kræver det (`EIRA_STATE_BACKEND=rust`), eller Rust-lageret, `app/core_rust.py` og `eira-ipc` arkiveres. Begge dele er bedre end en tavs fallback | G-26, G-27, G-32 |
+| F1c.12 | Ejerens beslutning om en udgivelsesnøgle; derefter et signeret offline-repo (`Release` + `InRelease`) og `signed-by=` i stedet for `trusted=yes`, både i CI og på ISO'et | G-33 |
+| F1c.13 | Driftsgrænser i alle units: `MemoryMax`, `TasksMax`, `StartLimitIntervalSec`/`StartLimitBurst`, og `WatchdogSec` med `sd_notify` i gaten først | G-39 |
 
 ### F2 — Kontekster (EIRA-CONTEXT 1.0)
 
@@ -230,6 +265,8 @@ Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal generer
 
 Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges ind mellem de store trin.
 
+Fra 14. november: **F0c.1** (paknings-CI på `app/**` og `crates/**`, samlet slutjob) og **F0c.2** (mutanter for gaten og IPC-adgangen), derefter F1c.2 og F1c.3.
+
 ## 6. Ejerens beslutninger
 
 | Beslutning | Blokerer |
@@ -250,3 +287,7 @@ Derefter F1b (hele vejen fra IntentBar). F1.1–F1.4 og F1.6–F1.10 kan lægges
 | Grundspørgsmålene til ADR-0008 (økonomi) | P.3 |
 | Accept af ADR-0009 (datalagets byggesten; NextGraph som forlæg, ikke afhængighed) og O-3 (RDF for graphd) | F2.6 |
 | Hvem der deltager i brugertests | U.5–U.6 |
+| Merge kun med grønne checks: GitHub Pro, offentligt repo eller en skrevet regel | F0c.5 |
+| Rust-lageret til `stated`: byg og kræv det, eller arkivér det sammen med `eira-ipc` | F1c.11 |
+| Hvor udgivelsesnøglen bor (signeret offline-repo) | F1c.12 |
+| Grænser for modellens forslag, agentens dialoger og opbevaring af beskedtekst og audit | F1c.10 |

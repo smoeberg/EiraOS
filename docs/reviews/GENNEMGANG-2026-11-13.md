@@ -2,7 +2,7 @@
 
 **Grundlag:** En statisk gennemgang af `main` i to runder (zip, `VERSION` = `1.0.0-rc2`), læst og ikke kørt. Runde 1 (13. november) dækker hele koden; runde 2 (14. november) går dybere i Rust, pakning og drift samt dokumentationens konsistens. Hvert fund er her efterprøvet mod koden på `main` (efter #212). Gennemgangen er input, ikke krav.
 
-**Vurderinger:** som i [fundregistret 12. november](GENNEMGANG-2026-11-12.md): *Bekræftet* (fundet holder), *Delvist* (en del holder), *Afvist* (koden siger noget andet), *Dækket* (står allerede i planen). **Plan** er et forslag til trin, som ejeren skal acceptere, før det kommer i [udviklingsplanen](../UDVIKLINGSPLAN.md).
+**Vurderinger:** som i [fundregistret 12. november](GENNEMGANG-2026-11-12.md): *Bekræftet* (fundet holder), *Delvist* (en del holder), *Afvist* (koden siger noget andet), *Dækket* (står allerede i planen). **Plan** henviser til trin i [udviklingsplanen](../UDVIKLINGSPLAN.md); F0c og F1c er accepteret af ejeren 14. november 2026.
 
 ## Det vigtigste
 
