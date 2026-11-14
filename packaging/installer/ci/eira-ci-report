@@ -557,6 +557,17 @@ reply = json.loads(s.makefile().readline())
 refused = reply.get("error", {}).get("message") == "E_ACCESS_DAEMON_ONLY"
 ok = refused if want == "refused" else ("error" in reply and not refused)
 print(json.dumps(reply)[:300])
+if not ok:
+    a, b = socket.socketpair()
+    try:
+        own = a.getsockopt(socket.SOL_SOCKET, 31, 4096)
+    except OSError as exc:
+        own = repr(exc)
+    try:
+        current = open("/proc/self/attr/apparmor/current").read().strip()
+    except OSError as exc:
+        current = repr(exc)
+    print("peersec-of-self=%r attr=%r" % (own, current))
 sys.exit(0 if ok else 1)'
 daemon_write_as() {
     # daemon_write_as <name> <profile|-> <method> <refused|accepted|unreachable>
@@ -571,7 +582,8 @@ daemon_write_as() {
         say "$name PASS"
     else
         say "$name FAIL"
-        say "diag $name: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-400)"
+        say "diag $name: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-600)"
+        say "diag $name-stated: $(journalctl -u eira-stated.service -b -o cat --no-pager 2>&1 | grep 'daemon_write' | tail -n 3 | tr '\n' ' ' | cut -c1-600)"
         failed=1
     fi
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import socket
 import threading
 from collections.abc import Callable
@@ -12,6 +13,8 @@ from app.ipc.access import (
     access_of,
     callers_of,
     daemon_write_allowed,
+    peer_daemon,
+    service_uid,
 )
 from app.ipc.auth import PEER_KEY, strip_and_validate_ipc_auth
 from app.ipc.jsonrpc import (
@@ -26,6 +29,8 @@ from app.ipc.jsonrpc import (
 from app.ipc.paths import ensure_run_dir
 from app.ipc.socket_security import PeerCredentialError, validate_peer_credentials
 from app.ipc.transport import bind_server
+
+logger = logging.getLogger(__name__)
 
 Handler = Callable[[dict[str, Any]], Any]
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
@@ -121,6 +126,14 @@ class JsonRpcServer:
             if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(
                 peer, callers_of(self._handlers[method])
             ):
+                if getattr(peer, "uid", None) == service_uid():
+                    # The service user, but not a named caller: worth a line in
+                    # the journal (which daemon the kernel said it was).
+                    logger.warning(
+                        "%s: daemon_write %s refused for pid %s (label %r, daemon %r)",
+                        self.daemon, method, getattr(peer, "pid", None),
+                        getattr(peer, "label", None), peer_daemon(peer),
+                    )
                 raise JsonRpcError(
                     ACCESS_DENIED,
                     "E_ACCESS_DAEMON_ONLY",
