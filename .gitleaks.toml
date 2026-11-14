@@ -1,0 +1,20 @@
+# Secret scanning of the whole git history (CI job secret-scan, SECURITY.md).
+# The default gitleaks rules, with the four known false positives allowed by
+# their exact text. Add a line here only with a reason; never for a real secret.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known false positives (scanned 14 November 2026)"
+# The regexes are matched against the whole finding, so they can name the context.
+regexTarget = "match"
+regexes = [
+  # Basic-auth for the throwaway WebDAV test container in ci.yml (context-home).
+  '''-u eira:eira ''',
+  # journalctl's flag for forward-secure sealing, not a key.
+  '''--setup-keys''',
+  # Canonical's public CD-image signing key fingerprint (fetch_ubuntu_iso.sh).
+  '''843938DF228D22F7B3742BC0D94AA3F0EFE21092''',
+  # The name of the consent-key domain in an archived spec.
+  '''consent_key, "EIRA-CONSENT-V1"''',
+]

@@ -28,6 +28,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - `CONTRIBUTING.md`: hvad der gælder, de hårde regler og vejen for en ny beskyttet handling (skema → policy →
   gengivelse → executor → rettighed → AppArmor → model → UI → test → VM-check → audit). PR-skabelon. `.cursor`-reglen
   pegede på arkiverede filer og sessionsbundet tilstand og er rettet.
+- Vurdering af den uafhængige gennemgang 13.–14. november ([`docs/reviews/GENNEMGANG-2026-11-13.md`](docs/reviews/GENNEMGANG-2026-11-13.md)):
+  42 fund fra to runder efterprøvet mod `main`, de fleste bekræftet, og forslag til to nye trin, F0c (bevisets
+  tillid i CI) og F1c (sikkerhedsgæld), accepteret af ejeren 14. november og skrevet ind i udviklingsplanen.
 
 ### CI
 - Packaging Acceptance er kortere: ISO og VM-installation i samme job (CI-billedet uploades og hentes ikke længere),
@@ -74,6 +77,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Audit-anker i journald og hos Fleet (#155) og journalens FSS-segl med overdragelse af nøglen (#167).
 - Samtykkeagenten `eira-consent-agent` (Rust, setgid): kun den kan samtykke og bekræfte (#153, #158, #175).
 - Delegation "på vegne af" via den betroede vej, registreret i gatens audit (#157, #164).
+- Repoet er offentligt fra 14. november. `SECURITY.md` siger, hvordan en sårbarhed rapporteres (GitHubs private
+  rapportering) og hvad der svares. Hele historikken er scannet for hemmeligheder: ingen nøgler til eksterne tjenester,
+  men en udviklingsnøgle til Fleet-synkronisering (`data/fleet_master.key`, oktober) er brændt
+  ([`docs/security/hemmeligheder-i-historikken-2026-11-14.md`](docs/security/hemmeligheder-i-historikken-2026-11-14.md)).
+  Nyt CI-job `secret-scan` (gitleaks, hele historikken).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

@@ -294,6 +294,8 @@ jobs:
             | grep -q "'/eira/repo/Packages.gz'"
 
       # The ISO is already compressed (squashfs); zipping it again only costs time.
+      # An ISO is about 6.5 GB: a pull request's ISO is kept 2 days, a manual
+      # run's 7, or the repository's artifact quota fills up within a week.
       - name: Upload installer ISO
         uses: ./.github/actions/upload-artifact-retry
         with:
@@ -303,7 +305,7 @@ jobs:
             dist/EiraOS-*-amd64.iso.sha3-256
             dist/EiraOS-*-amd64.iso.build-info.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: ${{ github.event_name == 'pull_request' && 2 || 7 }}
           compression-level: 0
 
       - name: Make room for the VM disk
