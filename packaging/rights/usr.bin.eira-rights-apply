@@ -26,6 +26,13 @@
   /etc/eira/fleet/device.key r,
   /etc/eira/fleet/tenant.token r,
 
+  # The device key lives in the TPM (EIRA-CONTEXT §5.0): OpenSSL's tpm2
+  # provider and the TPM resource manager, nothing else of the TPM.
+  /usr/share/eira-os/openssl-tpm2.cnf r,
+  /usr/lib/@{multiarch}/ossl-modules/tpm2.so mr,
+  /usr/lib/@{multiarch}/libtss2-*.so* mr,
+  /dev/tpmrm0 rw,
+
   /data/ r,
   /data/audit/anchor.json r,
   /data/rights/ rw,

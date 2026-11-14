@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 T = "tests/context"
 HOME = f"{T}/home/test_home.py::"
+KEY = "tests/test_device_key_tpm.py::"
 
 MUTANTS: dict[str, dict] = {
     # B-1: block_id is computed from exactly the encrypted plaintext.
@@ -186,6 +187,42 @@ MUTANTS: dict[str, dict] = {
         "edits": [("app/context/home.py",
                    '            raise ContextError(E_CONTEXT_INTEGRITY, f"manifest {name} already exists")',
                    '            pass')],
+    },
+    # A-1 (EIRA-CONTEXT §5.0): the device key is made in the TPM and cannot
+    # leave it. CTX-A1-6 (software key imported into the TPM) needs an import
+    # path tpm2-openssl does not offer; it stays for N3. CTX-A1-1, -3, -4, -5
+    # belong to F2.4 (sealing) and Fleet.
+    "CTX-A1-2": {
+        "why": "the device key is made in software and written as a file",
+        "tests": [KEY + "test_t_a1_f_the_key_is_a_tpm_blob_that_cannot_be_exported"],
+        "edits": [
+            ("app/rights/devicekey.py",
+             '_openssl("genpkey", *PROVIDERS, "-propquery", "?provider=tpm2", "-algorithm", "EC",',
+             '_openssl("genpkey", "-algorithm", "EC",'),
+            ("app/rights/devicekey.py", "        if not path.read_bytes().startswith(TSS2_HEADER):",
+             "        if False:"),
+            ("app/rights/devicekey.py", "        missing = REQUIRED_ATTRIBUTES - attributes(path)",
+             "        missing = set()"),
+        ],
+    },
+    "CTX-A1-8": {
+        "why": "with the installed OPENSSL_CONF the default provider makes the key",
+        "tests": [KEY + "test_the_key_is_made_in_the_tpm_with_the_installed_openssl_conf"],
+        "edits": [
+            ("app/rights/devicekey.py", '*PROVIDERS, "-propquery", "?provider=tpm2", "-algorithm"',
+             '*PROVIDERS, "-algorithm"'),
+        ],
+    },
+    "CTX-A1-7": {
+        "why": "a device without a TPM is enrolled anyway",
+        "tests": [KEY + "test_t_a1_g_enroll_without_a_tpm_writes_nothing_and_exits_2"],
+        "edits": [
+            ("app/rights/enroll.py", "    if not devicekey.tpm_present():  # before anything is written",
+             "    if False:  # before anything is written"),
+            ("app/rights/devicekey.py",
+             "    if not tpm_present():\n        raise NoTpm(\"this device has no TPM 2.0; managed requires one\")\n",
+             ""),
+        ],
     },
 }
 

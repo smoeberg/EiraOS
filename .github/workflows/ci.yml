@@ -41,9 +41,11 @@ jobs:
 
     - name: Install AppArmor parser for packaging validation
       run: |
-        scripts/ci/apt-install.sh apparmor-utils xorriso
+        scripts/ci/apt-install.sh apparmor-utils xorriso swtpm tpm2-openssl
 
     - name: Run integration tests (Pytest)
+      env:
+        EIRA_TEST_REQUIRE_TPM: "1"  # the device-key tests need swtpm (EIRA-CONTEXT §5.0)
       run: |
         python -m pytest tests/
 
@@ -57,6 +59,7 @@ jobs:
     timeout-minutes: 20
     env:
       EIRA_TEST_REQUIRE_SERVERS: "1"
+      EIRA_TEST_REQUIRE_TPM: "1"
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -67,6 +70,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt pytest "moto[server]" wsgidav cheroot
+        scripts/ci/apt-install.sh swtpm tpm2-openssl
     - name: Start MinIO and Apache WebDAV
       run: |
         docker run -d --name minio -p 9000:9000 \
@@ -93,7 +97,7 @@ jobs:
       run: python -m pytest -v -p no:cacheprovider -m home tests/context/home -rs
     - name: H-1 against moto and WsgiDAV
       run: python -m pytest -v -p no:cacheprovider -m home tests/context/home -rs
-    # EIRA-CONTEXT testplan §2: every mutant must be caught (moto/WsgiDAV).
+    # EIRA-CONTEXT testplan §2: every mutant must be caught (moto/WsgiDAV, swtpm).
     - name: Context mutants (EIRA-CONTEXT N1, N2)
       env:
         EIRA_TEST_H1B_REPETITIONS: "5"

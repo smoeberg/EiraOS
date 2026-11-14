@@ -411,6 +411,51 @@ check rights-sync-timer-enabled systemctl is-enabled --quiet eira-rights-sync.ti
 check rights-sync-profile-loaded sh -c "grep -q '^/usr/bin/eira-rights-apply ' /sys/kernel/security/apparmor/profiles"
 check rights-sync-not-enrolled sh -c 'runuser -u eira -- env EIRA_RIGHTS_DIR=/data/rights /usr/bin/eira-rights-apply sync; [ $? -eq 2 ]'
 check enroll-tool-installed test -x /usr/bin/eira-enroll
+# EIRA-CONTEXT §5.0, T-A1-f: the VM has a software TPM. The device key is made
+# in it as eira-enroll does and cannot be exported, and the rights-sync
+# sandbox (user eira, only /dev/tpmrm0) can open the TPM.
+device_key_in_tpm() {
+    dir=$(mktemp -d)
+    OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf TPM2OPENSSL_TCTI=device:/dev/tpmrm0 \
+        PYTHONPATH=/usr/lib/eira-os python3 - "$dir" <<'PY'
+import sys
+from pathlib import Path
+
+from app.rights import devicekey
+
+key = Path(sys.argv[1]) / "device.key"
+devicekey.create(key)
+assert key.read_bytes().startswith(devicekey.TSS2_HEADER)
+attributes = devicekey.attributes(key)
+assert {"fixedTPM", "fixedParent", "sensitiveDataOrigin"} <= attributes, attributes
+assert b"BEGIN CERTIFICATE REQUEST" in devicekey.csr(key, "vm")
+PY
+    status=$?
+    rm -rf "$dir"
+    return $status
+}
+# A failing TPM check says why (checks discard their output).
+explain() {
+    name=$1
+    shift
+    log=$(mktemp)
+    "$@" >"$log" 2>&1
+    status=$?
+    [ "$status" -eq 0 ] || say "diag $name: exit $status: $(tail -n 8 "$log" | tr '\n' ' ' | cut -c1-900)"
+    rm -f "$log"
+    return $status
+}
+# A real open (O_RDWR) as the sandbox has it: the group and DevicePolicy both
+# have to allow it. (26.04's /usr/bin/test, uutils, ignored the supplementary
+# group tss and failed where the shell's builtin test succeeded.)
+tpm_sandbox_writable() {
+    systemd-run --quiet --wait --pipe -p User=eira -p Group=eira \
+        -p SupplementaryGroups=tss -p DevicePolicy=closed -p "DeviceAllow=/dev/tpmrm0 rw" \
+        /usr/bin/python3 -c "import os; os.close(os.open('/dev/tpmrm0', os.O_RDWR))"
+}
+check tpm-present test -c /dev/tpmrm0
+check device-key-in-tpm explain device-key-in-tpm device_key_in_tpm
+check rights-sync-sandbox-reaches-tpm explain rights-sync-sandbox-reaches-tpm tpm_sandbox_writable
 # The desktop user can read neither the cache nor change it.
 check user-cannot-touch-rights-cache sh -c "! runuser -u $USER_NAME -- test -r /data/rights/active.json && ! runuser -u $USER_NAME -- test -w /data/rights"
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop

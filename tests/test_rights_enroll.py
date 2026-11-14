@@ -17,7 +17,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.x509.oid import ExtendedKeyUsageOID
 
-from app.rights import agent, enroll, fleet_api
+from app.rights import agent, devicekey, enroll, fleet_api
 from app.rights.cache import RightsCache
 from app.rights.transport import TlsFiles
 from tests.test_fleet_transport import _ca, _leaf
@@ -89,7 +89,7 @@ def invitation(handler, tmp_path, **over):
 
 
 @pytest.fixture
-def machine(tmp_path, monkeypatch):
+def machine(tmp_path, monkeypatch, tpm):
     mid = tmp_path / "machine-id"
     mid.write_text("0123456789abcdef0123456789abcdef\n")
     monkeypatch.setattr(enroll, "MACHINE_ID", mid)
@@ -113,6 +113,7 @@ def test_enroll_writes_a_managed_device(fleet, machine):
     jsonschema.validate(body, openapi["components"]["schemas"]["EnrollRequest"])
     assert body["machine_hash"].startswith("sha256:") and "0123456789abcdef" not in body["machine_hash"]
     assert "PRIVATE" not in json.dumps(body)  # only the CSR leaves the device
+    assert files.key.read_bytes().startswith(b"-----BEGIN TSS2 PRIVATE KEY-----")
     assert stat.S_IMODE(files.key.stat().st_mode) == 0o640
     assert stat.S_IMODE(files.token.stat().st_mode) == 0o640
     assert files.token.read_text() == "tenant-secret"
@@ -225,6 +226,20 @@ def test_sync_skips_while_backing_off(tmp_path, monkeypatch, capsys):
 
     assert agent.sync(NeverCalled(), cache) == 0
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["result"] == "not_due"
+
+
+def test_enrolled_device_key_is_the_tpm_blob(tpm, fleet, machine):
+    handler, tmp = fleet
+    enrollment_path, files = machine
+    enrollment_path.parent.mkdir(parents=True)
+    enroll.enroll(invitation(handler, tmp), enrollment_path=enrollment_path, files=files, group=None)
+    assert files.key.read_bytes().startswith(b"-----BEGIN TSS2 PRIVATE KEY-----")
+    assert {"fixedTPM", "fixedParent"} <= devicekey.attributes(files.key)
+    assert not list(files.key.parent.glob(".device.key*"))  # no staged copy left behind
+    cert = x509.load_pem_x509_certificate(files.certificate.read_bytes())
+    assert cert.public_key().public_bytes(serialization.Encoding.DER,
+                                          serialization.PublicFormat.SubjectPublicKeyInfo) \
+        == devicekey.public_key_der(files.key)
 
 
 # --- packaging ----------------------------------------------------------------

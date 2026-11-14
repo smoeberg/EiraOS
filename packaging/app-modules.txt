@@ -72,6 +72,7 @@ app/rights/__init__.py
 app/rights/agent.py
 app/rights/cache.py
 app/rights/contract.py
+app/rights/devicekey.py
 app/rights/eira-rights-set-1.0.schema.json
 app/rights/enroll.py
 app/rights/fleet_api.py

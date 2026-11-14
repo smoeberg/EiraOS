@@ -114,7 +114,7 @@ jobs:
       - name: Install Python, Node and the tools the tests use
         run: |
           scripts/ci/apt-install.sh ca-certificates curl git build-essential pkg-config libssl-dev \
-            python3 python3-venv python3-pip nodejs npm apparmor xorriso
+            python3 python3-venv python3-pip nodejs npm apparmor xorriso swtpm tpm2-openssl
 
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -124,7 +124,8 @@ jobs:
           python3 --version
           python3 -m venv /tmp/venv
           /tmp/venv/bin/python -m pip install -q -r requirements-dev.txt alembic
-          PYTHONPATH=. /tmp/venv/bin/python -m pytest -q tests
+          # The device key against 26.04's own tpm2-openssl (EIRA-CONTEXT §5.0).
+          EIRA_TEST_REQUIRE_TPM=1 PYTHONPATH=. /tmp/venv/bin/python -m pytest -q tests
 
       - name: UI tests
         run: |
@@ -311,7 +312,7 @@ jobs:
 
       - name: Install QEMU and enable KVM
         run: |
-          scripts/ci/apt-install.sh qemu-system-x86 qemu-utils ovmf socat netpbm
+          scripts/ci/apt-install.sh qemu-system-x86 qemu-utils ovmf socat netpbm swtpm
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -357,7 +358,12 @@ jobs:
 
       - name: Boot installed system and run acceptance report
         run: |
+          # A software TPM 2.0 for the device key checks (EIRA-CONTEXT §5.0).
+          mkdir -p tpm
+          swtpm socket --tpm2 --tpmstate dir=tpm --ctrl type=unixio,path=tpm/swtpm.sock --daemon
           timeout 30m qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4096 \
+            -chardev socket,id=chrtpm,path=tpm/swtpm.sock -tpmdev emulator,id=tpm0,chardev=chrtpm \
+            -device tpm-tis,tpmdev=tpm0 \
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
             -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
