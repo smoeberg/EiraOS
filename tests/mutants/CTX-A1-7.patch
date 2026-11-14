@@ -1,0 +1,25 @@
+Mutant CTX-A1-7: a device without a TPM is enrolled anyway
+Tests: tests/test_device_key_tpm.py::test_t_a1_g_enroll_without_a_tpm_writes_nothing_and_exits_2
+
+--- a/app/rights/devicekey.py
++++ b/app/rights/devicekey.py
+@@ -57,8 +57,6 @@
+     """Generate a P-256 key in the TPM and write its wrapped blob to ``path``
+     (mode 0600; the caller sets the final owner and mode). Refuses to leave
+     anything behind that is not a non-exportable TPM key."""
+-    if not tpm_present():
+-        raise NoTpm("this device has no TPM 2.0; managed requires one")
+     path.unlink(missing_ok=True)
+     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+     os.close(fd)
+--- a/app/rights/enroll.py
++++ b/app/rights/enroll.py
+@@ -191,7 +191,7 @@
+     now = now or dt.datetime.now(dt.timezone.utc)
+     if enrollment_path.exists():
+         raise EnrollError("device is already enrolled; remove the enrollment to re-enroll")
+-    if not devicekey.tpm_present():  # before anything is written (§8 step 1)
++    if False:  # before anything is written (§8 step 1)
+         raise devicekey.NoTpm("this device has no TPM 2.0; managed requires one (FLEET-RIGHTS-API §6 pt. 1a)")
+     gid = grp.getgrnam(group).gr_gid if group else None
+     directory = files.key.parent

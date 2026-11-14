@@ -17,6 +17,10 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=-/etc/eira/eira.conf
 Environment=EIRA_RIGHTS_DIR=/data/rights
 Environment=EIRA_APP_DB=/data/eira-app.db
+# The mTLS handshake is signed by the device key in the TPM (EIRA-CONTEXT §5.0).
+Environment=OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf
+Environment=TPM2OPENSSL_TCTI=device:/dev/tpmrm0
+SupplementaryGroups=tss
 ExecStart=/usr/bin/eira-rights-apply sync
 # 1 = a set was rejected (reported to Fleet), 3 = offline: both are normal
 # outcomes, not unit failures.
@@ -26,7 +30,9 @@ TimeoutStartSec=120
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-PrivateDevices=true
+# Only the TPM's resource manager; no other device (PrivateDevices would hide it).
+DevicePolicy=closed
+DeviceAllow=/dev/tpmrm0 rw
 NoNewPrivileges=true
 CapabilityBoundingSet=
 AmbientCapabilities=
