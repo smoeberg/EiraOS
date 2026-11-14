@@ -137,10 +137,16 @@ def daemon_from_label(label: str | None) -> str | None:
     profiles count: a profile in complain mode confines nothing."""
     if not label:
         return None
-    name, _, mode = label.strip().partition(" ")
+    name, _, mode = label.strip().rpartition(" ")
     if mode != "(enforce)":
         return None
-    match = _LABEL.match(name)
+    # A stack with "unconfined" (X//&unconfined, what a profile change from
+    # an unconfined task can give) is confined exactly by X. Any other stack
+    # is not one daemon.
+    parts = [part for part in name.split("//&") if part != "unconfined"]
+    if len(parts) != 1:
+        return None
+    match = _LABEL.match(parts[0])
     return match.group(1) if match and match.group(1) in DAEMONS else None
 
 

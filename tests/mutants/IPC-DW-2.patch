@@ -3,7 +3,7 @@ Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_
 
 --- a/app/ipc/access.py
 +++ b/app/ipc/access.py
-@@ -203,7 +203,7 @@
+@@ -209,7 +209,7 @@
      take the service UID; and a process with the service UID is not
      necessarily a daemon (rights-sync, anything root starts as eira)."""
      uid = getattr(peer, "uid", None)

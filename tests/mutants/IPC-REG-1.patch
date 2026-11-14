@@ -3,7 +3,7 @@ Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_
 
 --- a/app/daemons/base.py
 +++ b/app/daemons/base.py
-@@ -51,8 +51,7 @@
+@@ -56,8 +56,7 @@
  
      def register(self, method: str, handler: Handler) -> None:
          kind = access_of(handler)

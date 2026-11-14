@@ -3,7 +3,7 @@ Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_
 
 --- a/app/daemons/base.py
 +++ b/app/daemons/base.py
-@@ -118,7 +118,7 @@
+@@ -123,7 +123,7 @@
              # The caller comes from the kernel (SO_PEERCRED), never from the
              # request: a client-supplied "_peer" is dropped (bilag A pkt. 1).
              params.pop(PEER_KEY, None)
@@ -11,4 +11,4 @@ Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_
 +            if False and not daemon_write_allowed(
                  peer, callers_of(self._handlers[method])
              ):
-                 raise JsonRpcError(
+                 if getattr(peer, "uid", None) == service_uid():

@@ -65,8 +65,16 @@ def test_an_enforced_daemon_profile_names_the_daemon(daemon):
     assert access.daemon_from_label(_label(daemon)) == daemon
 
 
+def test_a_daemon_stacked_with_unconfined_is_the_daemon():
+    # What the VM showed for a profile change from an unconfined task.
+    assert access.daemon_from_label("/usr/bin/eira-fleetd//&unconfined (enforce)") == "fleetd"
+
+
 @pytest.mark.parametrize("label", [
-    None, "", "unconfined", _label("fleetd", "complain"), "/usr/bin/eira-modeld (enforce)",
+    None, "", "unconfined", "unconfined (enforce)",
+    "/usr/bin/eira-fleetd//&/usr/bin/eira-stated (enforce)",
+    "/usr/bin/eira-fleetd//&/usr/bin/eira-rights-apply (enforce)",
+    "/usr/bin/eira-fleetd//&unconfined (mixed)", _label("fleetd", "complain"), "/usr/bin/eira-modeld (enforce)",
     "/usr/bin/eira-rights-apply (enforce)", "/usr/lib/eira-os/eira-consent-agent (enforce)",
     "/usr/local/bin/eira-stated (enforce)", "/usr/bin/eira-stated",
 ])
