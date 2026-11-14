@@ -1,0 +1,14 @@
+Mutant GATE-R-2: the confirmation is not bound to the rendering hash
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -495,7 +495,7 @@
+             raise LayerFailure(GateCode.E_STATE, f"action is {record['state']}")
+         if content_hash != record["content_hash"] or edp.content_hash(envelope) != record["content_hash"]:
+             raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to these parameters")
+-        if rendering_hash_ != record["rendering_hash"] or not _rendering_intact(record):
++        if not _rendering_intact(record):
+             raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to the text that was shown")
+         execution_id = self.store.claim(record["action_id"], content_hash)
+         if execution_id is None:

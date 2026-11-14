@@ -1,0 +1,14 @@
+Mutant GATE-C-4: the model reaches consent
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -200,7 +200,7 @@
+         and this rendering (the text the user was shown), from the EiraOS app
+         (`proof`, consent_proof.py)."""
+         _reset_rights()
+-        if _model_is_calling():
++        if False:
+             return self._fail("consent", None, _MODEL_CANNOT_DECIDE, None, action_id=action_id)
+         actor = self._human_actor(session_id)
+         bad_proof = self._proof_failure("consent", actor, action_id, content_hash, rendering_hash_, proof)

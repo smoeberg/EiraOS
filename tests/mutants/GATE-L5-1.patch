@@ -1,0 +1,13 @@
+Mutant GATE-L5-1: a consent from another session counts
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -427,7 +427,6 @@
+         return any(
+             consent["content_hash"] == record["content_hash"]
+             and consent["rendering_hash"] == record["rendering_hash"]
+-            and consent["session_id"] == session_id
+             and consent["revoked_at"] is None
+             and within(_boot_instant(consent), now, ttl_ns)
+             for consent in self.store.consents_for(record["action_id"])

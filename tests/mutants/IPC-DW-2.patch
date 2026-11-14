@@ -1,0 +1,11 @@
+Mutant IPC-DW-2: daemon_write accepts a request without a kernel-verified caller
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py
+
+--- a/app/ipc/access.py
++++ b/app/ipc/access.py
+@@ -103,4 +103,4 @@
+     """Only another daemon (same service user) may write. No peer means the
+     request did not come over a socket with SO_PEERCRED: refuse."""
+     uid = getattr(peer, "uid", None)
+-    return isinstance(uid, int) and uid == service_uid()
++    return uid is None or uid == service_uid()

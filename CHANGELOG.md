@@ -71,6 +71,12 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Audit-anker i journald og hos Fleet (#155) og journalens FSS-segl med overdragelse af nøglen (#167).
 - Samtykkeagenten `eira-consent-agent` (Rust, setgid): kun den kan samtykke og bekræfte (#153, #158, #175).
 - Delegation "på vegne af" via den betroede vej, registreret i gatens audit (#157, #164).
+- Gaten og IPC-adgangsklasserne er under mutationstest: 20 mutanter (`GATE-*`, `IPC-*`) i et nyt CI-job
+  `security-mutants`. Syv af de første gate-mutanter overlevede den eksisterende suite (samtykke fra en anden session,
+  tilbagekaldt samtykke, en anden brugers samtykke, ændret gengivelsestekst, bekræftelse uden gengivelseshash, to
+  samtidige claims, modellen ved døren); `tests/test_gate_invariants.py` dræber dem nu. `check-mutants.sh` tæller kun
+  pytest-exit 1 som dræbt; en mutant, der får opsamlingen til at fejle, får kørslen til at fejle (udviklingsplan F0c.2,
+  gennemgang G-21).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

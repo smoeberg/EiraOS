@@ -1,0 +1,14 @@
+Mutant GATE-L6-1: a user who is not an acting participant is authorised
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -441,7 +441,7 @@
+             raise LayerFailure(GateCode.E_UNAUTHORIZED, "no authenticated session")
+         identity = actor["identity"]
+         acting = [p for p in envelope["participants"] if p["identity"] == identity and p["role"] == "member"]
+-        if not acting:
++        if False:
+             raise LayerFailure(GateCode.E_UNAUTHORIZED, "the user is not an acting participant")
+         resolved = self._rights.resolve(self._clock())
+         rights = resolved.rights

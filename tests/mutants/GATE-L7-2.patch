@@ -1,0 +1,14 @@
+Mutant GATE-L7-2: two concurrent confirmations can both claim the action
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/store.py
++++ b/app/gate/store.py
+@@ -155,7 +155,7 @@
+         with self._connect() as conn:
+             cursor = conn.execute(
+                 """UPDATE gate_actions SET state = 'executing', execution_id = ?, updated_at = ?
+-                   WHERE action_id = ? AND state = 'pending' AND content_hash = ?""",
++                   WHERE action_id = ? AND content_hash = ?""",
+                 (execution_id, iso(utc_now()), action_id, content_hash),
+             )
+         return execution_id if cursor.rowcount == 1 else None

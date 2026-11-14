@@ -1,0 +1,14 @@
+Mutant GATE-C-3: a missing or wrong consent proof is accepted
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -642,7 +642,7 @@
+         if actor is None:
+             return None
+         session = self._sessions(actor["session_id"]) or {}
+-        if consent_proof.verify(
++        if True or consent_proof.verify(
+             session.get("consent_key"), proof, verb, actor["caller_uid"], actor["session_id"],
+             action_id, content_hash, rendering_hash_,
+         ):
