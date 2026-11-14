@@ -296,6 +296,13 @@ MUTANTS.update({
         "edits": [(K, '        if _model_is_calling():\n            return self._fail("confirm", None, _MODEL_CANNOT_DECIDE',
                    '        if False:\n            return self._fail("confirm", None, _MODEL_CANNOT_DECIDE')],
     },
+    # A session that has ended (logout, F1c.2) or expired is no session.
+    "GATE-S-1": {
+        "why": "an ended or expired session is still accepted",
+        "tests": GATE_TESTS,
+        "edits": [(K, '        if not expires or datetime.fromisoformat(str(expires).replace("Z", "+00:00")) <= self._clock():',
+                   "        if not expires:")],
+    },
     # The rendering that was shown is the one that was consented to.
     "GATE-R-1": {
         "why": "a changed rendering text is not detected",

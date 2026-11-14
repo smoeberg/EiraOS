@@ -127,7 +127,7 @@ Accepteret af ejeren 14. november 2026. Små PR'er mellem F2-trinnene; F1c.2 og 
 | # | Leverance | Fund |
 |---|---|---|
 | F1c.1 | Synkronisering med challenge og signatur med enhedens nøgle (fra F2.3) i stedet for bearer-token, eller klassen omdøbes til `token`, og dokumentationen siger det | G-1 |
-| F1c.2 | Logout: sessionen slettes, `consent_keys.forget()` kaldes, og en session kan tilbagekaldes. Kun `identityd` kan skrive samtykkenøglerne; gaten og `delegationd` kan kun læse dem. SIKKERHEDSMODEL §6 beskriver, hvem der kan læse nøglen | G-2, G-15, G-34 |
+| F1c.2 | Logout: sessionen slettes, `consent_keys.forget()` kaldes, og en session kan tilbagekaldes. Kun `identityd` kan skrive samtykkenøglerne; gaten og `delegationd` kan kun læse dem. SIKKERHEDSMODEL §6 beskriver, hvem der kan læse nøglen (leveret 14. november: `identity.logout`, tilbagekaldelse ved udløb, `rk` for gaten og `delegationd`) | G-2, G-15, G-34 |
 | F1c.3 | `daemon_write` bundet til navngivne tjenester (egne brugere pr. daemon, eller kalderens systemd-unit via cgroup), så `fleetd` og `rights-sync` ikke kan skrive i `stated`. AppArmor: hver daemon lytter kun på sin egen socket og forbinder kun til dem, den kalder; logmappen deles ikke | G-3, G-35 |
 | F1c.4 | `gate_audit` i sin egen database, som kun `intentd` kan skrive i (AppArmor); på sigt en kæde med nøgle (TPM eller Fleet) | G-4 |
 | F1c.5 | `capabilityd`, `app/routers/capability.py`, `app/services/*veritas*`, `veritas-shield/` fjernet eller arkiveret; projektbeskrivelsen opdateret | G-8, G-9 |

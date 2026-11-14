@@ -93,3 +93,14 @@ def test_the_proposer_is_the_consenting_identity(world):
     env, digest = propose_and_consent(world)
     assert world.store.find(env["id"])["actor_identity"] == ANNE
     assert world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne").decision is Decision.PASS
+
+
+def test_a_session_that_has_ended_cannot_confirm(world):
+    """GATE-S-1: logout (F1c.2) ends a session by setting expires_at to now;
+    the gate must refuse the session from then on, also for an action that
+    was already consented to."""
+    env, digest = propose_and_consent(world)
+    world.sessions["s-anne"] = {**world.sessions["s-anne"], "expires_at": "2026-11-07T08:59:00Z"}
+    result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
+    assert result.decision is Decision.REJECT
+    assert outbox(world) == []

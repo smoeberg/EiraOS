@@ -185,6 +185,7 @@ def create_session_from_claims(
                 # would need a key on disk.
                 consent_keys.put(sid, new_consent_key())
                 conn.commit()
+                _forget_expired_keys(conn)
                 return sid
     raise RuntimeError("could not create a fresh session")
 
@@ -288,3 +289,36 @@ def session_of_caller(os_uid: int, session_id: str | None = None) -> dict | None
     return get_session(row["session_id"]) if row else None
 
 
+def _now_text() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _forget_expired_keys(conn: sqlite3.Connection) -> None:
+    """An expired session's consent key has no use; drop it from RAM."""
+    rows = conn.execute(
+        "SELECT session_id FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?", (_now_text(),)
+    ).fetchall()
+    consent_keys.forget_many([row["session_id"] for row in rows])
+
+
+def end_session(os_uid: int, session_id: str) -> bool:
+    """Log out (UDVIKLINGSPLAN F1c.2): the caller's own session ends now.
+
+    The session expires at once, so the gate, delegationd and the consent
+    agent refuse it (they all check expires_at), and its consent key is
+    deleted, so no proof can be made for it again; a consent given in it can
+    no longer be confirmed. Another user's session is never ended. Returns
+    whether a live session was ended."""
+    now = _now_text()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """UPDATE sessions SET expires_at = ?, updated_at = ?
+               WHERE session_id = ? AND os_uid = ? AND authenticated_at IS NOT NULL
+                 AND expires_at IS NOT NULL AND expires_at > ?""",
+            (now, now, session_id, os_uid, now),
+        )
+        conn.commit()
+        ended = cursor.rowcount == 1
+    if ended:
+        consent_keys.forget(session_id)
+    return ended

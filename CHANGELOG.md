@@ -88,6 +88,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   men en udviklingsnøgle til Fleet-synkronisering (`data/fleet_master.key`, oktober) er brændt
   ([`docs/security/hemmeligheder-i-historikken-2026-11-14.md`](docs/security/hemmeligheder-i-historikken-2026-11-14.md)).
   Nyt CI-job `secret-scan` (gitleaks, hele historikken).
+- Logout virker: "Log ud" kalder `identity.logout`, som afslutter sessionen med det samme og sletter dens samtykkenøgle;
+  gaten, `delegationd` og agenten afviser den derefter, og næste login sletter nøglerne for udløbne sessioner. Før havde
+  `consent_keys.forget()` ingen kald, og en nøgle levede til næste opstart. `delegationd` tjekker nu også, om sessionen er
+  udløbet. Kun `identityd` kan skrive samtykkenøglerne; gaten og `delegationd` læser dem skrivebeskyttet (AppArmor `rk`).
+  Ny gate-test og mutant `GATE-S-1` for en afsluttet session (udviklingsplan F1c.2, gennemgang G-2, G-15, G-34).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

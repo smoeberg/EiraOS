@@ -95,5 +95,12 @@ def test_installed_units_keep_keys_on_run_and_never_allow_disk():
         assert "Environment=EIRA_CONSENT_KEY_DB=/run/eira/consent-keys.db" in unit
         assert consent_keys.ALLOW_DISK_ENV not in unit
         profile = (root / "packaging" / "apparmor" / f"usr.bin.eira-{daemon}").read_text()
-        assert "/run/eira/consent-keys.db rwk," in profile
+        # Only identityd writes the keys; the gate and delegationd read them
+        # (UDVIKLINGSPLAN F1c.2, review G-34).
+        expected = "rwk" if daemon == "identityd" else "rk"
+        assert f"/run/eira/consent-keys.db {expected}," in profile
         assert "/data/consent" not in profile
+    for profile in (root / "packaging" / "apparmor").iterdir():
+        if profile.name != "usr.bin.eira-identityd":
+            text = profile.read_text()
+            assert "consent-keys.db rw" not in text and "consent-keys.db w" not in text, profile.name

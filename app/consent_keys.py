@@ -4,14 +4,16 @@ A consent key lets its holder consent on the user's behalf. Kept in the
 session database under /data, it survived a reboot and was on every copy of
 the disk. Here it is kept apart from the session, in a small SQLite file on a
 tmpfs (``/run/eira``) shared by the daemons that need it (identityd writes it,
-the gate and delegationd read it), and every key is tied to the boot it was
-made in:
+the gate and delegationd only read it, through a read-only connection and an
+AppArmor profile that gives them ``rk``, not ``w``: UDVIKLINGSPLAN F1c.2), and
+every key is tied to the boot it was made in:
 
 * Nothing is written to persistent storage. The store refuses a path that is
   not on tmpfs, unless ``EIRA_CONSENT_KEYS_ALLOW_DISK=1`` (development and
   tests only; the installed units never set it).
 * A key made in another boot is never returned, even if the file survived.
-* Logging out deletes the key.
+* Logging out deletes the key (``identity.logout``), and so does the next
+  login for every session that has expired.
 
 The target architecture keeps the key only in identityd and the consent
 agent's memory (§5.3); this module is the step that gets it off the disk now.
@@ -68,14 +70,25 @@ def _mount_type(path: Path) -> str | None:
     return kind
 
 
-def _connect() -> sqlite3.Connection:
-    path = store_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _require_ram(path: Path) -> None:
     if os.environ.get(ALLOW_DISK_ENV) != "1" and _mount_type(path.parent) not in {
         "tmpfs",
         "ramfs",
     }:
         raise ConsentKeyStoreError(f"consent keys must be on tmpfs, not {path}")
+
+
+def _connect_read_only() -> sqlite3.Connection:
+    """For the readers (the gate, delegationd): never creates, never writes."""
+    path = store_path()
+    _require_ram(path)
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+
+
+def _connect() -> sqlite3.Connection:
+    path = store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _require_ram(path)
     # Created owner-only before SQLite opens it; never widened afterwards.
     os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
     conn = sqlite3.connect(path)
@@ -104,13 +117,15 @@ def put(session_id: str, key: str) -> None:
 def get(session_id: str) -> str | None:
     """The key for this session, if it was made in this boot. Fails closed."""
     try:
-        conn = _connect()
+        conn = _connect_read_only()
     except (ConsentKeyStoreError, OSError, sqlite3.Error):
         return None
     try:
         row = conn.execute(
             "SELECT boot_id, key FROM consent_keys WHERE session_id = ?", (session_id,)
         ).fetchone()
+    except sqlite3.Error:
+        return None  # no store yet (nobody has logged in this boot)
     finally:
         conn.close()
     if row is None or row[0] != boot_now().boot_id:
@@ -122,6 +137,17 @@ def forget(session_id: str) -> None:
     conn = _connect()
     try:
         conn.execute("DELETE FROM consent_keys WHERE session_id = ?", (session_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def forget_many(session_ids: list[str]) -> None:
+    if not session_ids:
+        return
+    conn = _connect()
+    try:
+        conn.executemany("DELETE FROM consent_keys WHERE session_id = ?", [(sid,) for sid in session_ids])
         conn.commit()
     finally:
         conn.close()
