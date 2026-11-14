@@ -39,6 +39,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   Basis-ISO'ens cache gemmes kun, når ISO'en skifter.
 - Packaging Acceptance rydder disk, når runneren har under 40 GB fri, og fejler tydeligt under 30 GB (ISO-bygget løb
   tør for plads på en runner med 16 GB fri).
+- Paknings-acceptancen kører nu på alle ændringer undtagen dokumentation (`paths-ignore` i stedet for en liste,
+  der manglede `app/**` og `crates/**`), testene på 26.04 kører også Rust-workspacet, og et samlet slutjob `acceptance`
+  er kun grønt, når både testene og VM-acceptancen bestod (udviklingsplan F0c.1, gennemgang G-19, G-20).
 
 ### Gate Kernel og sikkerhed
 - Gate: sessioner uden udløbstidspunkt er ikke længere gyldige (fail-closed).
