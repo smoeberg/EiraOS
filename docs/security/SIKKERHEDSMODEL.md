@@ -75,12 +75,14 @@ Beviser: `tests/test_gate_kernel.py`, `tests/test_gate_system.py`, `tests/test_i
 Kun `eira-consent-agent` kan samtykke og bekræfte (EIRA-CONSENT-AGENT):
 
 - Den er installeret setgid `eira-consent`, en gruppe uden medlemmer. Gaten genkender den på den effektive GID ved `connect()`.
-- Samtykkenøglen ligger kun i agentens hukommelse. `intentd` og `identityd` nægter at starte, hvis gruppen får medlemmer.
+- Samtykkenøglen ligger aldrig på disk. Den dannes af `identityd` ved login og ligger i RAM: i agentens hukommelse og i `/run/eira/consent-keys.db` (tmpfs, ejet af `eira`, `0600`). Kun `identityd` kan skrive den; gaten (`intentd`) og `delegationd` kan kun læse den (AppArmor `rk`, skrivebeskyttet forbindelse), fordi de efterprøver beviserne med den. Da alle daemons kører som `eira`, er det AppArmor og ikke filrettighederne, der holder skrivningen til `identityd` (F1c.3 binder resten). En nøgle fra en tidligere opstart bruges aldrig.
+- **Logout** (`identity.logout`, knappen "Log ud") afslutter sessionen med det samme og sletter dens nøgle. Gaten, `delegationd` og agenten afviser derefter sessionen, og et samtykke givet i den kan ikke længere bekræftes. Ved næste login slettes også nøglerne for alle udløbne sessioner. Kun den OS-bruger, sessionen er bundet til, kan logge den ud.
+- `intentd` og `identityd` nægter at starte, hvis gruppen `eira-consent` får medlemmer.
 - Dens vindue ligger øverst og har fokus, mens det vises (`<trustedGroup>` i `eira-labwc`, R-6.2). Ingen klient har privilegerede Wayland-protokoller (R-6.1).
 
 Eira UI viser aldrig gatens gengivelse som noget at godkende; appen sender kun `action_id`.
 
-Beviser: `tests/test_consent_agent_path.py`, `packaging/eira-labwc/verify-trusted.sh` og `verify-globals.sh` (i CI). VM: `consent-*`, `labwc-trusts-consent-group`.
+Beviser: `tests/test_consent_agent_path.py`, `tests/test_logout.py`, `tests/test_consent_keys_ram_only.py`, mutant `GATE-S-1`, `packaging/eira-labwc/verify-trusted.sh` og `verify-globals.sh` (i CI). VM: `consent-*`, `labwc-trusts-consent-group`.
 
 ## 7. Indeslutning
 

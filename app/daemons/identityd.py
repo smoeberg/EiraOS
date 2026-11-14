@@ -42,6 +42,23 @@ def identity_session(params: dict) -> dict:
 identity_session.wants_peer = True  # type: ignore[attr-defined]
 
 
+def identity_logout(params: dict) -> dict:
+    """Log out: end the caller's own session and forget its consent key
+    (UDVIKLINGSPLAN F1c.2). Only the OS user the session is bound to can end
+    it; naming another user's session ends nothing."""
+    from app.session_store import end_session
+
+    peer = params.pop(PEER_KEY, None)
+    uid = getattr(peer, "uid", None)
+    session_id = params.get("session_id")
+    if not isinstance(uid, int) or not isinstance(session_id, str) or not session_id:
+        return {"ended": False}
+    return {"ended": end_session(uid, session_id)}
+
+
+identity_logout.wants_peer = True  # type: ignore[attr-defined]
+
+
 def identity_step_up(params: dict) -> dict:
     """Fail closed until a trusted, session-bound provider verifier is wired in.
 
@@ -216,6 +233,7 @@ def register_identity_handlers(
 ) -> IdentityDaemon:
     service = daemon or IdentityDaemon()
     server.register("identity.session", caller(identity_session))
+    server.register("identity.logout", caller(identity_logout))
     # Desktop login (bilag A pkt. 1): the only way to a session the gate accepts.
     from app import database
     from app.auth import login

@@ -44,6 +44,14 @@ def _caller(params: dict[str, Any]) -> Caller:
     return caller
 
 
+def _unexpired(expires_at: Any) -> bool:
+    from datetime import datetime, timezone
+
+    if not expires_at:
+        return False  # pre-upgrade row without expiry: no session
+    return datetime.fromisoformat(str(expires_at).replace("Z", "+00:00")) > datetime.now(timezone.utc)
+
+
 def _session(caller: Caller, session_id: Any) -> dict[str, Any]:
     if caller.model or not isinstance(session_id, str) or not session_id:
         raise JsonRpcError(NOT_ALLOWED, "Authenticated human session required")
@@ -53,6 +61,9 @@ def _session(caller: Caller, session_id: Any) -> dict[str, Any]:
     session = get_session_for_gate(session_id)
     if not session or not session.get("authenticated_at"):
         raise JsonRpcError(NOT_ALLOWED, "Invalid authenticated session")
+    if not _unexpired(session.get("expires_at")):
+        # Logged out (F1c.2) or expired: no delegation on its behalf.
+        raise JsonRpcError(NOT_ALLOWED, "Session has ended")
     if session.get("os_uid") is None or int(session["os_uid"]) != caller.uid:
         raise JsonRpcError(NOT_ALLOWED, "Session is not bound to this OS user")
     return session

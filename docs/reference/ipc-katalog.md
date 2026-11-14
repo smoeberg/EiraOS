@@ -37,6 +37,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `identity.consent_key_claim` | `caller` |  |
 | `identity.login_complete` | `caller` |  |
 | `identity.login_start` | `caller` |  |
+| `identity.logout` | `caller` |  |
 | `identity.providers` | `read` |  |
 | `identity.session` | `caller` |  |
 | `identity.step_up` | `refused` |  |

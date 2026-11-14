@@ -130,7 +130,7 @@ def test_a_stale_proposal_cannot_be_activated(service, monkeypatch):
 
 KEY = "2" * 64
 SESSIONS = {
-    "s-anne": {"identity": "did:eira:anne", "authenticated_at": "x", "os_uid": HUMAN.uid, "consent_key": KEY},
+    "s-anne": {"identity": "did:eira:anne", "authenticated_at": "x", "expires_at": "2099-01-01T00:00:00Z", "os_uid": HUMAN.uid, "consent_key": KEY},
 }
 
 
@@ -263,3 +263,13 @@ def test_installed_only_the_consent_agent_reads_the_proposal_and_creates(daemon,
     assert shown["rendering"]["text"] == p["rendering"]["text"] and agent.consent_agent
     assert created(daemon, p, as_=AgentPeer())["status"] == "created"
     assert check(service, "intent:utterance")
+
+
+def test_an_ended_session_cannot_delegate(daemon, monkeypatch):
+    """F1c.2: delegationd checks expires_at like the gate; logout sets it to now."""
+    import app.session_store as store
+
+    ended = {**SESSIONS["s-anne"], "expires_at": "2020-01-01T00:00:00Z"}
+    monkeypatch.setattr(store, "get_session_for_gate", lambda sid: ended)
+    with pytest.raises(JsonRpcError, match="ended"):
+        proposed(daemon)

@@ -463,12 +463,29 @@ pub async fn gate_confirm(
     decide("confirm", action_id, content_hash, rendering_hash).await
 }
 
-/// Logging out forgets the key: nothing more can be signed.
+/// Logging out ends the session in identityd and forgets the key here:
+/// nothing more can be signed, and the gate refuses the session
+/// (UDVIKLINGSPLAN F1c.2). The app forgets its copy even if identityd
+/// cannot be reached; the session then still ends when it expires.
 #[tauri::command]
-pub fn desktop_logout() {
-    if let Ok(mut held) = HELD.lock() {
-        *held = None;
-    }
+pub async fn desktop_logout() -> Result<bool, String> {
+    let session_id = match HELD.lock() {
+        Ok(mut held) => held.take().map(|h| h.session_id),
+        Err(_) => return Err("consent key store poisoned".into()),
+    };
+    let Some(session_id) = session_id else {
+        return Ok(false);
+    };
+    let answer = crate::ipc::send_ipc_request(
+        "identityd".into(),
+        "identity.logout".into(),
+        json!({ "session_id": session_id }),
+    )
+    .await?;
+    Ok(answer
+        .get("ended")
+        .and_then(Value::as_bool)
+        .unwrap_or(false))
 }
 
 #[cfg(test)]

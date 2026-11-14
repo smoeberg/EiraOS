@@ -1,0 +1,14 @@
+Mutant GATE-S-1: an ended or expired session is still accepted
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -590,7 +590,7 @@
+         if not session or not session.get("authenticated_at"):
+             return None
+         expires = session.get("expires_at")
+-        if not expires or datetime.fromisoformat(str(expires).replace("Z", "+00:00")) <= self._clock():
++        if not expires:
+             return None  # no expiry (pre-upgrade row) or expired: no session
+         bound = session.get("os_uid")
+         if bound is None:
