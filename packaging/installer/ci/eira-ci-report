@@ -445,23 +445,14 @@ explain() {
     rm -f "$log"
     return $status
 }
+# A real open (O_RDWR) as the sandbox has it: the group and DevicePolicy both
+# have to allow it. (26.04's /usr/bin/test, uutils, ignored the supplementary
+# group tss and failed where the shell's builtin test succeeded.)
 tpm_sandbox_writable() {
     systemd-run --quiet --wait --pipe -p User=eira -p Group=eira \
-        -p SupplementaryGroups=tss -p DevicePolicy=closed -p "DeviceAllow=/dev/tpmrm0 rw" test -w /dev/tpmrm0
+        -p SupplementaryGroups=tss -p DevicePolicy=closed -p "DeviceAllow=/dev/tpmrm0 rw" \
+        /usr/bin/python3 -c "import os; os.close(os.open('/dev/tpmrm0', os.O_RDWR))"
 }
-# What the TPM checks below need, so a failure can be read from the job log.
-say "diag tpm-devices: $(ls -l /dev/tpm* 2>&1 | tr '\n' ' ')"
-say "diag tpm-group: $(getent group tss 2>&1) / eira: $(id eira 2>&1)"
-say "diag tpm-providers: $(OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf openssl list -providers 2>&1 | tr '\n' ' ' | cut -c1-400)"
-tpm_diag_dir=$(mktemp -d)
-say "diag tpm-genpkey: $(OPENSSL_CONF=/usr/share/eira-os/openssl-tpm2.cnf TPM2OPENSSL_TCTI=device:/dev/tpmrm0 \
-    openssl genpkey -provider tpm2 -provider default -algorithm EC -pkeyopt group:P-256 \
-    -out "$tpm_diag_dir/k" 2>&1 | tail -n 5 | tr '\n' ' ' | cut -c1-600) rc=$?"
-rm -rf "$tpm_diag_dir"
-say "diag tpm-sandbox: $(systemd-run --quiet --wait --pipe -p User=eira -p Group=eira \
-    -p SupplementaryGroups=tss -p DevicePolicy=closed -p "DeviceAllow=/dev/tpmrm0 rw" \
-    sh -c 'id; ls -l /dev/tpmrm0; test -w /dev/tpmrm0 && echo writable' 2>&1 | tr '\n' ' ' | cut -c1-600)"
-say "diag tpm-kernel: $(journalctl -k -b --no-pager 2>&1 | grep -i tpm | tail -n 5 | tr '\n' ' ' | cut -c1-600)"
 check tpm-present test -c /dev/tpmrm0
 check device-key-in-tpm explain device-key-in-tpm device_key_in_tpm
 check rights-sync-sandbox-reaches-tpm explain rights-sync-sandbox-reaches-tpm tpm_sandbox_writable

@@ -197,12 +197,20 @@ MUTANTS: dict[str, dict] = {
         "tests": [KEY + "test_t_a1_f_the_key_is_a_tpm_blob_that_cannot_be_exported"],
         "edits": [
             ("app/rights/devicekey.py",
-             '_openssl("genpkey", *PROVIDERS, "-algorithm", "EC"',
-             '_openssl("genpkey", "-algorithm", "EC"'),
+             '_openssl("genpkey", *PROVIDERS, "-propquery", "?provider=tpm2", "-algorithm", "EC",',
+             '_openssl("genpkey", "-algorithm", "EC",'),
             ("app/rights/devicekey.py", "        if not path.read_bytes().startswith(TSS2_HEADER):",
              "        if False:"),
             ("app/rights/devicekey.py", "        missing = REQUIRED_ATTRIBUTES - attributes(path)",
              "        missing = set()"),
+        ],
+    },
+    "CTX-A1-8": {
+        "why": "with the installed OPENSSL_CONF the default provider makes the key",
+        "tests": [KEY + "test_the_key_is_made_in_the_tpm_with_the_installed_openssl_conf"],
+        "edits": [
+            ("app/rights/devicekey.py", '*PROVIDERS, "-propquery", "?provider=tpm2", "-algorithm"',
+             '*PROVIDERS, "-algorithm"'),
         ],
     },
     "CTX-A1-7": {
