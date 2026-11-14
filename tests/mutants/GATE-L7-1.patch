@@ -1,0 +1,14 @@
+Mutant GATE-L7-1: a confirmation for other parameters executes
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -493,7 +493,7 @@
+             return self._existing(record)  # idempotency: never execute twice
+         if record["state"] != "pending":
+             raise LayerFailure(GateCode.E_STATE, f"action is {record['state']}")
+-        if content_hash != record["content_hash"] or edp.content_hash(envelope) != record["content_hash"]:
++        if False:
+             raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to these parameters")
+         if rendering_hash_ != record["rendering_hash"] or not _rendering_intact(record):
+             raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to the text that was shown")

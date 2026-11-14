@@ -1,0 +1,14 @@
+Mutant GATE-C-2: consent outside the consent agent is accepted
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -634,7 +634,7 @@
+         # The path first, with or without a session: every attempt to decide
+         # outside the consent agent gets the same code (EIRA-CONSENT-AGENT §7).
+         caller = current_caller()
+-        if self._consent_agent_required() and (caller is None or not caller.consent_agent):
++        if False:
+             return LayerFailure(
+                 GateCode.E_CONSENT_PATH,
+                 f"{verb} must come from the consent agent (eira-consent-agent)",

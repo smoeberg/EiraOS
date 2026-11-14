@@ -1,0 +1,14 @@
+Mutant GATE-C-1: another user can consent to someone's action
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -210,7 +210,7 @@
+         try:
+             if record is None or record["state"] != "pending":
+                 raise LayerFailure(GateCode.E_STATE, "no pending action to consent to")
+-            if actor is None or actor["identity"] != record["actor_identity"]:
++            if actor is None:
+                 raise LayerFailure(GateCode.E_UNAUTHORIZED, "only the proposing user can consent")
+             if content_hash != record["content_hash"]:
+                 raise LayerFailure(GateCode.E_CONSENT, "consent does not cover these parameters")

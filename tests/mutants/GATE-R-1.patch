@@ -1,0 +1,14 @@
+Mutant GATE-R-1: a changed rendering text is not detected
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -830,7 +830,7 @@
+     if not record.get("rendering_hash") or record.get("rendering_text") is None:
+         return False
+     expected = rendering_hash(record["rendering_text"], record["render_lang"], record["renderer_version"])
+-    return expected == record["rendering_hash"]
++    return True
+ 
+ 
+ def _boot_instant(consent: dict[str, Any]) -> BootInstant | None:

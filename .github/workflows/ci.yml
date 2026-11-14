@@ -101,10 +101,32 @@ jobs:
     - name: Context mutants (EIRA-CONTEXT N1, N2)
       env:
         EIRA_TEST_H1B_REPETITIONS: "5"
-      run: PYTHON=python scripts/check-mutants.sh
+      run: PYTHON=python scripts/check-mutants.sh 'CTX-*'
     - name: Server logs
       if: failure()
       run: docker logs minio | tail -50; docker logs webdav | tail -50
+
+  # Gate Kernel and the IPC access classes under mutation (UDVIKLINGSPLAN
+  # F0c.2, review G-21): each GATE-*/IPC-* patch is a realistic bug in a
+  # security invariant, and some test must fail on it. A mutant that breaks
+  # the test run instead (collection error) fails the job too.
+  security-mutants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: 'pip'
+    - name: Create EiraOS IPC group
+      run: getent group eira >/dev/null || sudo groupadd eira
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt pytest pyyaml
+    - name: Gate and IPC mutants
+      run: PYTHON=python scripts/check-mutants.sh 'GATE-*' 'IPC-*'
 
   # Secret scanning of the whole git history (SECURITY.md). The repository
   # is public: a key that reaches any branch is published. Pinned gitleaks

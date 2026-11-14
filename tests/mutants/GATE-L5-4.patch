@@ -1,0 +1,14 @@
+Mutant GATE-L5-4: an irreversible action needs no consent
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -406,7 +406,7 @@
+     def _layer_5_consent(
+         self, policy: ActionPolicy, record: dict[str, Any], session_id: str | None, *, at_proposal: bool
+     ) -> None:
+-        if not policy.requires_consent:
++        if True:
+             return
+         # Bilag A pkt. 6: validity on CLOCK_BOOTTIME within this boot. Setting
+         # the wall clock back cannot extend a consent; a reboot ends it.

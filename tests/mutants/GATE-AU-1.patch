@@ -1,0 +1,14 @@
+Mutant GATE-AU-1: an audit entry is not chained to the previous one
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/store.py
++++ b/app/gate/store.py
+@@ -291,7 +291,7 @@
+             try:
+                 row = conn.execute("SELECT entry_hash FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()
+                 prev = row["entry_hash"] if row else GENESIS
+-                entry_hash = "sha256:" + hashlib.sha256((prev + body).encode()).hexdigest()
++                entry_hash = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+                 conn.execute(
+                     "INSERT INTO gate_audit (entry, prev_hash, entry_hash) VALUES (?, ?, ?)",
+                     (body, prev, entry_hash),

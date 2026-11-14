@@ -1,11 +1,14 @@
-"""Generates tests/mutants/CTX-*.patch (EIRA-CONTEXT testplan §2).
+"""Generates tests/mutants/*.patch: CTX-* (EIRA-CONTEXT testplan §2), and
+GATE-* and IPC-* for Gate Kernel and the IPC access classes (UDVIKLINGSPLAN
+F0c.2, review G-21).
 
 Each mutant is a small, realistic bug that breaks one invariant. A mutant is
 a list of exact text replacements in the current source; this script turns
 it into a unified diff with a ``Tests:`` header naming the tests that must
 catch it. ``scripts/check-mutants.sh`` applies them one at a time.
 
-Run from the repository root after changing app/context/:
+Run from the repository root after changing app/context/, app/gate/ or
+app/ipc/:
     python3 tests/mutants/make_mutants.py
 A replacement that no longer matches fails loudly: update the mutant, never
 drop it.
@@ -226,9 +229,156 @@ MUTANTS: dict[str, dict] = {
     },
 }
 
+# Gate Kernel and IPC access (UDVIKLINGSPLAN F0c.2, review G-21): each mutant
+# breaks one security invariant the way a real refactoring could.
+G = "tests/test_gate_kernel.py"
+GATE_TESTS = [G, "tests/test_gate_invariants.py", "tests/test_gate_consent_proof.py", "tests/test_consent_agent_path.py", "tests/test_gate_rights.py",
+              "tests/test_gate_clock.py", "tests/test_gate_audit_anchor.py", "tests/test_gate_ipc.py"]
+IPC_TESTS = ["tests/test_ipc_access.py", "tests/test_gate_caller.py", "tests/test_s1_daemons_ipc.py"]
+K = "app/gate/kernel.py"
+
+MUTANTS.update({
+    # Layer 5: a consent covers exactly one action, one session, one boot window.
+    "GATE-L5-1": {
+        "why": "a consent from another session counts",
+        "tests": GATE_TESTS,
+        "edits": [(K, '            and consent["session_id"] == session_id\n', "")],
+    },
+    "GATE-L5-2": {
+        "why": "a revoked consent still counts",
+        "tests": GATE_TESTS,
+        "edits": [(K, '            and consent["revoked_at"] is None\n', "")],
+    },
+    "GATE-L5-3": {
+        "why": "a consent never expires",
+        "tests": GATE_TESTS,
+        "edits": [(K, "            and within(_boot_instant(consent), now, ttl_ns)\n", "")],
+    },
+    "GATE-L5-4": {
+        "why": "an irreversible action needs no consent",
+        "tests": GATE_TESTS,
+        "edits": [(K, "        if not policy.requires_consent:\n            return\n",
+                   "        if True:\n            return\n")],
+    },
+    # Only the proposing user, only through the consent agent, only with a proof.
+    "GATE-C-1": {
+        "why": "another user can consent to someone's action",
+        "tests": GATE_TESTS,
+        "edits": [(K, '            if actor is None or actor["identity"] != record["actor_identity"]:\n'
+                      '                raise LayerFailure(GateCode.E_UNAUTHORIZED, "only the proposing user can consent")',
+                   '            if actor is None:\n'
+                   '                raise LayerFailure(GateCode.E_UNAUTHORIZED, "only the proposing user can consent")')],
+    },
+    "GATE-C-2": {
+        "why": "consent outside the consent agent is accepted",
+        "tests": GATE_TESTS,
+        "edits": [(K, "        if self._consent_agent_required() and (caller is None or not caller.consent_agent):\n"
+                      "            return LayerFailure(",
+                   "        if False:\n            return LayerFailure(")],
+    },
+    "GATE-C-3": {
+        "why": "a missing or wrong consent proof is accepted",
+        "tests": GATE_TESTS,
+        "edits": [(K, "        if consent_proof.verify(\n", "        if True or consent_proof.verify(\n")],
+    },
+    # The model is stopped at the door of consent and confirm. _human_actor
+    # refuses it a second time; a mutant of that second guard alone survives
+    # by design, so the mutants remove the first.
+    "GATE-C-4": {
+        "why": "the model reaches consent",
+        "tests": GATE_TESTS,
+        "edits": [(K, '        if _model_is_calling():\n            return self._fail("consent", None, _MODEL_CANNOT_DECIDE',
+                   '        if False:\n            return self._fail("consent", None, _MODEL_CANNOT_DECIDE')],
+    },
+    "GATE-C-5": {
+        "why": "the model reaches confirm",
+        "tests": GATE_TESTS,
+        "edits": [(K, '        if _model_is_calling():\n            return self._fail("confirm", None, _MODEL_CANNOT_DECIDE',
+                   '        if False:\n            return self._fail("confirm", None, _MODEL_CANNOT_DECIDE')],
+    },
+    # The rendering that was shown is the one that was consented to.
+    "GATE-R-1": {
+        "why": "a changed rendering text is not detected",
+        "tests": GATE_TESTS,
+        "edits": [(K, '    return expected == record["rendering_hash"]', "    return True")],
+    },
+    "GATE-R-2": {
+        "why": "the confirmation is not bound to the rendering hash",
+        "tests": GATE_TESTS,
+        "edits": [(K, '        if rendering_hash_ != record["rendering_hash"] or not _rendering_intact(record):\n'
+                      '            raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to the text that was shown")',
+                   '        if not _rendering_intact(record):\n'
+                   '            raise LayerFailure(GateCode.E_STATE, "confirmation is not bound to the text that was shown")')],
+    },
+    # Layer 6 and 7: rights at every decision; the confirmed parameters are the proposed ones.
+    "GATE-L6-1": {
+        "why": "a user who is not an acting participant is authorised",
+        "tests": GATE_TESTS,
+        "edits": [(K, "        if not acting:\n            raise LayerFailure(GateCode.E_UNAUTHORIZED, "
+                      '"the user is not an acting participant")',
+                   "        if False:\n            raise LayerFailure(GateCode.E_UNAUTHORIZED, "
+                   '"the user is not an acting participant")')],
+    },
+    "GATE-L7-1": {
+        "why": "a confirmation for other parameters executes",
+        "tests": GATE_TESTS,
+        "edits": [(K, '        if content_hash != record["content_hash"] or edp.content_hash(envelope) != record["content_hash"]:',
+                   "        if False:")],
+    },
+    # The gate also returns a finished action's result before claiming it, so
+    # the claim is what stops two concurrent confirmations (bilag A).
+    "GATE-L7-2": {
+        "why": "two concurrent confirmations can both claim the action",
+        "tests": GATE_TESTS,
+        "edits": [("app/gate/store.py", "WHERE action_id = ? AND state = 'pending' AND content_hash = ?",
+                   "WHERE action_id = ? AND content_hash = ?")],
+    },
+    # The audit chain links every entry to the one before.
+    "GATE-AU-1": {
+        "why": "an audit entry is not chained to the previous one",
+        "tests": GATE_TESTS,
+        "edits": [("app/gate/store.py",
+                   '                entry_hash = "sha256:" + hashlib.sha256((prev + body).encode()).hexdigest()',
+                   '                entry_hash = "sha256:" + hashlib.sha256(body.encode()).hexdigest()')],
+    },
+    # IPC access classes (F0b): the server enforces them before the handler.
+    "IPC-DW-1": {
+        "why": "daemon_write accepts any caller",
+        "tests": IPC_TESTS,
+        "edits": [("app/ipc/access.py", "    return isinstance(uid, int) and uid == service_uid()",
+                   "    return True")],
+    },
+    "IPC-DW-2": {
+        "why": "daemon_write accepts a request without a kernel-verified caller",
+        "tests": IPC_TESTS,
+        "edits": [("app/ipc/access.py", "    return isinstance(uid, int) and uid == service_uid()",
+                   "    return uid is None or uid == service_uid()")],
+    },
+    "IPC-SRV-1": {
+        "why": "the server does not check daemon_write before the handler",
+        "tests": IPC_TESTS,
+        "edits": [("app/daemons/base.py",
+                   "            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(peer):",
+                   "            if False:")],
+    },
+    "IPC-SRV-2": {
+        "why": "a client-supplied caller is trusted",
+        "tests": IPC_TESTS,
+        "edits": [("app/daemons/base.py", "            params.pop(PEER_KEY, None)\n", "")],
+    },
+    "IPC-REG-1": {
+        "why": "a method without an access class can be registered",
+        "tests": IPC_TESTS,
+        "edits": [("app/daemons/base.py",
+                   "        if kind is None:\n            # app/ipc/access.py: no method without an access class (F0b).\n"
+                   "            raise ValueError(",
+                   "        if False:\n            raise ValueError(")],
+    },
+})
+
 
 def main() -> None:
-    for old in OUT.glob("CTX-*.patch"):
+    for old in OUT.glob("*.patch"):
         old.unlink()
     for name, mutant in MUTANTS.items():
         changed: dict[str, str] = {}

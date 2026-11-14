@@ -1,0 +1,14 @@
+Mutant GATE-C-5: the model reaches confirm
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -248,7 +248,7 @@
+         proof: str | None = None,
+     ) -> GateResult:
+         _reset_rights()
+-        if _model_is_calling():
++        if False:
+             return self._fail("confirm", None, _MODEL_CANNOT_DECIDE, None, action_id=action_id)
+         actor = self._human_actor(session_id)
+         bad_proof = self._proof_failure("confirm", actor, action_id, content_hash, rendering_hash_, proof)
