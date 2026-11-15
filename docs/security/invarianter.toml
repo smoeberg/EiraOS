@@ -160,7 +160,7 @@ claim = "Kun samtykkeagenten (setgid eira-consent, en gruppe uden medlemmer) kan
 tests = ["tests/test_consent_agent_path.py::test_the_app_or_any_user_program_gets_e_consent_path", "tests/test_consent_agent_path.py::test_the_agent_without_a_proof_is_still_refused", "tests/test_consent_agent_path.py::test_without_a_session_a_bypass_still_gets_e_consent_path", "tests/test_consent_agent_path.py::test_a_development_machine_keeps_the_app_path", "tests/test_gate_invariants.py::test_the_proposer_is_the_consenting_identity"]
 production_tests = ["tests/test_consent_agent_path.py::test_a_correct_installation_passes", "tests/test_consent_agent_path.py::test_anything_that_lets_someone_else_hold_the_gid_stops_the_daemons", "tests/test_delegation.py::test_installed_only_the_consent_agent_reads_the_proposal_and_creates"]
 mutants = ["GATE-C-2", "GATE-C-3"]
-vm = ["consent-agent-setgid", "consent-group-system-gid", "consent-group-no-members", "consent-group-no-password", "consent-gid-not-obtainable", "consent-path-enforced", "consent-agent-links-only-libc", "consent-agent-secure-exec", "consent-agent-version"]
+vm = ["consent-agent-setgid", "consent-group-system-gid", "consent-group-no-members", "consent-group-no-password", "consent-gid-not-obtainable", "consent-path-enforced", "consent-agent-links-only-libc", "consent-agent-secure-exec", "consent-agent-version", "consent-agent-profile-enforced"]
 
 [[invariant]]
 id = "I-18"
