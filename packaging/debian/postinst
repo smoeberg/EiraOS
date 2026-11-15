@@ -76,7 +76,10 @@ case "${1:-configure}" in
         # install (chroot) this can fail; apparmor.service loads them at boot,
         # so a failure here must not abort package installation.
         if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
-            for profile in /etc/apparmor.d/usr.bin.eira-*; do
+            # Every profile the package installs: the daemons, the model and
+            # rights-apply under usr.bin, the consent agent under usr.lib
+            # (gennemgang G-25; an upgrade without a reboot needs them all).
+            for profile in /etc/apparmor.d/usr.bin.eira-* /etc/apparmor.d/usr.lib.eira-os.*; do
                 [ -f "$profile" ] || continue
                 apparmor_parser -r "$profile" || echo "eira-os-core: kunne ikke indlæse $profile nu; indlæses ved boot" >&2
             done

@@ -42,6 +42,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Paknings-acceptancen kører nu på alle ændringer undtagen dokumentation (`paths-ignore` i stedet for en liste,
   der manglede `app/**` og `crates/**`), testene på 26.04 kører også Rust-workspacet, og et samlet slutjob `acceptance`
   er kun grønt, når både testene og VM-acceptancen bestod (udviklingsplan F0c.1, gennemgang G-19, G-20).
+- VM-checkene kan ikke længere bestå af forkerte grunde: negative checks går gennem hjælpere med en positiv kontrol
+  (`not_member`, `user_cannot` med `access(2)` som brugeren, `no_kernel_denials`, `sg` prøvet på brugerens egen gruppe,
+  `ldd` skal vise libc). En test afviser `! cmd | grep` i et check. `postinst` indlæser også samtykkeagentens
+  AppArmor-profil, og VM-checket `consent-agent-profile-enforced` viser den (udviklingsplan F0c.4, gennemgang G-24, G-25).
 - Rust bygges med låste afhængigheder: workspacets `Cargo.lock` er committet (Tauri-skallens var det allerede), og
   alle `cargo build`, `test` og `clippy` i CI, pakkebygningen (også Tauri via `tauri build -- --locked`) og
   udgivelsesscriptet bruger `--locked`. `tests/test_cargo_locked.py` holder det. Den forældede kommentar om en

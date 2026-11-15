@@ -33,6 +33,45 @@ wait_for() {
     return 1
 }
 
+# Negative checks have a positive control (UDVIKLINGSPLAN F0c.4, gennemgang
+# G-24): a missing tool, a failing command or an empty answer is a FAIL, never
+# a PASS by accident. So no "! cmd | grep" (the pipe hides cmd failing, and
+# dash has no pipefail); each helper first proves its probe works.
+#
+# not_member <user> <group>: the user exists and has groups, none is <group>.
+not_member() {
+    groups=$(id -nG "$1") || return 1
+    [ -n "$groups" ] || return 1
+    for group in $groups; do
+        [ "$group" = "$2" ] && return 1
+    done
+    return 0
+}
+# user_access <user> <path> <r|w>: exit 0 allowed, 1 denied, 2 no such path.
+# access(2) as the user; uutils' test ignores supplementary groups.
+user_access() {
+    runuser -u "$1" -- python3 -c 'import os, sys
+path, mode = sys.argv[1], sys.argv[2]
+if not os.path.lexists(path):
+    sys.exit(2)
+sys.exit(0 if os.access(path, os.R_OK if mode == "r" else os.W_OK) else 1)' "$2" "$3"
+}
+# user_cannot <user> <path> <r|w>: the path exists, the probe sees what the
+# user can read, and the user is denied.
+user_cannot() {
+    user_access "$1" /etc/os-release r || return 1
+    user_access "$1" "$2" "$3"
+    [ $? -eq 1 ]
+}
+# no_kernel_denials <profile pattern>: the kernel log of this boot can be read
+# (it has the boot banner) and has no AppArmor denial for the profile.
+no_kernel_denials() {
+    log=$(journalctl -k -b --no-pager 2>/dev/null) || return 1
+    printf '%s\n' "$log" | grep -q 'Linux version' || return 1
+    denials=$(printf '%s\n' "$log" | grep 'apparmor="DENIED"' | grep -- "$1")
+    [ -z "$denials" ]
+}
+
 say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME") uptime=$(cut -d' ' -f1 /proc/uptime)s"
 check eira.target wait_for 300 systemctl is-active --quiet eira.target
 for daemon in $DAEMONS; do
@@ -225,10 +264,26 @@ check intent-power-reaches-gate-and-is-refused runuser -u "$USER_NAME" -- python
 AGENT=/usr/lib/eira-os/eira-consent-agent
 check consent-agent-setgid sh -c '[ "$(stat -c "%U:%G %a" '"$AGENT"')" = "root:eira-consent 2755" ]'
 check consent-group-system-gid sh -c '[ "$(getent group eira-consent | cut -d: -f3)" -lt 1000 ]'
-check consent-group-no-members sh -c '[ -z "$(getent group eira-consent | cut -d: -f4)" ] && ! awk -F: -v g="$(getent group eira-consent | cut -d: -f3)" "\$4 == g" /etc/passwd | grep -q .'
+consent_group_has_no_members() {
+    entry=$(getent group eira-consent) || return 1
+    gid=$(printf '%s' "$entry" | cut -d: -f3)
+    [ -n "$gid" ] || return 1
+    [ -z "$(printf '%s' "$entry" | cut -d: -f4)" ] || return 1
+    users=$(getent passwd) || return 1
+    printf '%s\n' "$users" | grep -q '^root:' || return 1
+    [ -z "$(printf '%s\n' "$users" | awk -F: -v g="$gid" '$4 == g')" ]
+}
+check consent-group-no-members consent_group_has_no_members
 check consent-group-no-password sh -c 'getent gshadow eira-consent | cut -d: -f2 | grep -Eqx "!|\*|!\*|!!"'
-check consent-agent-links-only-libc sh -c '! ldd '"$AGENT"' | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"'
+agent_links_only_libc() {
+    libs=$(ldd "$AGENT") || return 1
+    printf '%s\n' "$libs" | grep -q 'libc\.so' || return 1
+    ! printf '%s\n' "$libs" | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
+}
+check consent-agent-links-only-libc agent_links_only_libc
 check consent-agent-version runuser -u "$USER_NAME" -- "$AGENT" --version
+# G-25: the agent's profile is loaded and enforced (postinst loads usr.lib too).
+check consent-agent-profile-enforced sh -c "grep -q '^/usr/lib/eira-os/eira-consent-agent (enforce)' /sys/kernel/security/apparmor/profiles"
 # AT_SECURE: the loader ignores LD_DEBUG (and LD_PRELOAD) for the setgid
 # agent, but not for a plain copy (the control shows the test can see it).
 consent_agent_secure() {
@@ -241,7 +296,15 @@ consent_agent_secure() {
 }
 check consent-agent-secure-exec consent_agent_secure
 # A program running as the user cannot become the agent: newgrp/sg fail.
-check consent-gid-not-obtainable sh -c '! runuser -u "'"$USER_NAME"'" -- sg eira-consent -c true </dev/null'
+# The control: sg works for the user's own group, so a failure for
+# eira-consent is the refusal, not a missing sg.
+consent_gid_not_obtainable() {
+    command -v sg >/dev/null || return 1
+    own=$(id -gn "$USER_NAME") || return 1
+    runuser -u "$USER_NAME" -- sg "$own" -c true </dev/null || return 1
+    ! runuser -u "$USER_NAME" -- sg eira-consent -c true </dev/null
+}
+check consent-gid-not-obtainable consent_gid_not_obtainable
 # §7: the gate takes no consent from anyone but the agent, session or not.
 check consent-path-enforced python3 - <<'PY'
 import json, socket
@@ -277,7 +340,7 @@ for method, params in (("identity.consent_key_claim", {}), ("identity.consent_ag
 PY
 check model-user-exists getent passwd eira-model
 check model-in-eira-clients sh -c "id -nG eira-model | tr ' ' '\n' | grep -qx eira-clients"
-check model-not-in-eira sh -c "! id -nG eira-model | tr ' ' '\n' | grep -qx eira"
+check model-not-in-eira not_member eira-model eira
 check model-is-system-uid sh -c '[ "$(id -u eira-model)" -lt 1000 ] && [ "$(id -u eira-model)" -ne "$(id -u eira)" ]'
 check model-cannot-consent runuser -u eira-model -- python3 - <<'PY'
 import json, socket
@@ -317,7 +380,7 @@ identity_reply_has() {
 }
 check identityd-has-database identity_reply_has identity.session '"session_id"'
 check login-needs-login-session identity_reply_has identity.login_start caller_not_in_a_login_session
-check identityd-no-apparmor-denials sh -c "! journalctl -k -b --no-pager | grep 'apparmor=\"DENIED\"' | grep -q 'eira-identityd'"
+check identityd-no-apparmor-denials no_kernel_denials eira-identityd
 # The general apparmor diag shows only the last five denials of any profile;
 # name identityd's own, or a failure here cannot be read from the job log.
 identityd_denials=$(journalctl -k -b --no-pager 2>&1 | grep 'apparmor="DENIED"' | grep 'eira-identityd' | tail -n 5 | tr '\n' ' ' | cut -c1-2000)
@@ -457,18 +520,26 @@ check tpm-present test -c /dev/tpmrm0
 check device-key-in-tpm explain device-key-in-tpm device_key_in_tpm
 check rights-sync-sandbox-reaches-tpm explain rights-sync-sandbox-reaches-tpm tpm_sandbox_writable
 # The desktop user can read neither the cache nor change it.
-check user-cannot-touch-rights-cache sh -c "! runuser -u $USER_NAME -- test -r /data/rights/active.json && ! runuser -u $USER_NAME -- test -w /data/rights"
+user_cannot_touch_rights_cache() {
+    user_cannot "$USER_NAME" /data/rights/active.json r &&
+        user_cannot "$USER_NAME" /data/rights w
+}
+check user-cannot-touch-rights-cache user_cannot_touch_rights_cache
 check wayland-session-file test -f /usr/share/wayland-sessions/eira-session.desktop
 # Explorer has no escape hatch: EiraOS is the only selectable session.
 check only-eira-session sh -c '[ "$(ls /usr/share/wayland-sessions /usr/share/xsessions 2>/dev/null | grep "\.desktop$")" = "eira-session.desktop" ]'
-check gnome-session-hidden sh -c '! ls /usr/share/wayland-sessions/ubuntu*.desktop >/dev/null 2>&1'
+# The control: the directory is there and holds EiraOS' session.
+check gnome-session-hidden sh -c '[ -f /usr/share/wayland-sessions/eira-session.desktop ] && ! ls /usr/share/wayland-sessions/ubuntu*.desktop >/dev/null 2>&1'
 check session-policy-active systemctl is-active --quiet eira-session-policy.service
 check firstboot-done test -e /var/lib/eira/firstboot.done
 check default-session grep -q '^Session=eira-session$' "/var/lib/AccountsService/users/$USER_NAME"
 check user-in-eira-clients sh -c "id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira-clients"
 # ADR-0003: the desktop user reaches the daemons but cannot touch their state.
-check user-not-in-eira sh -c "! id -nG $USER_NAME | tr ' ' '\\n' | grep -qx eira"
-check user-cannot-write-gate-db sh -c "test -e /data/eira-app.db && ! runuser -u $USER_NAME -- test -w /data/eira-app.db && ! runuser -u $USER_NAME -- test -r /data/eira-app.db"
+check user-not-in-eira not_member "$USER_NAME" eira
+user_cannot_touch_gate_db() {
+    user_cannot "$USER_NAME" /data/eira-app.db w && user_cannot "$USER_NAME" /data/eira-app.db r
+}
+check user-cannot-write-gate-db user_cannot_touch_gate_db
 # A full round-trip: connect() proves the socket's group/mode, the reply proves
 # the daemon's peer-credential check accepts the user via eira-clients.
 REACH_PY='import json, socket
@@ -637,11 +708,13 @@ check labwc-is-eira-labwc sh -c 'dpkg-query -W -f="\${Status}" eira-labwc | grep
 # EIRA-CONSENT-AGENT R-6.2: the session's labwc has the trustedGroup patch and
 # trusts eira-consent, a group labwc (the desktop user) is not in. The
 # behaviour itself is tested headless in CI (verify-trusted.sh).
-check labwc-trusts-consent-group sh -c '
+labwc_trusts_consent_group() {
     grep -qx 0001-trusted-group-stacking-and-focus.patch /usr/share/eira-labwc/patches &&
-    grep -q "<trustedGroup>eira-consent</trustedGroup>" /usr/share/eira-os/labwc/rc.xml &&
-    grep -aq "is a group labwc runs in" /usr/bin/labwc &&
-    ! id -nG "'"$USER_NAME"'" | tr " " "\n" | grep -qx eira-consent'
+        grep -q "<trustedGroup>eira-consent</trustedGroup>" /usr/share/eira-os/labwc/rc.xml &&
+        grep -aq "is a group labwc runs in" /usr/bin/labwc &&
+        not_member "$USER_NAME" eira-consent
+}
+check labwc-trusts-consent-group labwc_trusts_consent_group
 check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop
 
 if [ "$failed" -ne 0 ]; then
