@@ -4,6 +4,8 @@ Status: beskriver koden på `main` pr. 13. november 2026 (UDVIKLINGSPLAN F0b.3, 
 
 Hver påstand nedenfor peger på koden, der gør det, og på testen eller VM-checket, der beviser det. VM-checkene står i `packaging/installer/ci/eira-ci-report` og køres på den installerede ISO i CI.
 
+De samme påstande står som en liste i [`invarianter.toml`](invarianter.toml) med testene i udviklings- og produktionstilstand, mutanterne og VM-checkene. Matricen genereres til [`docs/reference/sikkerhedsinvarianter.md`](../reference/sikkerhedsinvarianter.md), og `tests/test_security_invariants.py` fejler, hvis en henvisning ikke findes, eller en GATE- eller IPC-mutant ikke hører til en invariant (F0c.3).
+
 ## 1. Hvem vi beskytter mod
 
 | Modpart | Inden for modellen? | Hvad den kan |

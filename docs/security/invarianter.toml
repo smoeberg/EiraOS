@@ -1,0 +1,196 @@
+# EiraOS' sikkerhedsinvarianter (UDVIKLINGSPLAN F0c.3, vurderingen G-22).
+#
+# Hver invariant er en påstand fra SIKKERHEDSMODEL.md med det, der beviser den:
+#
+#   tests             tests, der kører med udviklingsstandarden (conftest:
+#                     EIRA_ENV=development, sockets uden for /run/eira)
+#   production_tests  tests, der selv sætter produktionstilstanden: et
+#                     installeret system (installed(), EIRA_STRICT_DAEMON_IDENTITY,
+#                     /run/eira-stier), en rigtig kerne-peer eller de installerede
+#                     filer (units, profiler, pakke)
+#   mutants           mutanter i tests/mutants/, som skal fanges
+#   vm                checks i packaging/installer/ci/eira-ci-report, kørt på
+#                     den installerede ISO
+#   gap               hvad der ikke er bevist endnu
+#
+# En test skrives "fil::funktion" (eller "fil::Klasse::metode").
+# scripts/invariant_matrix.py laver docs/reference/sikkerhedsinvarianter.md, og
+# tests/test_security_invariants.py tjekker, at hver henvisning findes, og at
+# alle GATE- og IPC-mutanter hører til en invariant.
+
+[[invariant]]
+id = "I-1"
+section = "§2"
+claim = "Desktop-brugeren er i eira-clients, aldrig i eira, og kan ikke skrive daemonernes data"
+production_tests = ["tests/test_os_packaging_security.py::test_desktop_user_reaches_sockets_but_not_daemon_data"]
+vm = ["user-in-eira-clients", "user-not-in-eira", "user-cannot-write-gate-db", "user-can-reach-intentd"]
+
+[[invariant]]
+id = "I-2"
+section = "§2"
+claim = "Modelprocessen er en egen systembruger uden for eira og uden net"
+tests = ["tests/test_gate_caller.py::test_model_uid_must_be_a_separate_system_user", "tests/test_gate_caller.py::test_model_uid_cannot_be_the_daemons_uid"]
+production_tests = ["tests/test_gate_caller.py::test_installed_gate_refuses_to_start_without_the_model_user", "tests/test_model_process.py::test_the_unit_isolates_the_model", "tests/test_model_process.py::test_apparmor_lets_it_reach_only_the_gate", "tests/test_model_process.py::test_the_process_refuses_to_run_as_anyone_but_eira_model"]
+vm = ["model-user-exists", "model-in-eira-clients", "model-not-in-eira", "model-is-system-uid", "modeld-runs-as-model", "modeld-confined", "modeld-no-network", "modeld-profile-enforced"]
+
+[[invariant]]
+id = "I-3"
+section = "§3"
+claim = "Sockets er 0660 og ejet af eira-clients; på et installeret system starter en daemon ikke uden gruppen"
+tests = ["tests/test_socket_permissions.py::test_socket_mode_permissions", "tests/test_socket_permissions.py::test_chown_failure_is_not_swallowed", "tests/test_socket_permissions.py::test_dev_socket_keeps_fallback"]
+production_tests = ["tests/test_socket_permissions.py::test_installed_socket_refuses_silent_gid_fallback"]
+vm = ["stated-ipc-health"]
+
+[[invariant]]
+id = "I-4"
+section = "§3"
+claim = "Kalderens identitet kommer fra kernen (SO_PEERCRED, SO_PEERGROUPS), aldrig fra en parameter"
+tests = ["tests/test_gate_caller.py::test_server_passes_the_kernels_peer_and_drops_a_forged_one", "tests/test_gate_caller.py::test_server_never_passes_peer_to_handlers_that_did_not_ask", "tests/test_gate_caller.py::test_naming_an_actor_never_yields_a_gate_session", "tests/test_socket_permissions.py::test_peer_groups_come_from_kernel_snapshot"]
+production_tests = ["tests/test_gate_caller.py::test_peer_over_a_real_socket_is_the_connecting_process"]
+mutants = ["IPC-SRV-2"]
+vm = ["gate-ipc-reject"]
+
+[[invariant]]
+id = "I-5"
+section = "§4"
+claim = "Hver IPC-metode har præcis én adgangsklasse, og der er ingen åbne skrivninger"
+tests = ["tests/test_ipc_access.py::test_every_production_method_has_an_access_class", "tests/test_ipc_access.py::test_a_method_without_a_class_cannot_be_registered", "tests/test_ipc_access.py::test_open_writes_are_exactly_the_known_planned_gaps", "tests/test_ipc_access.py::test_catalogue_document_is_current"]
+mutants = ["IPC-REG-1"]
+gap = "Klasserne prøves i udviklingstilstand; VM-checkene dækker kun de skrivninger, der står under I-6 og I-7"
+
+[[invariant]]
+id = "I-6"
+section = "§4"
+claim = "daemon_write kræver tjenestebrugerens UID og en kerne-verificeret kalder; desktop-brugeren og root kan ikke skrive i stated"
+tests = ["tests/test_ipc_access.py::test_daemon_write_from_another_user_is_refused_before_the_handler", "tests/test_ipc_access.py::test_daemon_write_without_a_kernel_caller_is_refused", "tests/test_ipc_access.py::test_root_is_not_a_daemon_writer_unless_it_is_the_service_user", "tests/test_ipc_access.py::test_the_desktop_user_cannot_write_to_stated", "tests/test_ipc_access.py::test_the_desktop_user_cannot_make_identityd_write_audit_events"]
+production_tests = ["tests/test_daemon_isolation.py::test_the_desktop_user_under_a_daemon_profile_may_not"]
+mutants = ["IPC-DW-1", "IPC-DW-2", "IPC-SRV-1"]
+vm = ["user-cannot-write-stated", "user-cannot-make-identityd-audit"]
+
+[[invariant]]
+id = "I-7"
+section = "§3, §4"
+claim = "Kun de navngivne daemons må kalde en daemon_write-metode; samme UID er ikke nok (AppArmor-etiket, ellers systemd-unit)"
+tests = ["tests/test_daemon_isolation.py::test_a_development_run_accepts_the_service_uid", "tests/test_daemon_isolation.py::test_a_confined_caller_is_decided_by_its_label_not_its_cgroup"]
+production_tests = ["tests/test_daemon_isolation.py::test_another_daemon_may_not", "tests/test_daemon_isolation.py::test_no_daemon_may_write_a_method_without_callers", "tests/test_daemon_isolation.py::test_the_service_uid_alone_is_not_a_daemon_on_an_installed_system", "tests/test_daemon_isolation.py::test_a_daemon_profile_in_complain_mode_is_not_the_daemon", "tests/test_daemon_isolation.py::test_an_installed_system_is_strict", "tests/test_daemon_isolation.py::test_other_daemons_may_not_append_to_the_audit_trail", "tests/test_daemon_isolation.py::test_only_fleetd_may_append_states", "tests/test_daemon_isolation.py::test_the_rights_sync_may_not_write_state"]
+mutants = ["IPC-DW-3", "IPC-DW-4", "IPC-DW-5", "IPC-DW-6"]
+vm = ["eira-uid-is-not-a-daemon", "eira-uid-cannot-audit", "fleetd-may-append-state", "graphd-cannot-append-state", "fleetd-cannot-audit"]
+gap = "fleetd må stadig tilføje synkroniserede tilstande; det er dens opgave"
+
+[[invariant]]
+id = "I-8"
+section = "§7"
+claim = "Hver daemon kan kun oprette sin egen socket og kun forbinde til dem, den kalder; ingen fælles logmappe"
+production_tests = ["tests/test_daemon_isolation.py::test_each_profile_owns_its_socket_and_reaches_only_its_callees", "tests/test_daemon_isolation.py::test_every_daemon_call_is_allowed_by_the_policy", "tests/test_daemon_isolation.py::test_no_daemon_unit_shares_a_log_directory", "tests/test_os_packaging_security.py::test_all_daemons_have_least_privilege_apparmor_profiles", "tests/test_os_packaging_security.py::test_apparmor_profiles_parse_on_ubuntu"]
+vm = ["intentd-cannot-reach-stated", "identityd-no-apparmor-denials"]
+gap = "AppArmor skelner ikke mellem at forbinde til og at slette en sti-socket"
+
+[[invariant]]
+id = "I-9"
+section = "§5"
+claim = "Intet ændres uden for gaten: en eksekvering kræver alle lag, og executoren kan ikke kaldes direkte"
+tests = ["tests/test_gate_kernel.py::test_propose_alone_never_executes", "tests/test_gate_kernel.py::test_executor_cannot_be_called_directly", "tests/test_gate_system.py::test_poweroff_goes_through_all_layers_and_is_reported_as_requested", "tests/test_gate_system.py::test_missing_consent_never_reaches_logind", "tests/test_gate_kernel.py::test_policy_change_after_proposal_forces_reject"]
+production_tests = ["tests/test_gate_system.py::test_package_grants_only_the_power_actions"]
+vm = ["gate-ipc-reject", "gate-power-capability", "intent-power-reaches-gate-and-is-refused"]
+
+[[invariant]]
+id = "I-10"
+section = "§5"
+claim = "Modellen kan kun foreslå, kun under en delegation fra mennesket, og aldrig samtykke eller bekræfte"
+tests = ["tests/test_gate_caller.py::test_model_can_propose_but_never_consent", "tests/test_gate_caller.py::test_model_cannot_confirm_what_the_user_consented_to", "tests/test_gate_caller.py::test_model_claiming_user_origin_is_recorded_as_model", "tests/test_gate_invariants.py::test_the_model_is_refused_at_consent_and_confirm", "tests/test_intent_to_gate.py::test_the_model_cannot_consent_for_her", "tests/test_model_process.py::test_without_a_delegation_the_gate_refuses_the_model", "tests/test_delegation.py::test_only_prepare_can_be_delegated"]
+production_tests = ["tests/test_gate_caller.py::test_model_over_ipc_cannot_consent"]
+mutants = ["GATE-C-4", "GATE-C-5"]
+vm = ["modeld-reaches-gate-and-is-refused", "model-cannot-consent"]
+
+[[invariant]]
+id = "I-11"
+section = "§5"
+claim = "Et samtykke gælder kun for den bruger, session og handling, det blev givet til, og udløber"
+tests = ["tests/test_gate_invariants.py::test_a_consent_from_another_session_of_the_same_user_does_not_count", "tests/test_gate_invariants.py::test_a_revoked_consent_does_not_count", "tests/test_gate_invariants.py::test_another_user_cannot_consent_to_someone_elses_action", "tests/test_gate_kernel.py::test_missing_consent_for_irreversible_action_is_rejected", "tests/test_gate_kernel.py::test_consent_expires_on_the_boot_clock", "tests/test_gate_kernel.py::test_setting_the_wall_clock_back_does_not_extend_consent", "tests/test_gate_kernel.py::test_consent_does_not_survive_a_reboot"]
+mutants = ["GATE-L5-1", "GATE-L5-2", "GATE-L5-3", "GATE-L5-4", "GATE-C-1"]
+gap = "Ingen VM-check giver et rigtigt samtykke: uden en login-udbyder (F0.3) er der ingen autentificeret session på en installeret maskine"
+
+[[invariant]]
+id = "I-12"
+section = "§5"
+claim = "Det, der bekræftes, er det, der blev vist: gengivelsen er bundet med sin hash, og ændrede parametre afvises"
+tests = ["tests/test_gate_invariants.py::test_a_rendering_text_changed_after_proposal_cannot_be_consented_to", "tests/test_gate_invariants.py::test_a_confirmation_must_name_the_rendering_that_was_shown", "tests/test_gate_kernel.py::test_changed_parameters_after_confirmation_are_rejected", "tests/test_gate_kernel.py::test_tampered_stored_input_is_rejected"]
+mutants = ["GATE-R-1", "GATE-R-2", "GATE-L7-1"]
+gap = "Kun i udviklingstilstand; som I-11 mangler et VM-check med en rigtig session"
+
+[[invariant]]
+id = "I-13"
+section = "§5"
+claim = "En handling udføres højst én gang, også ved samtidige bekræftelser og nedbrud"
+tests = ["tests/test_gate_kernel.py::test_double_execution_returns_the_existing_result", "tests/test_gate_kernel.py::test_concurrent_confirmations_execute_once", "tests/test_gate_kernel.py::test_crash_between_outbox_and_gate_result_is_recovered_once", "tests/test_gate_system.py::test_double_confirmation_powers_off_once", "tests/test_gate_system.py::test_a_crash_during_poweroff_is_unknown_and_never_retried"]
+mutants = ["GATE-L7-2"]
+gap = "Kun i udviklingstilstand"
+
+[[invariant]]
+id = "I-14"
+section = "§5"
+claim = "Kun den, der handler, og som har en ret fra Fleet, er autoriseret; uden rettighedssæt ingen rettigheder"
+tests = ["tests/test_gate_kernel.py::test_acting_for_someone_else_is_unauthorized", "tests/test_gate_kernel.py::test_correct_schema_without_permission_is_unauthorized", "tests/test_gate_rights.py::test_no_rights_set_means_no_rights", "tests/test_gate_rights.py::test_deny_wins_over_grant", "tests/test_gate_rights.py::test_tampered_cache_file_fails_closed", "tests/test_gate_rights.py::test_setting_the_clock_back_does_not_revive_an_expired_set", "tests/test_gate_system.py::test_another_user_cannot_confirm_anne_s_poweroff"]
+mutants = ["GATE-L6-1"]
+vm = ["rights-default-active", "user-cannot-touch-rights-cache"]
+
+[[invariant]]
+id = "I-15"
+section = "§5"
+claim = "Kun en autentificeret, ubrudt session bundet til OS-brugeren kan handle; en afsluttet session kan ikke bekræfte"
+tests = ["tests/test_gate_caller.py::test_another_os_user_cannot_use_the_session", "tests/test_gate_caller.py::test_unauthenticated_or_unbound_session_is_no_session", "tests/test_gate_kernel.py::test_unknown_or_missing_session_cannot_act", "tests/test_desktop_login.py::test_expired_session_is_no_session", "tests/test_desktop_login.py::test_peer_and_loginuid_must_agree", "tests/test_gate_invariants.py::test_a_session_that_has_ended_cannot_confirm", "tests/test_logout.py::test_logout_ends_the_session_and_forgets_the_key", "tests/test_logout.py::test_another_user_cannot_log_someone_out"]
+production_tests = ["tests/test_desktop_login.py::test_installed_login_session_is_accepted_by_the_gate"]
+mutants = ["GATE-S-1"]
+vm = ["events-need-session", "user-mode-without-session", "login-needs-login-session"]
+
+[[invariant]]
+id = "I-16"
+section = "§5"
+claim = "Hver beslutning skrives i en kædet audit, som forankres i journalen og forsegles"
+tests = ["tests/test_gate_kernel.py::test_every_decision_is_audited_and_pass_only_after_the_result", "tests/test_gate_kernel.py::test_audit_log_is_append_only_and_tamper_evident", "tests/test_gate_audit_anchor.py::test_whole_chain_rewrite_is_caught_by_an_anchor", "tests/test_gate_audit_anchor.py::test_truncation_is_caught", "tests/test_audit_seal.py::test_a_tampered_key_file_is_not_sent"]
+production_tests = ["tests/test_audit_seal.py::test_packaging_sets_it_up_once_at_boot", "tests/test_audit_seal.py::test_the_seal_is_verified_on_the_system_journal_where_the_anchors_are"]
+mutants = ["GATE-AU-1"]
+vm = ["audit-anchor-in-journal", "audit-anchor-file", "audit-verify-journal", "audit-rewrite-caught", "audit-seal-set-up", "audit-seal-journal-keys", "audit-seal-key-pending", "audit-seal-owner-handover", "audit-seal-status-sealed"]
+gap = "Gatens audit deler database med resten af gaten; en egen database kun for intentd er F1c.4"
+
+[[invariant]]
+id = "I-17"
+section = "§6"
+claim = "Kun samtykkeagenten (setgid eira-consent, en gruppe uden medlemmer) kan samtykke og bekræfte"
+tests = ["tests/test_consent_agent_path.py::test_the_app_or_any_user_program_gets_e_consent_path", "tests/test_consent_agent_path.py::test_the_agent_without_a_proof_is_still_refused", "tests/test_consent_agent_path.py::test_without_a_session_a_bypass_still_gets_e_consent_path", "tests/test_consent_agent_path.py::test_a_development_machine_keeps_the_app_path", "tests/test_gate_invariants.py::test_the_proposer_is_the_consenting_identity"]
+production_tests = ["tests/test_consent_agent_path.py::test_a_correct_installation_passes", "tests/test_consent_agent_path.py::test_anything_that_lets_someone_else_hold_the_gid_stops_the_daemons", "tests/test_delegation.py::test_installed_only_the_consent_agent_reads_the_proposal_and_creates"]
+mutants = ["GATE-C-2", "GATE-C-3"]
+vm = ["consent-agent-setgid", "consent-group-system-gid", "consent-group-no-members", "consent-group-no-password", "consent-gid-not-obtainable", "consent-path-enforced", "consent-agent-links-only-libc", "consent-agent-secure-exec", "consent-agent-version"]
+
+[[invariant]]
+id = "I-18"
+section = "§6"
+claim = "Samtykkenøglen ligger kun i RAM, kun identityd kan skrive den, kun agenten får den, og logout sletter den"
+tests = ["tests/test_consent_keys_ram_only.py::test_login_writes_no_consent_key_to_the_session_database", "tests/test_consent_keys_ram_only.py::test_key_from_another_boot_is_never_returned", "tests/test_consent_keys_ram_only.py::test_store_refuses_a_path_that_is_not_tmpfs", "tests/test_consent_agent_path.py::test_only_a_registered_agent_gets_the_key", "tests/test_desktop_login.py::test_consent_key_never_reaches_clients", "tests/test_logout.py::test_the_next_login_forgets_keys_of_expired_sessions", "tests/test_logout.py::test_readers_never_create_or_write_the_store"]
+production_tests = ["tests/test_consent_keys_ram_only.py::test_installed_units_keep_keys_on_run_and_never_allow_disk", "tests/test_desktop_login.py::test_on_an_installed_system_the_app_never_gets_the_key"]
+vm = ["consent-key-only-to-agent"]
+gap = "Logout på en installeret maskine kræver en rigtig login-udbyder (F0.3)"
+
+[[invariant]]
+id = "I-19"
+section = "§6"
+claim = "Samtykkeagentens vindue ligger øverst, og ingen anden klient har privilegerede Wayland-protokoller"
+production_tests = ["tests/test_session_clean_environment.py::test_session_refuses_labwc_without_the_trusted_group_patch"]
+vm = ["labwc-is-eira-labwc", "labwc-trusts-consent-group"]
+gap = "R-6.1 til R-6.3 er afprøvet headless, ikke i en grafisk session (F0.2)"
+
+[[invariant]]
+id = "I-20"
+section = "§7"
+claim = "Sessionen er kun EiraOS, og dens miljø kan ikke overtages af arvede variabler eller en fremmed konfiguration"
+tests = ["tests/test_session_clean_environment.py::test_inherited_overrides_are_ignored", "tests/test_session_clean_environment.py::test_untrusted_conf_is_not_sourced", "tests/test_session_clean_environment.py::test_session_still_refuses_root"]
+production_tests = ["tests/test_os_packaging_security.py::test_session_and_systemd_boot_integration_are_hardened"]
+vm = ["only-eira-session", "gnome-session-hidden", "session-policy-active", "wayland-session-file"]
+
+[[invariant]]
+id = "I-21"
+section = "§7"
+claim = "Enhedens nøgle laves i TPM'en, kan ikke eksporteres, og en klonet disk kan ikke signere"
+production_tests = ["tests/test_device_key_tpm.py::test_t_a1_f_the_key_is_a_tpm_blob_that_cannot_be_exported", "tests/test_device_key_tpm.py::test_the_key_is_made_in_the_tpm_with_the_installed_openssl_conf", "tests/test_device_key_tpm.py::test_t_a1_b_a_cloned_disk_cannot_sign_on_other_hardware", "tests/test_device_key_tpm.py::test_t_a1_g_enroll_without_a_tpm_writes_nothing_and_exits_2"]
+mutants = ["CTX-A1-2", "CTX-A1-7", "CTX-A1-8"]
+vm = ["tpm-present", "device-key-in-tpm", "rights-sync-sandbox-reaches-tpm"]
