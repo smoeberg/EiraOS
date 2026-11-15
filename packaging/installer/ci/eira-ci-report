@@ -309,13 +309,22 @@ consent_agent_secure() {
 }
 check consent-agent-secure-exec consent_agent_secure
 # A program running as the user cannot become the agent: newgrp/sg fail.
-# The control: sg works for the user's own group, so a failure for
-# eira-consent is the refusal, not a missing sg.
+# The old check, "! runuser ... sg eira-consent", passed because 26.04 has no
+# sg at all (the first VM run of F0c.4 showed it). What proves the point: the
+# only setgid eira-consent file is the agent, and where sg or newgrp exist
+# they work for the user's own group (the control) but not for eira-consent.
 consent_gid_not_obtainable() {
-    command -v sg >/dev/null || { echo "no sg"; return 1; }
+    holders=$(find /usr /opt /etc -xdev -perm -2000 -group eira-consent 2>/dev/null) || {
+        echo "find failed"; return 1; }
+    [ "$holders" = "$AGENT" ] || { echo "setgid eira-consent: ${holders:-none}"; return 1; }
     own=$(id -gn "$USER_NAME") || return 1
-    runuser -u "$USER_NAME" -- sg "$own" -c true </dev/null || { echo "control: sg $own failed"; return 1; }
-    ! runuser -u "$USER_NAME" -- sg eira-consent -c true </dev/null
+    for tool in sg newgrp; do
+        command -v "$tool" >/dev/null || { echo "no $tool"; continue; }
+        [ "$tool" = sg ] || continue  # newgrp needs a terminal; sg is the same program
+        runuser -u "$USER_NAME" -- sg "$own" -c true </dev/null || { echo "control: sg $own failed"; return 1; }
+        ! runuser -u "$USER_NAME" -- sg eira-consent -c true </dev/null || { echo "sg eira-consent worked"; return 1; }
+    done
+    return 0
 }
 check consent-gid-not-obtainable explain consent-gid-not-obtainable consent_gid_not_obtainable
 # §7: the gate takes no consent from anyone but the agent, session or not.
