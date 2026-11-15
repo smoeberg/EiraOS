@@ -161,6 +161,10 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Upload og download af CI-artefakter prøves op til tre gange (30 s og 90 s imellem; genforsøg overskriver et
   halvt oprettet artefakt) gennem `.github/actions/*-artifact-retry`; `tests/test_ci_artifact_retry.py` afviser
   direkte kald (udviklingsplan F1.4).
+- En opgradering lod alle daemons stå stoppet: `dh_installsystemd --no-start` gav en `preinst`, der stopper alle
+  units ved opgradering, og intet startede dem igen. Fundet af den nye opgraderingstest. Nu
+  `--no-start --restart-after-upgrade`: intet stoppes, og `postinst` genstarter de units, der kørte (udviklingsplan
+  F0c.7, gennemgang G-36).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),

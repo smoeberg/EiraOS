@@ -128,13 +128,15 @@ def test_both_vm_jobs_share_the_same_vm_steps():
 
 
 def test_an_upgrade_restarts_every_daemon_and_the_model():
-    # debhelper's postinst (dh_installsystemd --no-start, compat 13) runs
-    # "deb-systemd-invoke try-restart" on every unit the package installs
-    # when $2 (the old version) is set; nothing else may stop them on upgrade.
+    # dh_installsystemd --no-start alone (compat 13) adds a preinst that stops
+    # every unit on upgrade and never starts them again (the first upgrade
+    # run in the VM found all daemons dead). --restart-after-upgrade makes the
+    # postinst try-restart the running units instead, with no stop in preinst.
     # The VM check upgrade-daemons-restarted shows it on the running system.
     rules = (ROOT / "packaging" / "debian" / "rules").read_text(encoding="utf-8")
-    line = next(line for line in rules.splitlines() if "dh_installsystemd" in line and "override" not in line)
-    assert "--no-start" in line
+    line = next(line for line in rules.splitlines()
+                if line.strip().startswith("dh_installsystemd"))
+    assert "--no-start" in line and "--restart-after-upgrade" in line
     assert "--no-restart-after-upgrade" not in line and "--no-stop-on-upgrade" not in line
     control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
     assert "debhelper-compat (= 13)" in control

@@ -152,8 +152,29 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
             up_name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$up_profile" | head -n 1)
             [ -n "$up_name" ] || { echo "no name in ${up_profile##*/}"; return 1; }
             printf '%s\n' "$up_klog" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
-                grep -qF "name=\"$up_name\"" || { echo "not reloaded: $up_name"; return 1; }
+                grep -qF "name=\"$up_name\"" && continue
+            # The kernel may rate-limit its audit lines (no auditd). Then the
+            # loaded policy itself: its raw hash is the new file's compiled.
+            kernel_has_new_policy "$up_name" "$up_profile" && continue
+            echo "not reloaded: $up_name ($up_why)"
+            printf '%s\n' "$up_klog" | grep -c 'apparmor="STATUS"' | sed 's/^/status lines: /'
+            printf '%s\n' "$up_klog" | grep -iE 'suppressed|rate limit' | tail -n 2
+            return 1
         done
+    }
+    kernel_has_new_policy() {
+        up_why="no profile dir"
+        for up_dir in /sys/kernel/security/apparmor/policy/profiles/*/; do
+            [ "$(cat "$up_dir/name" 2>/dev/null)" = "$1" ] || continue
+            up_why="no raw_sha256 in $up_dir: $(ls "$up_dir" | tr '\n' ' ')"
+            [ -r "$up_dir/raw_sha256" ] || return 1
+            up_kernel=$(cat "$up_dir/raw_sha256")
+            up_file=$(apparmor_parser -S "$2" 2>/dev/null | sha256sum | cut -d' ' -f1)
+            up_why="kernel $up_kernel, new file $up_file"
+            [ -n "$up_kernel" ] && [ "$up_kernel" = "$up_file" ]
+            return
+        done
+        return 1
     }
     check upgrade-profiles-reloaded explain upgrade-profiles-reloaded profiles_reloaded
     # The daemons run the new code: postinst restarted each that was running.
