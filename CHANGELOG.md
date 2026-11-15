@@ -100,6 +100,12 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   afvises. AppArmor: hver daemon kan kun oprette sin egen socket og forbinde til dem, den kalder; den fælles logmappe
   `/var/log/eira` er fjernet. Nye tests, mutanter `IPC-DW-3` til `IPC-DW-6` og seks VM-checks (udviklingsplan F1c.3,
   gennemgang G-3, G-35). `fleetd` må stadig tilføje synkroniserede tilstande.
+- Sikkerhedsinvarianterne står nu som et register (`docs/security/invarianter.toml`, 21 invarianter) med testene i
+  udviklings- og produktionstilstand, mutanterne og VM-checkene. Matricen genereres til
+  `docs/reference/sikkerhedsinvarianter.md` (`scripts/invariant_matrix.py`). En test fejler, hvis en test, mutant eller
+  et VM-check, registret nævner, ikke findes, hvis en GATE- eller IPC-mutant ikke hører til en invariant, eller hvis en
+  invariant uden bevis i produktionstilstand ikke nævner hullet. Gatens samtykke, gengivelsesbinding og
+  enkeltudførelse (I-11 til I-13) er kun bevist i udviklingstilstand (udviklingsplan F0c.3, gennemgang G-22).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

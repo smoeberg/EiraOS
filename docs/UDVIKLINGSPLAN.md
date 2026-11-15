@@ -114,7 +114,7 @@ Fra gennemgangen 13.–14. november (G-19–G-25, G-30, G-36, G-38), accepteret 
 |---|---|---|
 | F0c.1 | Paknings-CI'en starter også på `app/**`, `crates/**` og `requirements*.txt`; et samlet slutjob kræver både testene på 26.04 og VM-acceptancen (G-19, G-20) | En PR, der kun ændrer `app/gate/`, kører VM-acceptancen, og en fejlende test gør hele workflowet rødt |
 | F0c.2 | Mutationstest af gaten og IPC-adgangen (fx lag 5–7, `_rendering_intact`, `daemon_write_allowed`, adgangsklasser); kun exit 1 tæller som dræbt, andre exitkoder fejler kørslen (G-21) | `check-mutants.sh` kører `GATE-*` og `IPC-*` i CI; en mutant, der ødelægger importen, afvises |
-| F0c.3 | En liste over sikkerhedsinvarianter med den test, der afprøver dem i produktionstilstand, og VM-checket (G-22); kan blive en del af implementeringsmatricen (plan §4 nr. 3) | Matricen viser for hver invariant: test, mutant, VM-check |
+| F0c.3 | En liste over sikkerhedsinvarianter med den test, der afprøver dem i produktionstilstand, og VM-checket (G-22); kan blive en del af implementeringsmatricen (plan §4 nr. 3) (leveret 15. november: `docs/security/invarianter.toml` med 21 invarianter, genereret matrix i `docs/reference/sikkerhedsinvarianter.md`; I-5 og I-11 til I-13 er kun bevist i udviklingstilstand) | Matricen viser for hver invariant: test, mutant, VM-check |
 | F0c.4 | Negative checks i `eira-ci-report` får en positiv kontrol og `pipefail`; `postinst` indlæser alle profiler, også agentens (G-24, G-25) | Et check fejler, når dets værktøj mangler |
 | F0c.5 | Merge kræver grønne checks: enten GitHub Pro eller et offentligt repo, så branch protection virker. Ellers en skrevet regel om, at ejeren kun merger med grønt slutjob | Ejeren har valgt |
 | F0c.6 | En committet `Cargo.lock` for workspacet, `--locked` i CI og i `debian/rules`; den forældede kommentar i `ci.yml` rettet (G-30) | En ændret afhængighed kræver en ændret låsefil |
@@ -268,7 +268,7 @@ Fra gennemgangene (D-3 til D-11). Det, der kan genereres fra koden, skal generer
 |---|---|---|
 | 1 | `docs/security/` som samlet sikkerhedsmodel | F0b.3 |
 | 2 | `SECURITY.md`: hvordan en sårbarhed rapporteres, og hvad der svares | Leveret 14. november, da repoet blev offentligt: GitHubs private sårbarhedsrapportering, kvittering inden 5 arbejdsdage, vurdering inden 14 dage, koordineret offentliggørelse senest efter 90 dage. Fristerne er et forslag, som ejeren bekræfter |
-| 3 | `docs/reference/implementeringsmatrix.md`: krav → kode → test → VM-check → status | Genereres af kontrakternes statustabeller og VM-checkenes navne; README's statustabel peger herhen |
+| 3 | `docs/reference/implementeringsmatrix.md`: krav → kode → test → VM-check → status | Genereres af kontrakternes statustabeller og VM-checkenes navne; README's statustabel peger herhen. Sikkerhedsdelen findes som `docs/reference/sikkerhedsinvarianter.md` (F0c.3) |
 | 4 | `docs/reference/miljoevariabler.md` | Genereres ved at søge efter `os.environ`/`getenv` i den pakkede kode |
 | 5 | ~~`CONTRIBUTING.md`~~ **Leveret** med "ny beskyttet handling fra ende til anden" (strøm som eksempel), PR-skabelon og en rettet `.cursor`-regel. Issue-skabeloner mangler | Skrevet efter F1b, så den beskriver en vej, der virker |
 
