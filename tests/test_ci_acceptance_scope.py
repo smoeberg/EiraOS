@@ -59,5 +59,5 @@ def test_one_final_job_needs_every_other_job():
 
 def test_the_tests_on_26_04_run_python_rust_and_ui():
     runs = " ".join(step.get("run", "") for step in WORKFLOW["jobs"]["tests-on-ubuntu-26-04"]["steps"])
-    assert "pytest" in runs and "cargo test --workspace" in runs and "npm test" in runs
+    assert "pytest" in runs and "cargo test --locked --workspace" in runs and "npm test" in runs
     assert "alembic" not in runs

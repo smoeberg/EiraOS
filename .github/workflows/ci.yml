@@ -161,18 +161,21 @@ jobs:
       # Every crate in the workspace (eira-core, eira-ipc, eira-stated,
       # eira-consent-agent), with all features and test/example targets.
       - name: Clippy workspace
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - name: Cargo test workspace
-        run: cargo test --workspace -- --nocapture
+        run: cargo test --locked --workspace -- --nocapture
       # EIRA-CONSENT-AGENT: the agent's window against a real (headless)
       # compositor, and its binary links nothing but libc (R-5.5).
       - name: Consent agent window and linkage
         timeout-minutes: 25
         run: |
           scripts/ci/apt-install.sh weston
-          cargo build -p eira-consent-agent --release
-          ! ldd target/release/eira-consent-agent | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
-          cargo build -p eira-consent-agent --features smoke --example window_smoke
+          cargo build --locked -p eira-consent-agent --release
+          # Positive control first (gennemgang G-24): ldd must answer and show libc.
+          libs=$(ldd target/release/eira-consent-agent)
+          printf '%s\n' "$libs" | grep -q 'libc\.so'
+          ! printf '%s\n' "$libs" | grep -Eq "wayland|xkb|fontconfig|gtk|dbus|webkit"
+          cargo build --locked -p eira-consent-agent --features smoke --example window_smoke
           export XDG_RUNTIME_DIR=$(mktemp -d) && chmod 700 "$XDG_RUNTIME_DIR"
           weston --backend=headless --renderer=pixman --socket=wayland-ci --width=1280 --height=800 &
           for i in $(seq 1 20); do [ -S "$XDG_RUNTIME_DIR/wayland-ci" ] && break; sleep 0.5; done
@@ -181,7 +184,7 @@ jobs:
       # Behind a feature so the Android/WASM state core stays syscall-free.
       - name: Phase 0 contract tests (eira-core --features ipc-tokio)
         run: |
-          cargo test -p eira-core --features ipc-tokio -- --nocapture
+          cargo test --locked -p eira-core --features ipc-tokio -- --nocapture
 
   # ui/src-tauri is `exclude`d from the root Cargo workspace, so
   # `cargo test --workspace` above never builds or tests it. This job
@@ -212,13 +215,13 @@ jobs:
       - name: Install Tauri system dependencies (Linux)
         run: |
           scripts/ci/apt-install.sh libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-          # NB: no --locked here: ui/src-tauri/Cargo.lock is gitignored, so
-          # --locked would fail with "cannot create the lock file". The root
-          # workspace lock does not apply (src-tauri is excluded from it).
+          # ui/src-tauri has its own committed Cargo.lock (it is excluded from
+          # the root workspace); --locked makes a changed dependency need a
+          # changed lock file (gennemgang G-30).
       - name: Clippy ui/src-tauri
-        run: cargo clippy --manifest-path ui/src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --locked --manifest-path ui/src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Cargo test ui/src-tauri
-        run: cargo test --manifest-path ui/src-tauri/Cargo.toml -- --nocapture
+        run: cargo test --locked --manifest-path ui/src-tauri/Cargo.toml -- --nocapture
 
   # Frontend: type check + vitest (incl. tests/e2e_canvas.test.ts). These
   # tests were not run in CI before, so UI regressions went unnoticed.
