@@ -23,11 +23,12 @@ LABWC_DEB_PATH=
 KEEP_WORK=0
 CI_UNATTENDED=0
 OFFLINE_REPO=
+UPGRADE_DEB=
 
 usage() {
     cat >&2 <<'USAGE'
 Usage: build_iso.sh --base-iso PATH [--deb PATH] [--labwc-deb PATH] [--output-dir DIR] [--work-dir DIR]
-                    [--keep-work] [--ci-unattended [--offline-repo DIR]]
+                    [--keep-work] [--ci-unattended [--offline-repo DIR] [--upgrade-deb PATH]]
 
 Builds an installable amd64 EiraOS ISO from the official Ubuntu Desktop
 26.04 LTS ISO (fetch and verify it with scripts/fetch_ubuntu_iso.sh).
@@ -35,6 +36,10 @@ Builds an installable amd64 EiraOS ISO from the official Ubuntu Desktop
 --offline-repo: with --ci-unattended, a local apt repository (scripts/
   build_offline_repo.sh) put on the image as /eira/repo, so the VM installs
   without network.
+--upgrade-deb: with --ci-unattended, an upgrade test image: --deb (the base
+  branch's package) is installed, and eira-ci-report then upgrades the
+  running system to this package before its checks (UDVIKLINGSPLAN F0c.7).
+  The offline repo must hold the dependencies of both.
 If --deb is omitted, scripts/build_deb.sh creates the package first.
 If --labwc-deb is omitted, packaging/eira-labwc/build.sh builds eira-labwc
 (labwc >= 0.20.3, required by the session; EIRA-CONSENT-AGENT R-6.1).
@@ -80,6 +85,11 @@ while (($#)); do
         --offline-repo)
             [[ $# -ge 2 ]] || { usage; exit 64; }
             OFFLINE_REPO=$2
+            shift 2
+            ;;
+        --upgrade-deb)
+            [[ $# -ge 2 ]] || { usage; exit 64; }
+            UPGRADE_DEB=$2
             shift 2
             ;;
         -h|--help)
@@ -165,8 +175,16 @@ if [[ $CI_UNATTENDED -eq 1 ]]; then
         cp -r -- "$OFFLINE_REPO" "$STAGE/eira/repo"
     fi
     ISO_NAME=EiraOS-${EIRA_VERSION}-amd64-ci-unattended.iso
+    if [[ -n $UPGRADE_DEB ]]; then
+        [[ -f $UPGRADE_DEB ]] || { echo "Upgrade package not found: $UPGRADE_DEB" >&2; exit 66; }
+        [[ -n $OFFLINE_REPO ]] || { echo "--upgrade-deb needs --offline-repo (the VM has no network)" >&2; exit 64; }
+        install -d -m 0755 "$STAGE/eira/ci/upgrade"
+        install -m 0644 -- "$UPGRADE_DEB" "$STAGE/eira/ci/upgrade/eira-os-core.deb"
+        ISO_NAME=EiraOS-${EIRA_VERSION}-amd64-ci-upgrade.iso
+    fi
 else
     [[ -z $OFFLINE_REPO ]] || { echo "--offline-repo is for the CI image only" >&2; exit 64; }
+    [[ -z $UPGRADE_DEB ]] || { echo "--upgrade-deb is for the CI image only" >&2; exit 64; }
     install -m 0644 -- "$INSTALLER/autoinstall.yaml" "$STAGE/autoinstall.yaml"
     ISO_NAME=EiraOS-${EIRA_VERSION}-amd64.iso
 fi
@@ -269,7 +287,7 @@ commit_match = (
 manifest = {
     "format": "eira-iso-build-info-v2",
     "method": "remastered Ubuntu Desktop ISO + autoinstall",
-    "variant": "ci-unattended" if "ci-unattended" in iso_path.name else "installer",
+    "variant": "ci-upgrade" if "ci-upgrade" in iso_path.name else ("ci-unattended" if "ci-unattended" in iso_path.name else "installer"),
     "source_commit": source_commit,
     "source_commit_verified": source_commit != "unknown",
     "package_build_info_present": bool(package_info),

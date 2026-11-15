@@ -52,6 +52,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   udgivelsesscriptet bruger `--locked`. `tests/test_cargo_locked.py` holder det. Den forældede kommentar om en
   gitignoreret låsefil i `ci.yml` er rettet, og agentens `ldd`-check i CI har fået en positiv kontrol (udviklingsplan
   F0c.6, gennemgang G-30).
+- Opgraderingstest i VM (`vm-upgrade-acceptance`): på en pull request bygges også base-grenens pakke. Den installeres,
+  og `eira-ci-report` opgraderer det kørende system til pull requestens pakke (med `+ci<n>` i versionen, så dpkg ser
+  den som nyere) og kører derefter alle checks. Fem nye checks viser, at opgraderingen lykkedes, at versionen er den nye,
+  at AppArmor-profilerne på disk og i kernen er de nye, og at daemonerne blev genstartet (udviklingsplan F0c.7,
+  gennemgang G-36, G-38).
 
 ### Gate Kernel og sikkerhed
 - Gate: sessioner uden udløbstidspunkt er ikke længere gyldige (fail-closed).
@@ -156,6 +161,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Upload og download af CI-artefakter prøves op til tre gange (30 s og 90 s imellem; genforsøg overskriver et
   halvt oprettet artefakt) gennem `.github/actions/*-artifact-retry`; `tests/test_ci_artifact_retry.py` afviser
   direkte kald (udviklingsplan F1.4).
+- En opgradering genstarter daemonerne og modellen, der kører (`systemctl try-restart` i `postinst`). Med
+  `dh_installsystemd --no-start` blev intet genstartet, så den gamle kode kørte videre ved siden af de nye filer
+  (udviklingsplan F0c.7).
 
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),

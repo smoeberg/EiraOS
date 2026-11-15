@@ -87,6 +87,83 @@ no_kernel_denials() {
 
 say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME") uptime=$(cut -d' ' -f1 /proc/uptime)s"
 check eira.target wait_for 300 systemctl is-active --quiet eira.target
+
+# Upgrade test (UDVIKLINGSPLAN F0c.7, gennemgang G-36, G-38). The upgrade
+# image installs the base branch's package and carries the pull request's in
+# /eira/ci/upgrade (scripts/build_iso.sh --upgrade-deb). Here, on the running
+# system, the new package is installed over the old the way apt would, and
+# then every check below runs against the upgraded system.
+UPGRADE_DIR=/var/lib/eira-install/ci/upgrade
+if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
+    old_version=$(dpkg-query -W -f='${Version}' eira-os-core 2>/dev/null)
+    new_version=$(dpkg-deb -f "$UPGRADE_DIR/eira-os-core.deb" Version)
+    say "mode upgrade from $old_version to $new_version"
+    upgrade_since=$(date '+%Y-%m-%d %H:%M:%S')
+    upgrade_uptime=$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)
+    sleep 1
+    # Dependencies a new version adds come from the image's offline repo,
+    # as apt would fetch them from the archive.
+    upgrade_list=/etc/apt/sources.list.d/eira-ci-upgrade.list
+    upgrade_log=/var/log/eira-ci-upgrade.log
+    echo "deb [trusted=yes] file:/var/lib/eira-install/repo ./" > "$upgrade_list"
+    chmod -R a+rX /var/lib/eira-install/repo "$UPGRADE_DIR"
+    upgrade() {
+        apt-get -o DPkg::Lock::Timeout=600 -o Dir::Etc::sourcelist="$upgrade_list" -o Dir::Etc::sourceparts=- update &&
+            DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Lock::Timeout=600 \
+                -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+                install "$UPGRADE_DIR/eira-os-core.deb"
+    }
+    upgrade >"$upgrade_log" 2>&1
+    upgrade_status=$?
+    rm -f "$upgrade_list"
+    [ "$upgrade_status" -eq 0 ] ||
+        say "diag upgrade-apt: $(tail -n 12 "$upgrade_log" | tr '\n' ' ' | cut -c1-900)"
+    check upgrade-apt-succeeded [ "$upgrade_status" -eq 0 ]
+    upgraded_version_is_new() {
+        now=$(dpkg-query -W -f='${Version} ${db:Status-Abbrev}' eira-os-core) || return 1
+        echo "installed: $now"
+        [ "$now" = "$new_version ii " ] && dpkg --compare-versions "$new_version" gt "$old_version"
+    }
+    check upgrade-version-is-new explain upgrade-version-is-new upgraded_version_is_new
+    # G-38: the profiles on disk are the new package's (an unmodified conffile
+    # is replaced), and the kernel has the new ones: postinst replaced each.
+    upgrade_tree=$(mktemp -d)
+    dpkg-deb -x "$UPGRADE_DIR/eira-os-core.deb" "$upgrade_tree"
+    profiles_are_new() {
+        found=0
+        for profile in "$upgrade_tree"/etc/apparmor.d/*; do
+            [ -f "$profile" ] || continue
+            found=$((found + 1))
+            cmp -s "$profile" "/etc/apparmor.d/${profile##*/}" ||
+                { echo "differs: ${profile##*/}"; return 1; }
+        done
+        echo "$found profiles"
+        [ "$found" -gt 0 ]
+    }
+    check upgrade-profiles-are-new explain upgrade-profiles-are-new profiles_are_new
+    profiles_reloaded() {
+        log=$(journalctl -k --since "$upgrade_since" --no-pager 2>/dev/null) || return 1
+        for profile in "$upgrade_tree"/etc/apparmor.d/*; do
+            [ -f "$profile" ] || continue
+            # The attachment path is the profile's name (/usr/bin/eira-stated).
+            name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$profile" | head -n 1)
+            [ -n "$name" ] || { echo "no name in ${profile##*/}"; return 1; }
+            printf '%s\n' "$log" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
+                grep -qF "name=\"$name\"" || { echo "not reloaded: $name"; return 1; }
+        done
+    }
+    check upgrade-profiles-reloaded explain upgrade-profiles-reloaded profiles_reloaded
+    # The daemons run the new code: postinst restarted each that was running.
+    daemons_restarted() {
+        for daemon in $DAEMONS; do
+            wait_for 60 test -S "/run/eira/$daemon.sock" || { echo "no socket: $daemon"; return 1; }
+            since=$(systemctl show -p ActiveEnterTimestampMonotonic --value "eira-$daemon.service")
+            [ $((since / 1000000)) -ge "$upgrade_uptime" ] || { echo "not restarted: $daemon"; return 1; }
+        done
+    }
+    check upgrade-daemons-restarted explain upgrade-daemons-restarted daemons_restarted
+    rm -rf "$upgrade_tree"
+fi
 for daemon in $DAEMONS; do
     check "daemon-$daemon" systemctl is-active --quiet "eira-$daemon.service"
     check "socket-$daemon" test -S "/run/eira/$daemon.sock"

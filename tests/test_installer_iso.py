@@ -221,6 +221,39 @@ def test_build_iso_ci_variant_is_unattended_and_separately_named(tmp_path):
     assert grub.count(" autoinstall console=tty0 console=ttyS0,115200 ---") == 1
 
 
+@needs_xorriso
+def test_build_iso_upgrade_variant_carries_the_new_package(tmp_path):
+    # UDVIKLINGSPLAN F0c.7: --deb is installed, --upgrade-deb is what
+    # eira-ci-report upgrades the running system to.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "Packages.gz").write_bytes(b"")
+    new = tmp_path / "new.deb"
+    new.write_bytes(b"the new package")
+    iso, listing, _ = _build(tmp_path, "--ci-unattended", "--offline-repo", str(repo),
+                             "--upgrade-deb", str(new))
+    assert iso.name == f"EiraOS-{_version()}-amd64-ci-upgrade.iso"
+    assert "'/eira/ci/upgrade/eira-os-core.deb'" in listing
+    assert "'/eira/eira-os-core.deb'" in listing
+    assert "'/eira/repo/Packages.gz'" in listing
+
+
+@needs_xorriso
+def test_build_iso_upgrade_needs_the_ci_image_and_a_repo(tmp_path):
+    new = tmp_path / "new.deb"
+    new.write_bytes(b"x")
+    base = _base_iso(tmp_path)
+    deb = tmp_path / "eira-os-core.deb"
+    deb.write_bytes(b"x")
+    for extra in (["--upgrade-deb", str(new)], ["--ci-unattended", "--upgrade-deb", str(new)]):
+        result = subprocess.run(
+            ["bash", str(BUILD_ISO), "--base-iso", str(base), "--deb", str(deb), "--labwc-deb", str(deb),
+             "--output-dir", str(tmp_path / "out"), *extra],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 64, (extra, result.stderr)
+
+
 def test_build_iso_requires_a_base_iso(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "EIRA_BASE_ISO"}
     result = subprocess.run(
