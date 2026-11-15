@@ -297,3 +297,35 @@ def test_desktop_user_reaches_sockets_but_not_daemon_data() -> None:
     from app.ipc import socket_security
 
     assert socket_security.SOCKET_GROUP == "eira-clients"
+
+
+def test_postinst_loads_every_apparmor_profile_the_package_installs():
+    # Gennemgang G-25: the consent agent's profile is under usr.lib, which the
+    # old usr.bin.eira-* glob missed. An upgrade without a reboot then kept the
+    # old profile in the kernel.
+    import fnmatch
+    import re
+
+    rules = (REPO_ROOT / "packaging" / "debian" / "rules").read_text(encoding="utf-8")
+    postinst = (REPO_ROOT / "packaging" / "debian" / "postinst").read_text(encoding="utf-8")
+    installed = set(re.findall(r"etc/apparmor\.d/([A-Za-z0-9._-]+)", rules))
+    # The daemons' profiles are copied as a directory (packaging/apparmor/*).
+    installed |= {p.name for p in (REPO_ROOT / "packaging" / "apparmor").iterdir() if p.is_file()}
+    loop = re.search(r"for profile in ([^;]+); do", postinst)
+    assert loop, "postinst has no profile loop"
+    globs = [g.removeprefix("/etc/apparmor.d/") for g in loop.group(1).split()]
+    assert installed
+    for name in sorted(installed):
+        assert any(fnmatch.fnmatch(name, g) for g in globs), name
+
+
+def test_no_vm_check_is_a_bare_negated_pipeline():
+    # Gennemgang G-24: "! cmd | grep" passes when cmd is missing or fails (dash
+    # has no pipefail). Negative checks go through a helper with a positive
+    # control (not_member, user_cannot, no_kernel_denials, ...).
+    import re
+
+    report = (REPO_ROOT / "packaging" / "installer" / "ci" / "eira-ci-report").read_text(encoding="utf-8")
+    offenders = [line for line in report.splitlines()
+                 if line.startswith("check ") and re.search(r"!\s[^|&;]*\|", line)]
+    assert offenders == []
