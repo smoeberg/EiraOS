@@ -92,4 +92,9 @@ override_dh_auto_install:
 	install -m 0644 packaging/audit/eira-audit-seal.service debian/eira-os-core/usr/lib/systemd/system/
 
 override_dh_installsystemd:
-	dh_installsystemd --no-start
+	# --no-start: nothing starts at install; eira.target does at boot. Without
+	# --restart-after-upgrade, --no-start made debhelper's preinst STOP every
+	# unit on an upgrade and nothing started them again: the upgrade test
+	# (F0c.7) found every daemon dead after an upgrade. With it, the preinst
+	# stops nothing and the postinst try-restarts the units that were running.
+	dh_installsystemd --no-start --restart-after-upgrade

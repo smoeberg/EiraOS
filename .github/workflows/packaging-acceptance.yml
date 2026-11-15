@@ -19,10 +19,18 @@ permissions:
 jobs:
   # The package is built on the target release so it links against
   # Ubuntu 26.04's libraries (WebKitGTK, glibc) and Python.
+  #
+  # On a pull request it is built twice: from the pull request (with a CI
+  # version suffix, so dpkg sees it as newer) and from the base branch, which
+  # vm-upgrade-acceptance installs and then upgrades (UDVIKLINGSPLAN F0c.7).
   build-deb:
     runs-on: ubuntu-latest
     container: ubuntu:26.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ github.event_name == 'pull_request' && fromJSON('["pr", "base"]') || fromJSON('["pr"]') }}
     steps:
       # Only for scripts/ci/apt-install.sh; git is not installed yet, so
       # this is a plain download. The real checkout follows below.
@@ -41,6 +49,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.target == 'base' && github.event.pull_request.base.sha || '' }}
 
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -66,6 +76,8 @@ jobs:
           DEB_BUILD_OPTIONS: nocheck
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
+          # The pull request's package is newer than the base branch's.
+          EIRA_DEB_VERSION_SUFFIX: ${{ matrix.target == 'pr' && format('+ci{0}', github.run_number) || '' }}
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           scripts/build_deb.sh --output-dir dist
@@ -89,7 +101,7 @@ jobs:
       - name: Upload Debian package and inspection evidence
         uses: ./.github/actions/upload-artifact-retry
         with:
-          name: eira-deb-ubuntu-26.04
+          name: eira-deb-ubuntu-26.04${{ matrix.target == 'base' && '-base' || '' }}
           path: |
             dist/eira-os-core.deb
             dist/eira-os-core.contents.txt
@@ -197,12 +209,17 @@ jobs:
     needs: [build-deb, build-eira-labwc]
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      # Read by the VM steps that vm-upgrade-acceptance shares (YAML anchors).
+      CI_ISO_GLOB: dist/EiraOS-*-amd64-ci-unattended.iso
+      VM_LOGS_NAME: vm-acceptance-logs
     steps:
       # The job peaks at ~30 GB (base ISO, two ISOs, offline repo). Runners
       # differ: #191 had 91 GB free, #208 (ubuntu-26.04 image, 72 GB disk) had
       # 16 GB and xorriso ran out of space. Clear the preinstalled toolchains
       # this job never uses (~2.5 min) only when there is less than 40 GB free.
-      - name: Make sure there is disk space
+      - &disk-space
+        name: Make sure there is disk space
         run: |
           df -h /
           free_gb=$(df --output=avail -BG / | tail -n 1 | tr -dc '0-9')
@@ -234,13 +251,15 @@ jobs:
           name: eira-labwc-ubuntu-26.04
           path: dist
 
-      - name: Install ISO tools
+      - &iso-tools
+        name: Install ISO tools
         run: |
           scripts/ci/apt-install.sh xorriso gnupg curl
 
       # Restored by prefix; saved again only when the verified ISO changed
       # (a point release), not on every run.
-      - name: Restore Ubuntu base ISO cache
+      - &iso-cache-restore
+        name: Restore Ubuntu base ISO cache
         id: iso-cache
         uses: actions/cache/restore@v4
         with:
@@ -248,14 +267,16 @@ jobs:
           key: ubuntu-26.04-desktop-none
           restore-keys: ubuntu-26.04-desktop-
 
-      - name: Fetch and verify Ubuntu Desktop 26.04 ISO
+      - &iso-fetch
+        name: Fetch and verify Ubuntu Desktop 26.04 ISO
         id: base
         run: |
           iso=$(scripts/fetch_ubuntu_iso.sh .cache/ubuntu-iso)
           echo "iso=$iso" >> "$GITHUB_OUTPUT"
           echo "key=ubuntu-26.04-desktop-$(basename "$iso" .iso)-$(stat -c %s "$iso")" >> "$GITHUB_OUTPUT"
 
-      - name: Save Ubuntu base ISO cache
+      - &iso-cache-save
+        name: Save Ubuntu base ISO cache
         if: steps.iso-cache.outputs.cache-matched-key != steps.base.outputs.key
         uses: actions/cache/save@v4
         with:
@@ -313,7 +334,8 @@ jobs:
           rm -rf .cache/ubuntu-iso offline-repo dist/EiraOS-*-amd64.iso
           df -h .
 
-      - name: Install QEMU and enable KVM
+      - &qemu
+        name: Install QEMU and enable KVM
         run: |
           scripts/ci/apt-install.sh qemu-system-x86 qemu-utils ovmf socat netpbm swtpm
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -322,7 +344,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
 
-      - name: Install EiraOS into a blank disk (UEFI)
+      - &vm-install
+        name: Install EiraOS into a blank disk (UEFI)
         run: |
           cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
           # cache=unsafe below: the disk is thrown away after the job, and the
@@ -342,7 +365,7 @@ jobs:
             -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
             -drive if=pflash,format=raw,file=vars.fd \
             -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
-            -cdrom dist/EiraOS-*-amd64-ci-unattended.iso -boot order=d \
+            -cdrom $CI_ISO_GLOB -boot order=d \
             -device virtio-vga -display none -nic none \
             -serial file:install-serial.log -no-reboot || status=$?
           echo "installer VM exited with ${status:-0} (124 = timeout)"
@@ -359,7 +382,8 @@ jobs:
           fi
           [ "${status:-0}" -eq 0 ]
 
-      - name: Boot installed system and run acceptance report
+      - &vm-boot
+        name: Boot installed system and run acceptance report
         run: |
           # A software TPM 2.0 for the device key checks (EIRA-CONTEXT §5.0).
           mkdir -p tpm
@@ -375,11 +399,12 @@ jobs:
           tr -d '\r' < boot-serial.log | grep -a "EIRA-CI" | tee acceptance.txt
           grep -q "EIRA-CI RESULT PASS" acceptance.txt || { tr -d '\r' < boot-serial.log | tail -n 400; exit 1; }
 
-      - name: Upload serial logs
+      - &vm-logs
+        name: Upload serial logs
         if: always()
         uses: ./.github/actions/upload-artifact-retry
         with:
-          name: vm-acceptance-logs
+          name: ${{ env.VM_LOGS_NAME }}
           path: |
             install-serial.log
             boot-serial.log
@@ -388,6 +413,78 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Upgrade test (UDVIKLINGSPLAN F0c.7, gennemgang G-36, G-38): the base
+  # branch's package is installed, eira-ci-report upgrades the running system
+  # to the pull request's package, and then the same checks run. It also
+  # checks that the AppArmor profiles on disk and in the kernel are the new
+  # ones and that the daemons were restarted. The VM steps are shared with
+  # vm-install-acceptance (YAML anchors). eira-labwc is the pull request's in
+  # both (it changes rarely; its own build tests it).
+  vm-upgrade-acceptance:
+    if: github.event_name == 'pull_request'
+    needs: [build-deb, build-eira-labwc]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CI_ISO_GLOB: dist/EiraOS-*-amd64-ci-upgrade.iso
+      VM_LOGS_NAME: vm-upgrade-logs
+    steps:
+      - *disk-space
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download the base branch's package (installed)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: eira-deb-ubuntu-26.04-base
+          path: dist
+
+      - name: Download the pull request's package (the upgrade)
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: eira-deb-ubuntu-26.04
+          path: dist/upgrade
+
+      - name: Download eira-labwc package
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: eira-labwc-ubuntu-26.04
+          path: dist
+
+      - name: The upgrade is newer than the base
+        run: |
+          old=$(dpkg-deb -f dist/eira-os-core.deb Version)
+          new=$(dpkg-deb -f dist/upgrade/eira-os-core.deb Version)
+          echo "base $old -> pull request $new"
+          dpkg --compare-versions "$new" gt "$old"
+
+      - *iso-tools
+      - *iso-cache-restore
+      - *iso-fetch
+      - *iso-cache-save
+
+      - name: Build the upgrade CI ISO
+        run: |
+          # The offline repo holds the dependencies of both packages.
+          EIRA_APT_MIRROR=http://azure.archive.ubuntu.com/ubuntu/ \
+            scripts/build_offline_repo.sh --deb dist/eira-os-core.deb --deb dist/upgrade/eira-os-core.deb \
+              --deb dist/eira-labwc.deb --output offline-repo
+          scripts/build_iso.sh --base-iso "${{ steps.base.outputs.iso }}" \
+            --deb dist/eira-os-core.deb --labwc-deb dist/eira-labwc.deb --output-dir dist \
+            --ci-unattended --offline-repo offline-repo --upgrade-deb dist/upgrade/eira-os-core.deb
+          rm -rf .cache/ubuntu-iso offline-repo
+          df -h .
+
+      - *qemu
+      - *vm-install
+      - *vm-boot
+
+      - name: The upgrade ran before the checks
+        run: grep -q "EIRA-CI mode upgrade from" acceptance.txt
+
+      - *vm-logs
+
   # The one verdict for a PR (UDVIKLINGSPLAN F0c.1, review G-19). The package
   # is built with nocheck so the ISO is not held up by the test suites; they
   # run in parallel in tests-on-ubuntu-26-04 instead. This job is red unless
@@ -395,12 +492,26 @@ jobs:
   # green workflow means "the code is right and it works installed".
   acceptance:
     if: always()
-    needs: [build-deb, tests-on-ubuntu-26-04, build-eira-labwc, vm-install-acceptance]
+    needs: [build-deb, tests-on-ubuntu-26-04, build-eira-labwc, vm-install-acceptance, vm-upgrade-acceptance]
     runs-on: ubuntu-latest
     steps:
       - name: All acceptance jobs passed
         env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
         run: |
-          echo "$RESULTS"
-          echo "$RESULTS" | python3 -c 'import json,sys; r=json.load(sys.stdin); sys.exit(0 if r and all(x == "success" for x in r) else 1)'
+          echo "$NEEDS"
+          # The upgrade test needs a base branch: it is skipped only outside
+          # a pull request (workflow_dispatch). Everything else must pass.
+          echo "$NEEDS" | python3 -c '
+          import json, os, sys
+          needs = json.load(sys.stdin)
+          ok = bool(needs)
+          for job, value in needs.items():
+              result = value["result"]
+              allowed = {"success"}
+              if job == "vm-upgrade-acceptance" and os.environ["EVENT"] != "pull_request":
+                  allowed.add("skipped")
+              print(job, result)
+              ok = ok and result in allowed
+          sys.exit(0 if ok else 1)'

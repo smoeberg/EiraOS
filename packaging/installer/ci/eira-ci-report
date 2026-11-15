@@ -87,6 +87,121 @@ no_kernel_denials() {
 
 say "BEGIN $(. /etc/os-release && echo "$PRETTY_NAME") uptime=$(cut -d' ' -f1 /proc/uptime)s"
 check eira.target wait_for 300 systemctl is-active --quiet eira.target
+
+# Upgrade test (UDVIKLINGSPLAN F0c.7, gennemgang G-36, G-38). The upgrade
+# image installs the base branch's package and carries the pull request's in
+# /eira/ci/upgrade (scripts/build_iso.sh --upgrade-deb). Here, on the running
+# system, the new package is installed over the old the way apt would, and
+# then every check below runs against the upgraded system.
+UPGRADE_DIR=/var/lib/eira-install/ci/upgrade
+if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
+    old_version=$(dpkg-query -W -f='${Version}' eira-os-core 2>/dev/null)
+    new_version=$(dpkg-deb -f "$UPGRADE_DIR/eira-os-core.deb" Version)
+    say "mode upgrade from $old_version to $new_version"
+    old_prerm=$(mktemp)
+    cp /var/lib/dpkg/info/eira-os-core.prerm "$old_prerm" 2>/dev/null || echo "(no prerm)" > "$old_prerm"
+    upgrade_since=$(date '+%Y-%m-%d %H:%M:%S')
+    upgrade_uptime=$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)
+    sleep 1
+    # Dependencies a new version adds come from the image's offline repo,
+    # as apt would fetch them from the archive.
+    upgrade_list=/etc/apt/sources.list.d/eira-ci-upgrade.list
+    upgrade_log=/var/log/eira-ci-upgrade.log
+    echo "deb [trusted=yes] file:/var/lib/eira-install/repo ./" > "$upgrade_list"
+    chmod -R a+rX /var/lib/eira-install/repo "$UPGRADE_DIR"
+    upgrade() {
+        apt-get -o DPkg::Lock::Timeout=600 -o Dir::Etc::sourcelist="$upgrade_list" -o Dir::Etc::sourceparts=- update &&
+            DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Lock::Timeout=600 \
+                -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+                install "$UPGRADE_DIR/eira-os-core.deb"
+    }
+    upgrade >"$upgrade_log" 2>&1
+    upgrade_status=$?
+    rm -f "$upgrade_list"
+    [ "$upgrade_status" -eq 0 ] ||
+        say "diag upgrade-apt: $(tail -n 12 "$upgrade_log" | tr '\n' ' ' | cut -c1-900)"
+    check upgrade-apt-succeeded [ "$upgrade_status" -eq 0 ]
+    # Helper variables are up_*: check and explain use name, log and status.
+    upgraded_version_is_new() {
+        up_now=$(dpkg-query -W -f='${Version} ${db:Status-Abbrev}' eira-os-core) || return 1
+        echo "installed: $up_now"
+        [ "$up_now" = "$new_version ii " ] && dpkg --compare-versions "$new_version" gt "$old_version"
+    }
+    check upgrade-version-is-new explain upgrade-version-is-new upgraded_version_is_new
+    # G-38: the profiles on disk are the new package's (an unmodified conffile
+    # is replaced), and the kernel has the new ones: postinst replaced each.
+    upgrade_tree=$(mktemp -d)
+    dpkg-deb -x "$UPGRADE_DIR/eira-os-core.deb" "$upgrade_tree"
+    profiles_are_new() {
+        up_found=0
+        for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
+            [ -f "$up_profile" ] || continue
+            up_found=$((up_found + 1))
+            cmp -s "$up_profile" "/etc/apparmor.d/${up_profile##*/}" ||
+                { echo "differs: ${up_profile##*/}"; return 1; }
+        done
+        echo "$up_found profiles"
+        [ "$up_found" -gt 0 ]
+    }
+    check upgrade-profiles-are-new explain upgrade-profiles-are-new profiles_are_new
+    profiles_reloaded() {
+        up_klog=$(journalctl -k --since "$upgrade_since" --no-pager 2>/dev/null) || { echo "no kernel log"; return 1; }
+        for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
+            [ -f "$up_profile" ] || continue
+            # The attachment path is the profile's name (/usr/bin/eira-stated).
+            up_name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$up_profile" | head -n 1)
+            [ -n "$up_name" ] || { echo "no name in ${up_profile##*/}"; return 1; }
+            printf '%s\n' "$up_klog" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
+                grep -qF "name=\"$up_name\"" && continue
+            # The kernel may rate-limit its audit lines (no auditd). Then the
+            # loaded policy itself: its raw hash is the new file's compiled.
+            kernel_has_new_policy "$up_name" "$up_profile" && continue
+            echo "not reloaded: $up_name ($up_why)"
+            printf '%s\n' "$up_klog" | grep -c 'apparmor="STATUS"' | sed 's/^/status lines: /'
+            printf '%s\n' "$up_klog" | grep -iE 'suppressed|rate limit' | tail -n 2
+            return 1
+        done
+    }
+    kernel_has_new_policy() {
+        up_why="no profile dir"
+        for up_dir in /sys/kernel/security/apparmor/policy/profiles/*/; do
+            [ "$(cat "$up_dir/name" 2>/dev/null)" = "$1" ] || continue
+            up_why="no raw_sha256 in $up_dir: $(ls "$up_dir" | tr '\n' ' ')"
+            [ -r "$up_dir/raw_sha256" ] || return 1
+            up_kernel=$(cat "$up_dir/raw_sha256")
+            up_file=$(apparmor_parser -S "$2" 2>/dev/null | sha256sum | cut -d' ' -f1)
+            up_why="kernel $up_kernel, new file $up_file"
+            [ -n "$up_kernel" ] && [ "$up_kernel" = "$up_file" ]
+            return
+        done
+        return 1
+    }
+    check upgrade-profiles-reloaded explain upgrade-profiles-reloaded profiles_reloaded
+    # The daemons run the new code: postinst restarted each that was running.
+    daemons_restarted() {
+        for up_daemon in $DAEMONS; do
+            wait_for 60 test -S "/run/eira/$up_daemon.sock" || { echo "no socket: $up_daemon"; return 1; }
+            up_since=$(systemctl show -p ActiveEnterTimestampMonotonic --value "eira-$up_daemon.service")
+            [ $((up_since / 1000000)) -ge "$upgrade_uptime" ] || { echo "not restarted: $up_daemon"; return 1; }
+        done
+    }
+    if ! check_ok=$(daemons_restarted 2>&1); then
+        say "upgrade-daemons-restarted FAIL"
+        failed=1
+        say "diag upgrade-daemons-restarted: $check_ok"
+        for up_daemon in $DAEMONS; do
+            say "diag upgrade-unit-$up_daemon: $(systemctl show -p ActiveState,SubState,Result,NRestarts,ActiveEnterTimestampMonotonic,InactiveEnterTimestampMonotonic "eira-$up_daemon.service" | tr '\n' ' ')"
+        done
+        say "diag upgrade-uptime: start=$upgrade_uptime now=$(cut -d' ' -f1 /proc/uptime)"
+        say "diag upgrade-stated-journal: $(journalctl -b -u eira-stated.service --since "$upgrade_since" -o cat --no-pager 2>&1 | tail -n 12 | tr '\n' ' ' | cut -c1-900)"
+        say "diag upgrade-systemd: $(journalctl -b _PID=1 --since "$upgrade_since" -o cat --no-pager 2>&1 | grep -i eira | tail -n 15 | tr '\n' ' ' | cut -c1-1200)"
+        say "diag upgrade-old-prerm: $(grep -n 'systemd\|stop\|deb-systemd' "$old_prerm" 2>&1 | tr '\n' ' ' | cut -c1-900)"
+        say "diag upgrade-apt-tail: $(tail -n 25 "$upgrade_log" | tr '\n' ' ' | cut -c1-1500)"
+    else
+        say "upgrade-daemons-restarted PASS"
+    fi
+    rm -rf "$upgrade_tree"
+fi
 for daemon in $DAEMONS; do
     check "daemon-$daemon" systemctl is-active --quiet "eira-$daemon.service"
     check "socket-$daemon" test -S "/run/eira/$daemon.sock"

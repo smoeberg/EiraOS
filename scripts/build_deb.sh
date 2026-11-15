@@ -55,6 +55,25 @@ rm -rf -- \
 find "$SOURCE_ROOT" -type d -name __pycache__ -prune -exec rm -rf -- {} +
 cp -a -- "${SOURCE_ROOT}/packaging/debian" "${SOURCE_ROOT}/debian"
 
+# A CI build can carry a version suffix (EIRA_DEB_VERSION_SUFFIX=+ci123), so
+# the upgrade test installs a package that dpkg sees as newer than the base
+# branch's (UDVIKLINGSPLAN F0c.7). Only the build copy's changelog changes.
+SUFFIX=${EIRA_DEB_VERSION_SUFFIX:-}
+if [[ -n $SUFFIX ]]; then
+    [[ $SUFFIX =~ ^\+[a-z0-9.~+]+$ ]] || { echo "EIRA_DEB_VERSION_SUFFIX must look like +ci123" >&2; exit 64; }
+    changelog=${SOURCE_ROOT}/debian/changelog
+    maintainer=$(dpkg-parsechangelog -l "$changelog" -S Maintainer)
+    distribution=$(dpkg-parsechangelog -l "$changelog" -S Distribution)
+    {
+        printf 'eira-os-core (%s%s) %s; urgency=medium\n\n' "$DEB_VERSION" "$SUFFIX" "$distribution"
+        printf '  * CI build of %s (EIRA_DEB_VERSION_SUFFIX).\n\n' "$DEB_VERSION"
+        printf ' -- %s  %s\n\n' "$maintainer" "$(date -R)"
+        cat -- "$changelog"
+    } > "$changelog.new"
+    mv -- "$changelog.new" "$changelog"
+    DEB_VERSION=$DEB_VERSION$SUFFIX
+fi
+
 (
     cd -- "$SOURCE_ROOT"
     DPKG_BUILD_ARGS=(--build=binary --no-sign)

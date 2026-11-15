@@ -40,7 +40,13 @@ IMAGE=${EIRA_OFFLINE_IMAGE:-ubuntu:26.04}
 mkdir -p -- "$OUT"
 OUT=$(realpath -- "$OUT")
 MOUNTS=()
-for deb in "${DEBS[@]}"; do MOUNTS+=(-v "$deb:/in/$(basename -- "$deb"):ro"); done
+# Numbered, so two packages with the same file name (the base branch's and
+# the pull request's eira-os-core.deb, UDVIKLINGSPLAN F0c.7) do not collide.
+n=0
+for deb in "${DEBS[@]}"; do
+    n=$((n + 1))
+    MOUNTS+=(-v "$deb:/in/$n-$(basename -- "$deb"):ro")
+done
 
 docker run --rm \
     -e SESSION_PACKAGES="$SESSION_PACKAGES" -e MIRRORS="$MIRRORS" -e HOST_UID="$(id -u)" \
