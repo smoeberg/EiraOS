@@ -27,6 +27,13 @@ CARGO = re.compile(r"\bcargo (build|test|clippy|run|check)\b[^\n]*")
 
 @pytest.mark.parametrize("lock", ["Cargo.lock", "ui/src-tauri/Cargo.lock"])
 def test_the_lock_file_is_committed(lock):
+    assert (ROOT / lock).is_file(), f"{lock} is missing"
+    inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=ROOT,
+                            capture_output=True, text=True)
+    if inside.returncode != 0:
+        # Some CI jobs test an exported tree without .git; there the file
+        # being in the tree is the evidence that it was committed.
+        return
     tracked = subprocess.run(["git", "ls-files", "--error-unmatch", lock], cwd=ROOT,
                              capture_output=True, text=True)
     assert tracked.returncode == 0, f"{lock} is not committed"
