@@ -9,9 +9,10 @@ export DEB_CARGO_CRATE=eira-spatial-desktop
 override_dh_auto_build:
 	npm ci --prefix ui --ignore-scripts
 	npm run build --prefix ui
-	cd ui && npm run tauri -- build --no-bundle
+	# --locked: the committed lock files decide every dependency (gennemgang G-30).
+	cd ui && npm run tauri -- build --no-bundle -- --locked
 	# EIRA-CONSENT-AGENT: the only process the gate takes decisions from.
-	cargo build --release -p eira-consent-agent
+	cargo build --release --locked -p eira-consent-agent
 
 # Debian's nocheck skips the suites (CI runs them in a parallel job on 26.04).
 override_dh_auto_test:

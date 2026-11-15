@@ -78,8 +78,8 @@ PY
     npm ci --prefix ui --ignore-scripts
     npm test --prefix ui
     npm run build --prefix ui
-    cargo test --workspace --all-targets
-    cargo test --manifest-path ui/src-tauri/Cargo.toml --all-targets
+    cargo test --locked --workspace --all-targets
+    cargo test --locked --manifest-path ui/src-tauri/Cargo.toml --all-targets
     gradle --project-dir android test
     apparmor_parser -Q -q packaging/apparmor/usr.bin.eira-*
     systemd-analyze verify systemd/eira-*.service systemd/eira.target

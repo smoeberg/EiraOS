@@ -44,7 +44,7 @@ def test_release_gate_has_no_unverified_bypass() -> None:
     assert "EIRA_RELEASE_GATE=1" in release
     assert "gpg --batch --verify" in release
     assert "sha3_256" in release
-    assert "cargo test --workspace" in release
+    assert "cargo test --locked --workspace" in release
     assert "gradle --project-dir android test" in release
     assert "apparmor_parser" in release
 

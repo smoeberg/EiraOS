@@ -128,7 +128,7 @@ jobs:
 
       # The Rust workspace includes the consent agent that is in the package.
       - name: Rust tests
-        run: cargo test --workspace --all-features
+        run: cargo test --locked --workspace --all-features
 
       - name: UI tests
         run: |

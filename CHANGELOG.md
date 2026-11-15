@@ -42,6 +42,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Paknings-acceptancen kører nu på alle ændringer undtagen dokumentation (`paths-ignore` i stedet for en liste,
   der manglede `app/**` og `crates/**`), testene på 26.04 kører også Rust-workspacet, og et samlet slutjob `acceptance`
   er kun grønt, når både testene og VM-acceptancen bestod (udviklingsplan F0c.1, gennemgang G-19, G-20).
+- Rust bygges med låste afhængigheder: workspacets `Cargo.lock` er committet (Tauri-skallens var det allerede), og
+  alle `cargo build`, `test` og `clippy` i CI, pakkebygningen (også Tauri via `tauri build -- --locked`) og
+  udgivelsesscriptet bruger `--locked`. `tests/test_cargo_locked.py` holder det. Den forældede kommentar om en
+  gitignoreret låsefil i `ci.yml` er rettet, og agentens `ldd`-check i CI har fået en positiv kontrol (udviklingsplan
+  F0c.6, gennemgang G-30).
 
 ### Gate Kernel og sikkerhed
 - Gate: sessioner uden udløbstidspunkt er ikke længere gyldige (fail-closed).

@@ -117,7 +117,7 @@ Fra gennemgangen 13.–14. november (G-19–G-25, G-30, G-36, G-38), accepteret 
 | F0c.3 | En liste over sikkerhedsinvarianter med den test, der afprøver dem i produktionstilstand, og VM-checket (G-22); kan blive en del af implementeringsmatricen (plan §4 nr. 3) | Matricen viser for hver invariant: test, mutant, VM-check |
 | F0c.4 | Negative checks i `eira-ci-report` får en positiv kontrol og `pipefail`; `postinst` indlæser alle profiler, også agentens (G-24, G-25) | Et check fejler, når dets værktøj mangler |
 | F0c.5 | Merge kræver grønne checks: enten GitHub Pro eller et offentligt repo, så branch protection virker. Ellers en skrevet regel om, at ejeren kun merger med grønt slutjob | Ejeren har valgt |
-| F0c.6 | En committet `Cargo.lock` for workspacet, `--locked` i CI og i `debian/rules`; den forældede kommentar i `ci.yml` rettet (G-30) | En ændret afhængighed kræver en ændret låsefil |
+| F0c.6 | En committet `Cargo.lock` for workspacet, `--locked` i CI og i `debian/rules`; den forældede kommentar i `ci.yml` rettet (G-30) (leveret 15. november: rodens `Cargo.lock` committet, `--locked` på alle cargo-kald i CI, pakkebygningen inkl. Tauri og udgivelsesscriptet, en test holder det) | En ændret afhængighed kræver en ændret låsefil |
 | F0c.7 | Opgraderingstest i VM: forrige udgivne pakke installeres, opgraderes til den nye, og de samme checks køres; profilerne er de nye (G-36, G-38) | Opgraderingen kører i `vm-install-acceptance` |
 
 ### F1c — Sikkerhedsgæld fra gennemgangen 13.–14. november
