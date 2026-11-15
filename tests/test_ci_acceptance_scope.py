@@ -128,11 +128,16 @@ def test_both_vm_jobs_share_the_same_vm_steps():
 
 
 def test_an_upgrade_restarts_every_daemon_and_the_model():
+    # debhelper's postinst (dh_installsystemd --no-start, compat 13) runs
+    # "deb-systemd-invoke try-restart" on every unit the package installs
+    # when $2 (the old version) is set; nothing else may stop them on upgrade.
+    # The VM check upgrade-daemons-restarted shows it on the running system.
+    rules = (ROOT / "packaging" / "debian" / "rules").read_text(encoding="utf-8")
+    line = next(line for line in rules.splitlines() if "dh_installsystemd" in line and "override" not in line)
+    assert "--no-start" in line
+    assert "--no-restart-after-upgrade" not in line and "--no-stop-on-upgrade" not in line
+    control = (ROOT / "packaging" / "debian" / "control").read_text(encoding="utf-8")
+    assert "debhelper-compat (= 13)" in control
+    units = {p.name for p in (ROOT / "systemd").glob("eira-*.service")}
     policy = json.loads((ROOT / "packaging" / "daemon-policy.json").read_text(encoding="utf-8"))
-    postinst = (ROOT / "packaging" / "debian" / "postinst").read_text(encoding="utf-8")
-    line = next(line for line in postinst.splitlines() if line.startswith("EIRA_RESTART_UNITS="))
-    units = set(line.split("=", 1)[1].strip('"').split())
-    assert units == {f"eira-{d}.service" for d in policy["production_daemons"]} | {"eira-modeld.service"}
-    assert 'systemctl try-restart $EIRA_RESTART_UNITS' in postinst
-    # Only on an upgrade (configure with the old version), and only on a booted system.
-    assert '[ -n "${2:-}" ] && [ -d /run/systemd/system ]' in postinst
+    assert {f"eira-{d}.service" for d in policy["production_daemons"]} <= units

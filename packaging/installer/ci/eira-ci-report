@@ -98,6 +98,8 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
     old_version=$(dpkg-query -W -f='${Version}' eira-os-core 2>/dev/null)
     new_version=$(dpkg-deb -f "$UPGRADE_DIR/eira-os-core.deb" Version)
     say "mode upgrade from $old_version to $new_version"
+    old_prerm=$(mktemp)
+    cp /var/lib/dpkg/info/eira-os-core.prerm "$old_prerm" 2>/dev/null || echo "(no prerm)" > "$old_prerm"
     upgrade_since=$(date '+%Y-%m-%d %H:%M:%S')
     upgrade_uptime=$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)
     sleep 1
@@ -119,10 +121,11 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
     [ "$upgrade_status" -eq 0 ] ||
         say "diag upgrade-apt: $(tail -n 12 "$upgrade_log" | tr '\n' ' ' | cut -c1-900)"
     check upgrade-apt-succeeded [ "$upgrade_status" -eq 0 ]
+    # Helper variables are up_*: check and explain use name, log and status.
     upgraded_version_is_new() {
-        now=$(dpkg-query -W -f='${Version} ${db:Status-Abbrev}' eira-os-core) || return 1
-        echo "installed: $now"
-        [ "$now" = "$new_version ii " ] && dpkg --compare-versions "$new_version" gt "$old_version"
+        up_now=$(dpkg-query -W -f='${Version} ${db:Status-Abbrev}' eira-os-core) || return 1
+        echo "installed: $up_now"
+        [ "$up_now" = "$new_version ii " ] && dpkg --compare-versions "$new_version" gt "$old_version"
     }
     check upgrade-version-is-new explain upgrade-version-is-new upgraded_version_is_new
     # G-38: the profiles on disk are the new package's (an unmodified conffile
@@ -130,38 +133,52 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
     upgrade_tree=$(mktemp -d)
     dpkg-deb -x "$UPGRADE_DIR/eira-os-core.deb" "$upgrade_tree"
     profiles_are_new() {
-        found=0
-        for profile in "$upgrade_tree"/etc/apparmor.d/*; do
-            [ -f "$profile" ] || continue
-            found=$((found + 1))
-            cmp -s "$profile" "/etc/apparmor.d/${profile##*/}" ||
-                { echo "differs: ${profile##*/}"; return 1; }
+        up_found=0
+        for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
+            [ -f "$up_profile" ] || continue
+            up_found=$((up_found + 1))
+            cmp -s "$up_profile" "/etc/apparmor.d/${up_profile##*/}" ||
+                { echo "differs: ${up_profile##*/}"; return 1; }
         done
-        echo "$found profiles"
-        [ "$found" -gt 0 ]
+        echo "$up_found profiles"
+        [ "$up_found" -gt 0 ]
     }
     check upgrade-profiles-are-new explain upgrade-profiles-are-new profiles_are_new
     profiles_reloaded() {
-        log=$(journalctl -k --since "$upgrade_since" --no-pager 2>/dev/null) || return 1
-        for profile in "$upgrade_tree"/etc/apparmor.d/*; do
-            [ -f "$profile" ] || continue
+        up_klog=$(journalctl -k --since "$upgrade_since" --no-pager 2>/dev/null) || { echo "no kernel log"; return 1; }
+        for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
+            [ -f "$up_profile" ] || continue
             # The attachment path is the profile's name (/usr/bin/eira-stated).
-            name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$profile" | head -n 1)
-            [ -n "$name" ] || { echo "no name in ${profile##*/}"; return 1; }
-            printf '%s\n' "$log" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
-                grep -qF "name=\"$name\"" || { echo "not reloaded: $name"; return 1; }
+            up_name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$up_profile" | head -n 1)
+            [ -n "$up_name" ] || { echo "no name in ${up_profile##*/}"; return 1; }
+            printf '%s\n' "$up_klog" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
+                grep -qF "name=\"$up_name\"" || { echo "not reloaded: $up_name"; return 1; }
         done
     }
     check upgrade-profiles-reloaded explain upgrade-profiles-reloaded profiles_reloaded
     # The daemons run the new code: postinst restarted each that was running.
     daemons_restarted() {
-        for daemon in $DAEMONS; do
-            wait_for 60 test -S "/run/eira/$daemon.sock" || { echo "no socket: $daemon"; return 1; }
-            since=$(systemctl show -p ActiveEnterTimestampMonotonic --value "eira-$daemon.service")
-            [ $((since / 1000000)) -ge "$upgrade_uptime" ] || { echo "not restarted: $daemon"; return 1; }
+        for up_daemon in $DAEMONS; do
+            wait_for 60 test -S "/run/eira/$up_daemon.sock" || { echo "no socket: $up_daemon"; return 1; }
+            up_since=$(systemctl show -p ActiveEnterTimestampMonotonic --value "eira-$up_daemon.service")
+            [ $((up_since / 1000000)) -ge "$upgrade_uptime" ] || { echo "not restarted: $up_daemon"; return 1; }
         done
     }
-    check upgrade-daemons-restarted explain upgrade-daemons-restarted daemons_restarted
+    if ! check_ok=$(daemons_restarted 2>&1); then
+        say "upgrade-daemons-restarted FAIL"
+        failed=1
+        say "diag upgrade-daemons-restarted: $check_ok"
+        for up_daemon in $DAEMONS; do
+            say "diag upgrade-unit-$up_daemon: $(systemctl show -p ActiveState,SubState,Result,NRestarts,ActiveEnterTimestampMonotonic,InactiveEnterTimestampMonotonic "eira-$up_daemon.service" | tr '\n' ' ')"
+        done
+        say "diag upgrade-uptime: start=$upgrade_uptime now=$(cut -d' ' -f1 /proc/uptime)"
+        say "diag upgrade-stated-journal: $(journalctl -b -u eira-stated.service --since "$upgrade_since" -o cat --no-pager 2>&1 | tail -n 12 | tr '\n' ' ' | cut -c1-900)"
+        say "diag upgrade-systemd: $(journalctl -b _PID=1 --since "$upgrade_since" -o cat --no-pager 2>&1 | grep -i eira | tail -n 15 | tr '\n' ' ' | cut -c1-1200)"
+        say "diag upgrade-old-prerm: $(grep -n 'systemd\|stop\|deb-systemd' "$old_prerm" 2>&1 | tr '\n' ' ' | cut -c1-900)"
+        say "diag upgrade-apt-tail: $(tail -n 25 "$upgrade_log" | tr '\n' ' ' | cut -c1-1500)"
+    else
+        say "upgrade-daemons-restarted PASS"
+    fi
     rm -rf "$upgrade_tree"
 fi
 for daemon in $DAEMONS; do

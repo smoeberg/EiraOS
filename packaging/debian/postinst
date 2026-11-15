@@ -103,14 +103,4 @@ esac
 
 #DEBHELPER#
 
-# An upgrade restarts the daemons that are running, so the new code is what
-# runs (UDVIKLINGSPLAN F0c.7). dh_installsystemd --no-start restarts nothing,
-# so before this the old code kept running beside the new files, importing
-# new modules lazily. A first install starts nothing: eira.target does at boot.
-EIRA_RESTART_UNITS="eira-stated.service eira-identityd.service eira-fleetd.service eira-veritasd.service eira-intentd.service eira-graphd.service eira-delegationd.service eira-modeld.service"
-if [ "${1:-}" = configure ] && [ -n "${2:-}" ] && [ -d /run/systemd/system ]; then
-    # shellcheck disable=SC2086
-    systemctl try-restart $EIRA_RESTART_UNITS || echo "eira-os-core: genstart af daemons fejlede" >&2
-fi
-
 exit 0
