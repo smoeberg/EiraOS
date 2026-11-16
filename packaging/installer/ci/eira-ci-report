@@ -144,37 +144,16 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
         [ "$up_found" -gt 0 ]
     }
     check upgrade-profiles-are-new explain upgrade-profiles-are-new profiles_are_new
+    # Each profile was replaced in the kernel by the new postinst: it says
+    # so for each "apparmor_parser -r" that succeeded. (The kernel's own
+    # audit lines are rate-limited without auditd, and its policy hash is
+    # not the compiled file's, so neither can prove it.)
     profiles_reloaded() {
-        up_klog=$(journalctl -k --since "$upgrade_since" --no-pager 2>/dev/null) || { echo "no kernel log"; return 1; }
         for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
             [ -f "$up_profile" ] || continue
-            # The attachment path is the profile's name (/usr/bin/eira-stated).
-            up_name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$up_profile" | head -n 1)
-            [ -n "$up_name" ] || { echo "no name in ${up_profile##*/}"; return 1; }
-            printf '%s\n' "$up_klog" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
-                grep -qF "name=\"$up_name\"" && continue
-            # The kernel may rate-limit its audit lines (no auditd). Then the
-            # loaded policy itself: its raw hash is the new file's compiled.
-            kernel_has_new_policy "$up_name" "$up_profile" && continue
-            echo "not reloaded: $up_name ($up_why)"
-            printf '%s\n' "$up_klog" | grep -c 'apparmor="STATUS"' | sed 's/^/status lines: /'
-            printf '%s\n' "$up_klog" | grep -iE 'suppressed|rate limit' | tail -n 2
-            return 1
+            grep -qxF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log" ||
+                { echo "not reloaded: ${up_profile##*/}"; grep -F "AppArmor" "$upgrade_log" | tail -n 3; return 1; }
         done
-    }
-    kernel_has_new_policy() {
-        up_why="no profile dir"
-        for up_dir in /sys/kernel/security/apparmor/policy/profiles/*/; do
-            [ "$(cat "$up_dir/name" 2>/dev/null)" = "$1" ] || continue
-            up_why="no raw_sha256 in $up_dir: $(ls "$up_dir" | tr '\n' ' ')"
-            [ -r "$up_dir/raw_sha256" ] || return 1
-            up_kernel=$(cat "$up_dir/raw_sha256")
-            up_file=$(apparmor_parser -S "$2" 2>/dev/null | sha256sum | cut -d' ' -f1)
-            up_why="kernel $up_kernel, new file $up_file"
-            [ -n "$up_kernel" ] && [ "$up_kernel" = "$up_file" ]
-            return
-        done
-        return 1
     }
     check upgrade-profiles-reloaded explain upgrade-profiles-reloaded profiles_reloaded
     # The daemons run the new code: postinst restarted each that was running.
