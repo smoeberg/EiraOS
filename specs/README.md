@@ -12,7 +12,7 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 - [EIRA Context 1.0](EIRA-CONTEXT-1.0.md) — the context as data, one Linux user per context, lifecycle on a device, key hierarchy, the open storage format (exit guarantee), sync over S3/WebDAV, ID home contents, glimt (ADR-0005, ADR-0006 L5).
 
-**Status:** v0.3, accepted by the owner 11 November 2026; binding. [Test plan](EIRA-CONTEXT-1.0-TESTPLAN.md) accepted 11 November 2026. Nothing is implemented yet.
+**Status:** v0.3, accepted by the owner 11 November 2026; binding. [Test plan](EIRA-CONTEXT-1.0-TESTPLAN.md) accepted 11 November 2026. Implemented: the storage format in `app/context/` (F2.1) and the homes over S3 and WebDAV (F2.2). Not yet: the daemon `eira-contextd` and one Linux user per context.
 
 ## Gate Kernel
 
@@ -24,7 +24,7 @@ This directory contains protocol and interface specifications for EiraOS. The in
 
 - [EIRA Consent Agent](EIRA-CONSENT-AGENT-0.1.md) (rev. 0.3) — trusted path to consent against programs running as the user (GATE-KERNEL bilag A pkt. 1, "Rest"): setgid agent holding the consent key, gate accepts consent only from it, compositor requirements.
 
-**Status:** Accepted by the owner (11 November 2026) and implemented except R-6.2 (labwc patch). See the status table in §0.
+**Status:** Accepted by the owner (11 November 2026) and implemented, R-6.2 included (the `<trustedGroup>` patch in `eira-labwc`, F0.1). R-6.1 to R-6.3 are tested headless, not yet in a graphical VM session. See the status table in §0.
 
 ## Conversation layer
 
