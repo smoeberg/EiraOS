@@ -154,3 +154,16 @@ def test_the_upgrade_check_reads_the_line_postinst_writes_for_each_profile():
     assert line in postinst
     assert 'if apparmor_parser -r "$profile"; then' in postinst
     assert 'grep -qF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log"' in report
+
+
+def test_only_a_qemu_crash_reading_the_dvd_is_retried():
+    # The hosted runners' QEMU sometimes segfaults while the firmware reads the
+    # DVD, before the installer runs. That, and only that, gets one retry.
+    step = next(s for s in WORKFLOW["jobs"]["vm-install-acceptance"]["steps"]
+                if s.get("name") == "Install EiraOS into a blank disk (UEFI)")
+    run = step["run"]
+    assert "for attempt in 1 2; do" in run
+    assert '[ "$attempt" -eq 1 ] && [ "$status" -eq 139 ]' in run
+    assert 'grep -aq "DVD-ROM.*Device Error" install-serial.log' in run
+    assert '! grep -aq "EIRA-CI" install-serial.log' in run
+    assert '[ "${status:-0}" -eq 0 ]' in run

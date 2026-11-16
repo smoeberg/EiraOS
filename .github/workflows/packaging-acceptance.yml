@@ -361,13 +361,29 @@ jobs:
               tr -d '\r' < install-serial.log | strings | tail -n 25
               echo "::endgroup::"
             done ) &
-          timeout 75m qemu-system-x86_64 -enable-kvm -monitor unix:qemu-mon.sock,server,nowait -machine q35 -cpu host -smp 4 -m 8192 \
-            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-            -drive if=pflash,format=raw,file=vars.fd \
-            -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
-            -cdrom $CI_ISO_GLOB -boot order=d \
-            -device virtio-vga -display none -nic none \
-            -serial file:install-serial.log -no-reboot || status=$?
+          # QEMU on the hosted runners sometimes segfaults while the firmware
+          # reads the DVD ("BdsDxe: failed to start ... DVD-ROM ... Device
+          # Error"), before anything of EiraOS has run. Only that failure is
+          # retried, once, on a fresh disk; every other result counts.
+          for attempt in 1 2; do
+            status=0
+            timeout 75m qemu-system-x86_64 -enable-kvm -monitor unix:qemu-mon.sock,server,nowait -machine q35 -cpu host -smp 4 -m 8192 \
+              -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+              -drive if=pflash,format=raw,file=vars.fd \
+              -drive file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe \
+              -cdrom $CI_ISO_GLOB -boot order=d \
+              -device virtio-vga -display none -nic none \
+              -serial file:install-serial.log -no-reboot || status=$?
+            if [ "$attempt" -eq 1 ] && [ "$status" -eq 139 ] \
+                && grep -aq "DVD-ROM.*Device Error" install-serial.log \
+                && ! grep -aq "EIRA-CI" install-serial.log; then
+              echo "::warning::QEMU crashed reading the DVD before the installer started; retrying once"
+              cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+              rm -f disk.qcow2 && qemu-img create -f qcow2 disk.qcow2 40G
+              continue
+            fi
+            break
+          done
           echo "installer VM exited with ${status:-0} (124 = timeout)"
           tail -c 20000 install-serial.log | tr -d '\r' || true
           for f in screens/*.ppm; do [ -f "$f" ] && pnmtopng "$f" > "${f%.ppm}.png" && rm "$f"; done
