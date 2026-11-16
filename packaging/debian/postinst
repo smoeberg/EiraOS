@@ -81,7 +81,13 @@ case "${1:-configure}" in
             # (gennemgang G-25; an upgrade without a reboot needs them all).
             for profile in /etc/apparmor.d/usr.bin.eira-* /etc/apparmor.d/usr.lib.eira-os.*; do
                 [ -f "$profile" ] || continue
-                apparmor_parser -r "$profile" || echo "eira-os-core: kunne ikke indlæse $profile nu; indlæses ved boot" >&2
+                # The line on success is what the upgrade test reads (F0c.7):
+                # the kernel's own audit lines are rate-limited without auditd.
+                if apparmor_parser -r "$profile"; then
+                    echo "eira-os-core: AppArmor-profil indlæst: $profile"
+                else
+                    echo "eira-os-core: kunne ikke indlæse $profile nu; indlæses ved boot" >&2
+                fi
             done
         fi
 
