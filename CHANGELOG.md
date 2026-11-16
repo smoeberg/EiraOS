@@ -31,6 +31,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Vurdering af den uafhængige gennemgang 13.–14. november ([`docs/reviews/GENNEMGANG-2026-11-13.md`](docs/reviews/GENNEMGANG-2026-11-13.md)):
   42 fund fra to runder efterprøvet mod `main`, de fleste bekræftet, og forslag til to nye trin, F0c (bevisets
   tillid i CI) og F1c (sikkerhedsgæld), accepteret af ejeren 14. november og skrevet ind i udviklingsplanen.
+- Forældede sætninger rettet: `specs/README.md` og README om kontekster (lageret og hjemmene er leveret, daemonen
+  ikke) og om R-6.2 (implementeret med `<trustedGroup>`-patchen), `databaseskema.md` om `stated` (Python-lageret på en
+  installeret maskine), kommentaren i `system_api/mod.rs` (gaten findes; den typede vej afviser sluk med vilje),
+  kommentaren i `fleetd.py` og SIKKERHEDSMODEL §4, som kaldte synkroniseringens bearer-token en signatur
+  (udviklingsplan F1c.9, gennemgang G-6, G-7, G-40 til G-42).
 
 ### CI
 - Packaging Acceptance er kortere: ISO og VM-installation i samme job (CI-billedet uploades og hentes ikke længere),

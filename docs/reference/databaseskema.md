@@ -24,7 +24,7 @@ EiraOS har én vej til databaseskemaet: **hvert modul, der ejer en tabel, oprett
 |---|---|---|---|
 | `/data/eira-app.db` | `EIRA_APP_DB` (`EIRA_DB_PATH` i tests) | `identityd`, `intentd` (gaten), `graphd`, `delegationd` | `app/database.py`, `app/session_store.py`, `app/gate/store.py`, `app/gate/executors.py`, `app/conversation/feed.py`, `app/auth/delegation.py`, `app/auth/consent_agent.py` |
 | `/data/eira-gate-audit.db` | `EIRA_GATE_AUDIT_DB` (i tests ved siden af app-databasen) | `intentd` alene; AppArmor giver ingen anden profil adgang (F1c.4) | `app/gate/store.py` (`gate_audit`, flyttet fra app-databasen ved første start) |
-| `/data/eira.db` | `EIRA_STATE_DB` | `stated` (Rust, `crates/eira-stated`) | `crates/eira-stated/src/lib.rs` |
+| `/data/eira.db` | `EIRA_STATE_DB` | `stated` (Python-lageret `app/core/store.py` på en installeret maskine; Rust-lageret i `crates/eira-stated` bygges ikke ind, se F1c.11) | `app/core/store.py` |
 | `/data/eira-fleet/inventory.db` | `EIRA_APP_DB` for `fleetd` | `fleetd` | `app/fleet/device_registry.py` |
 | `/run/eira/consent-keys.db` (tmpfs, aldrig på disk) | `EIRA_CONSENT_KEY_DB` | `identityd` skriver; gaten og `delegationd` læser | `app/consent_keys.py` |
 | Rettighedscachen (`/data/rights/`, JSON-filer, ikke SQL) | `EIRA_RIGHTS_DIR` | `eira-governance-agent` | `app/rights/cache.py` |

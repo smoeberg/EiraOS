@@ -526,7 +526,9 @@ def register_fleet_handlers(server: Any) -> None:
             )
         ),
     )
-    # Each sync call is authorized by the device's signature (_authorize).
+    # Each sync call is authorized by the device's token (_authorize compares
+    # sha256(auth_token) with the enrolled one). It is a bearer token, not a
+    # signature: no challenge, no nonce (vurderingen G-1, UDVIKLINGSPLAN F1c.1).
     server.register("sync.handshake", signed(_rpc_guard(service.handshake)))
     server.register("sync.request_blocks", signed(_rpc_guard(service.request_blocks)))
     server.register("sync.push_blocks", signed(_rpc_guard(service.push_blocks)))

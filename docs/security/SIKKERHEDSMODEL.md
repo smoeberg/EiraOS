@@ -54,7 +54,7 @@ Hver metode har præcis én klasse (`app/ipc/access.py`), og `JsonRpcServer.regi
 | `read` | 24 | Alle på socketen | Ændrer intet | `graph.spatial_snapshot`, `graph.temporal_query`, `health` |
 | `caller` | 28 | Alle, men handleren får kernens kalder og handler kun på dennes vegne | Handleren (`wants_peer`) | `dashboard.get`, `presentation.mode_set`, `identity.session`, `gate.propose`; `gate.consent`/`gate.confirm`, hvor gaten desuden kræver agentens gruppe |
 | `daemon_write` | 4 | Kun de navngivne daemons, som tjenestebrugeren (§3) | Serveren, før handleren: `E_ACCESS_DAEMON_ONLY` | `state.append` (kun `fleetd`), `audit.append` (kun `identityd`, `delegationd`), `state.sync_push` og `identity.verify_production_certificate` (ingen kalder i dag, så ingen må) |
-| `signed` | 4 | Den, der kan bevise sin ret med en signatur | Handleren | Fleets `fleet.device.enroll` og `sync.*` |
+| `signed` | 4 | Den, der kan bevise sin ret: for `sync.*` i dag et bearer-token (`sha256` af enhedens token), ikke en signatur; F1c.1 gør det til challenge og signatur | Handleren | Fleets `fleet.device.enroll` og `sync.*` |
 | `refused` | 4 | Ingen | Svarer altid med en afvisning | `intent.execute`, `intent.confirm`, `journey.advance` (`E_GATE_REQUIRED`), `identity.step_up` |
 | `open_write` | **0** | Alle, uden kontrol: **et kendt hul** | Kun tilladt med et plantrin | Ingen tilbage siden F0b.4 |
 
