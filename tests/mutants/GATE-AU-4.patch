@@ -1,0 +1,14 @@
+Mutant GATE-AU-4: two chains that disagree are accepted and the old one dropped
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py tests/test_gate_audit_db.py
+
+--- a/app/gate/store.py
++++ b/app/gate/store.py
+@@ -165,7 +165,7 @@
+                 if not new:
+                     audit.executemany(
+                         "INSERT INTO gate_audit (seq, entry, prev_hash, entry_hash) VALUES (?, ?, ?, ?)", old)
+-                elif new[: len(old)] != old:
++                elif False:
+                     raise AuditMigrationError(
+                         f"the audit chain in {self.db_path} is not the start of the one in {self.audit_path}")
+                 audit.execute("COMMIT")

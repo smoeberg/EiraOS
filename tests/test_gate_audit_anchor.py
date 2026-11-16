@@ -73,7 +73,7 @@ def test_whole_chain_rewrite_is_caught_by_an_anchor(store, tmp_path):
         rows[1]["entry"] = json.dumps({"step": "propose", "n": 1, "erased": True})
         return rows
 
-    rewrite_whole_chain(store.db_path, change)
+    rewrite_whole_chain(store.audit_path, change)
     assert store.verify_audit_chain()  # internally perfect again …
     verdict = audit_anchor.verify(store, [anchor])  # … but not what was anchored
     assert (verdict.ok, verdict.problem) == (False, "head_mismatch:seq=5")
@@ -81,14 +81,14 @@ def test_whole_chain_rewrite_is_caught_by_an_anchor(store, tmp_path):
 
 def test_truncation_is_caught(store):
     anchor = audit_anchor.current(store)
-    rewrite_whole_chain(store.db_path, lambda rows: rows[:3])
+    rewrite_whole_chain(store.audit_path, lambda rows: rows[:3])
     verdict = audit_anchor.verify(store, [anchor])
     assert (verdict.ok, verdict.problem) == (False, "chain_shorter_than_anchor:seq=5")
 
 
 def test_renumbered_seq_column_does_not_matter(store):
     anchor = audit_anchor.current(store)
-    conn = sqlite3.connect(store.db_path)
+    conn = sqlite3.connect(store.audit_path)
     conn.execute("DROP TRIGGER gate_audit_no_update")
     conn.execute("UPDATE gate_audit SET seq = seq + 1000")
     conn.commit()
@@ -97,7 +97,7 @@ def test_renumbered_seq_column_does_not_matter(store):
 
 
 def test_a_broken_chain_fails_before_any_anchor(store):
-    conn = sqlite3.connect(store.db_path)
+    conn = sqlite3.connect(store.audit_path)
     conn.execute("DROP TRIGGER gate_audit_no_update")
     conn.execute("UPDATE gate_audit SET entry = '{}' WHERE seq = 2")
     conn.commit()
@@ -113,7 +113,7 @@ def test_cli_with_fleet_export(store, tmp_path, capsys):
     export.write_text(json.dumps([audit_anchor.current(store).to_json()]))
     assert audit_verify.main(["--anchors", str(export), "--db", store.db_path]) == 0
     assert json.loads(capsys.readouterr().out) == {"ok": True, "anchors": 1, "problem": None}
-    rewrite_whole_chain(store.db_path, lambda rows: rows[:-1] + [{"entry": "{}"}])
+    rewrite_whole_chain(store.audit_path, lambda rows: rows[:-1] + [{"entry": "{}"}])
     assert audit_verify.main(["--anchors", str(export), "--db", store.db_path]) == 1
 
 

@@ -146,12 +146,12 @@ vm = ["events-need-session", "user-mode-without-session", "login-needs-login-ses
 [[invariant]]
 id = "I-16"
 section = "§5"
-claim = "Hver beslutning skrives i en kædet audit, som forankres i journalen og forsegles"
-tests = ["tests/test_gate_kernel.py::test_every_decision_is_audited_and_pass_only_after_the_result", "tests/test_gate_kernel.py::test_audit_log_is_append_only_and_tamper_evident", "tests/test_gate_audit_anchor.py::test_whole_chain_rewrite_is_caught_by_an_anchor", "tests/test_gate_audit_anchor.py::test_truncation_is_caught", "tests/test_audit_seal.py::test_a_tampered_key_file_is_not_sent"]
-production_tests = ["tests/test_audit_seal.py::test_packaging_sets_it_up_once_at_boot", "tests/test_audit_seal.py::test_the_seal_is_verified_on_the_system_journal_where_the_anchors_are"]
-mutants = ["GATE-AU-1"]
-vm = ["audit-anchor-in-journal", "audit-anchor-file", "audit-verify-journal", "audit-rewrite-caught", "audit-seal-set-up", "audit-seal-journal-keys", "audit-seal-key-pending", "audit-seal-owner-handover", "audit-seal-status-sealed"]
-gap = "Gatens audit deler database med resten af gaten; en egen database kun for intentd er F1c.4"
+claim = "Hver beslutning skrives i en kædet audit i sin egen database, som kun intentd kan skrive, og som forankres i journalen og forsegles"
+tests = ["tests/test_gate_kernel.py::test_every_decision_is_audited_and_pass_only_after_the_result", "tests/test_gate_kernel.py::test_audit_log_is_append_only_and_tamper_evident", "tests/test_gate_audit_anchor.py::test_whole_chain_rewrite_is_caught_by_an_anchor", "tests/test_gate_audit_anchor.py::test_truncation_is_caught", "tests/test_audit_seal.py::test_a_tampered_key_file_is_not_sent", "tests/test_gate_audit_db.py::test_the_chain_is_not_in_the_app_database", "tests/test_gate_audit_db.py::test_an_old_chain_is_moved_unchanged", "tests/test_gate_audit_db.py::test_two_chains_that_disagree_stop_the_gate"]
+production_tests = ["tests/test_audit_seal.py::test_packaging_sets_it_up_once_at_boot", "tests/test_audit_seal.py::test_the_seal_is_verified_on_the_system_journal_where_the_anchors_are", "tests/test_gate_audit_db.py::test_only_intentd_s_profile_names_the_audit_database", "tests/test_gate_audit_db.py::test_the_installed_units_and_the_verifier_use_the_same_file"]
+mutants = ["GATE-AU-1", "GATE-AU-2", "GATE-AU-3", "GATE-AU-4"]
+vm = ["audit-anchor-in-journal", "audit-anchor-file", "audit-verify-journal", "audit-rewrite-caught", "audit-seal-set-up", "audit-seal-journal-keys", "audit-seal-key-pending", "audit-seal-owner-handover", "audit-seal-status-sealed", "gate-audit-db-exists", "gate-audit-not-in-app-db", "intentd-can-write-gate-audit", "identityd-cannot-write-gate-audit", "delegationd-cannot-write-gate-audit"]
+gap = "Kæden er uden nøgle: root kan genberegne den, og det opdages først ved næste anker eller segl (en kæde med nøgle i TPM eller Fleet står tilbage)"
 
 [[invariant]]
 id = "I-17"

@@ -26,7 +26,7 @@ from tests.test_gate_kernel import (
 
 
 def last_audit(store: GateStore) -> dict:
-    with store._connect() as conn:
+    with store._connect_audit() as conn:
         row = conn.execute("SELECT entry FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()
     return json.loads(row["entry"])
 
