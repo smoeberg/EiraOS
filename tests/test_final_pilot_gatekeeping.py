@@ -68,7 +68,7 @@ def test_pilot_security_guarantees_are_explicit() -> None:
         REPO_ROOT / "app" / "auth" / "production_cert_verifier.py"
     ).read_text(encoding="utf-8")
     assert "hmac.compare_digest" in ipc_auth
-    assert "EIRA_FLEET_WS_HOST=127.0.0.1" in fleet_unit
+    assert "EIRA_FLEET_WS_ENABLED=0" in fleet_unit  # F1c.6: no listener
     assert "hashlib.sha3_256" in state
     assert "previous_audit_hash" in audit
     assert '"mitid_erhverv", "eudi_wallet"' in certificates

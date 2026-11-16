@@ -62,6 +62,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   den som nyere) og kører derefter alle checks. Fem nye checks viser, at opgraderingen lykkedes, at versionen er den nye,
   at AppArmor-profilerne på disk og i kernen er de nye, og at daemonerne blev genstartet (udviklingsplan F0c.7,
   gennemgang G-36, G-38).
+- `tests/context/test_uid.py` var ustabil: den ledte efter et UID som fem ASCII-cifre i alt gemt, også i
+  enhedslistens hex- og base64-tekst, hvor de kan forekomme tilfældigt (skete i CI). Nu skal cifrene stå som et
+  selvstændigt token (`"uid": 87654`, `/home/87654`), som er det, en fejl ville skrive.
 
 ### Gate Kernel og sikkerhed
 - Gate: sessioner uden udløbstidspunkt er ikke længere gyldige (fail-closed).
@@ -126,6 +129,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   et VM-check, registret nævner, ikke findes, hvis en GATE- eller IPC-mutant ikke hører til en invariant, eller hvis en
   invariant uden bevis i produktionstilstand ikke nævner hullet. Gatens samtykke, gengivelsesbinding og
   enkeltudførelse (I-11 til I-13) er kun bevist i udviklingstilstand (udviklingsplan F0c.3, gennemgang G-22).
+- `fleetd` lytter ikke længere på TCP `127.0.0.1:8765`: WebSocket-lytteren er slået fra i pakken, indtil en klient
+  findes og er beskrevet. Unit'en tillader kun `AF_UNIX` og ingen IP-adresser, og AppArmor-profilen har ikke længere
+  `network inet`. VM-checket `fleetd-no-tcp-listener` viser det (udviklingsplan F1c.6, gennemgang G-10).
 - Gatens audit-kæde har sin egen database, `/data/eira-gate-audit.db` (`EIRA_GATE_AUDIT_DB`), som kun `intentd`s
   AppArmor-profil må skrive i. Før lå den i app-databasen, som `identityd` og `delegationd` også skriver i, så de
   kunne genberegne kæden. En eksisterende kæde flyttes uændret ved første start (positioner og hashes, som ankrene

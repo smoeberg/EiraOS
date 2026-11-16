@@ -226,10 +226,15 @@ def test_session_and_systemd_boot_integration_are_hardened() -> None:
         assert "EnvironmentFile=-/etc/eira/eira.conf" in unit
 
     fleet = (REPO_ROOT / "systemd" / "eira-fleetd.service").read_text(encoding="utf-8")
-    assert "EIRA_FLEET_WS_HOST=127.0.0.1" in fleet
+    # F1c.6 (G-10): no WebSocket listener until a client exists; no IP at all.
+    assert "Environment=EIRA_FLEET_WS_ENABLED=0" in fleet
+    assert "EIRA_FLEET_WS_ENABLED=1" not in fleet
+    assert "RestrictAddressFamilies=AF_UNIX\n" in fleet
     assert "IPAddressDeny=any" in fleet
-    assert "IPAddressAllow=localhost" in fleet
+    assert "IPAddressAllow" not in fleet
     assert "0.0.0.0" not in fleet
+    profile = (REPO_ROOT / "packaging" / "apparmor" / "usr.bin.eira-fleetd").read_text(encoding="utf-8")
+    assert "network inet" not in profile
 
 
 def test_packaging_scripts_are_executable_shell_files() -> None:
