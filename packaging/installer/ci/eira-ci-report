@@ -530,8 +530,10 @@ check audit-anchor-file test -s /data/audit/anchor.json
 check audit-verify-journal /usr/bin/eira-audit-verify --journal
 audit_rewrite_is_caught() {
     tmp=$(mktemp -d)
+    # F1c.4: the chain is in its own database.
     cp /data/eira-app.db "$tmp/copy.db"
-    python3 - "$tmp/copy.db" <<'PY'
+    cp /data/eira-gate-audit.db "$tmp/copy-audit.db"
+    python3 - "$tmp/copy-audit.db" <<'PY'
 import hashlib, sqlite3, sys
 conn = sqlite3.connect(sys.argv[1])
 conn.execute("DROP TRIGGER IF EXISTS gate_audit_no_update")
@@ -548,7 +550,7 @@ for entry in rows:
     prev = h
 conn.commit()
 PY
-    /usr/bin/eira-audit-verify --journal --db "$tmp/copy.db"
+    /usr/bin/eira-audit-verify --journal --db "$tmp/copy.db" --audit-db "$tmp/copy-audit.db"
     status=$?
     rm -rf "$tmp"
     [ "$status" -eq 1 ]
@@ -791,6 +793,39 @@ daemon_write_as fleetd-may-append-state /usr/bin/eira-fleetd state.append accept
 daemon_write_as graphd-cannot-append-state /usr/bin/eira-graphd state.append refused
 daemon_write_as fleetd-cannot-audit /usr/bin/eira-fleetd audit.append refused
 daemon_write_as intentd-cannot-reach-stated /usr/bin/eira-intentd state.append unreachable
+# F1c.4 (G-4): the gate's audit chain has its own database, which only
+# intentd's profile may write. identityd and delegationd write the app
+# database beside it, and the same UID; their profiles cannot open the chain.
+# The control: under intentd's profile the same probe opens it for writing.
+AUDIT_OPEN_PY='import sys
+try:
+    open("/data/eira-gate-audit.db", "r+b").close()
+except PermissionError as exc:
+    print("denied:", exc)
+    sys.exit(3)
+print("opened")'
+audit_db_open_as() {
+    # audit_db_open_as <profile> <opened|denied>
+    runuser -u eira -- python3 -c "$ONEXEC_PY" "$1" python3 -c "$AUDIT_OPEN_PY"
+    case "$?:$2" in
+        0:opened|3:denied) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+check gate-audit-db-exists test -s /data/eira-gate-audit.db
+# The control: the app database is there and readable (its sessions table).
+gate_audit_not_in_app_db() {
+    test -s /data/eira-app.db || return 1
+    python3 -c 'import sqlite3, sys
+c = sqlite3.connect("file:/data/eira-app.db?mode=ro", uri=True)
+names = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type = '"'table'"'")}
+print(sorted(names))
+sys.exit(0 if "sessions" in names and "gate_audit" not in names else 4)'
+}
+check gate-audit-not-in-app-db explain gate-audit-not-in-app-db gate_audit_not_in_app_db
+check intentd-can-write-gate-audit explain intentd-can-write-gate-audit audit_db_open_as /usr/bin/eira-intentd opened
+check identityd-cannot-write-gate-audit explain identityd-cannot-write-gate-audit audit_db_open_as /usr/bin/eira-identityd denied
+check delegationd-cannot-write-gate-audit explain delegationd-cannot-write-gate-audit audit_db_open_as /usr/bin/eira-delegationd denied
 # F1.5 (fundregister S-4/S-5): the mode belongs to the OS user on the socket,
 # so the desktop user can read and set it with no session; a claimed actor
 # gets neither a session nor a name.

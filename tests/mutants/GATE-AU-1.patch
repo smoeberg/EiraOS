@@ -3,7 +3,7 @@ Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_c
 
 --- a/app/gate/store.py
 +++ b/app/gate/store.py
-@@ -291,7 +291,7 @@
+@@ -367,7 +367,7 @@
              try:
                  row = conn.execute("SELECT entry_hash FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()
                  prev = row["entry_hash"] if row else GENESIS

@@ -1,0 +1,23 @@
+Mutant GATE-AU-2: the audit chain is kept in the app database again
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py tests/test_gate_audit_db.py
+
+--- a/app/gate/store.py
++++ b/app/gate/store.py
+@@ -99,7 +99,7 @@
+     if configured and db_path is None:
+         return configured
+     app = Path(db_path or get_db_path())
+-    return str(app.with_name(app.stem + "-gate-audit" + (app.suffix or ".db")))
++    return str(app)
+ 
+ GENESIS = "sha256:" + "0" * 64
+ 
+@@ -129,7 +129,7 @@
+     def __init__(self, db_path: str | None = None, audit_path: str | None = None) -> None:
+         self.db_path = db_path or get_db_path()
+         self.audit_path = audit_path or audit_db_path(db_path)
+-        if Path(self.audit_path).resolve() == Path(self.db_path).resolve():
++        if False:
+             raise ValueError("the audit chain must not share the app database (F1c.4)")
+         # Called after each committed audit entry (audit_anchor.Anchorer).
+         self.audit_listeners: list = []
