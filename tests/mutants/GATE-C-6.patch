@@ -1,0 +1,14 @@
+Mutant GATE-C-6: another acting member may confirm an action that needs no consent
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py
+
+--- a/app/gate/kernel.py
++++ b/app/gate/kernel.py
+@@ -263,7 +263,7 @@
+         # For an action that needs consent the consent already binds to the
+         # session; one that only needs confirming had no such binding, so
+         # another acting member of the conversation could confirm it.
+-        if actor is None or actor["identity"] != record["actor_identity"]:
++        if actor is None:
+             return self._fail(
+                 "confirm", None,
+                 LayerFailure(GateCode.E_UNAUTHORIZED, "only the proposing user may confirm"),

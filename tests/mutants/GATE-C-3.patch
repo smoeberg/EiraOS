@@ -3,7 +3,7 @@ Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_c
 
 --- a/app/gate/kernel.py
 +++ b/app/gate/kernel.py
-@@ -642,7 +642,7 @@
+@@ -652,7 +652,7 @@
          if actor is None:
              return None
          session = self._sessions(actor["session_id"]) or {}

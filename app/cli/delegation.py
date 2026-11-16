@@ -36,6 +36,8 @@ def main(argv=None) -> int:
     check.add_argument("--delegee", required=True)
     check.add_argument("--action", required=True)
     check.add_argument("--target", required=True)
+    # Only your own delegations, under your session (F1c.8).
+    check.add_argument("--session-id", required=True)
 
     args = parser.parse_args(argv)
     client = IpcClient("delegationd")
@@ -59,6 +61,7 @@ def main(argv=None) -> int:
                 "delegee_id": args.delegee,
                 "action": args.action,
                 "target": args.target,
+                "session_id": args.session_id,
             },
         )
 

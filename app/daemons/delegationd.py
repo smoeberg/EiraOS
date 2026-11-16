@@ -161,15 +161,23 @@ def register_delegation_handlers(server, service: DelegationService | None = Non
         return {"status": "revoked" if success else "not_found"}
 
     def check(params: dict[str, Any]) -> dict[str, Any]:
-        # The model may ask about itself; a human about any model. Nobody
-        # anonymous learns which delegations exist.
+        # The model may ask about itself (any human's delegation to it). A
+        # human needs a session and learns only about delegations they gave
+        # themselves (UDVIKLINGSPLAN F1c.8, G-14): before, anyone in
+        # eira-clients could ask about any delegee and target, without a
+        # session, and so map who had delegated what.
         caller = _caller(params)
         request = DelegationCheckRequest.model_validate(
             {k: params.get(k) for k in ("delegee_id", "action", "target")}
         )
-        if caller.model and request.delegee_id != model_identity(caller):
-            raise JsonRpcError(NOT_ALLOWED, "a model may only check its own delegations")
-        return {"valid": svc.check_delegation(request)}
+        if caller.model:
+            if request.delegee_id != model_identity(caller):
+                raise JsonRpcError(NOT_ALLOWED, "a model may only check its own delegations")
+            return {"valid": svc.check_delegation(request)}
+        session = _session(caller, params.get("session_id"))
+        own = svc.delegation_for(request.delegee_id, request.action, request.target,
+                                 delegator=_identity(session))
+        return {"valid": own is not None}
 
     def listing(params: dict[str, Any]) -> dict[str, Any]:
         caller = _caller(params)

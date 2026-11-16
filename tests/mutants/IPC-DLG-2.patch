@@ -1,0 +1,14 @@
+Mutant IPC-DLG-2: delegation.check answers a human without a session
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_delegation.py
+
+--- a/app/daemons/delegationd.py
++++ b/app/daemons/delegationd.py
+@@ -174,7 +174,7 @@
+             if request.delegee_id != model_identity(caller):
+                 raise JsonRpcError(NOT_ALLOWED, "a model may only check its own delegations")
+             return {"valid": svc.check_delegation(request)}
+-        session = _session(caller, params.get("session_id"))
++        session = {}
+         own = svc.delegation_for(request.delegee_id, request.action, request.target,
+                                  delegator=_identity(session))
+         return {"valid": own is not None}

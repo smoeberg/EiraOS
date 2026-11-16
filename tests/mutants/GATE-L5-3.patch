@@ -3,7 +3,7 @@ Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_c
 
 --- a/app/gate/kernel.py
 +++ b/app/gate/kernel.py
-@@ -429,7 +429,6 @@
+@@ -439,7 +439,6 @@
              and consent["rendering_hash"] == record["rendering_hash"]
              and consent["session_id"] == session_id
              and consent["revoked_at"] is None

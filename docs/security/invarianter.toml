@@ -129,9 +129,9 @@ gap = "Kun i udviklingstilstand"
 [[invariant]]
 id = "I-14"
 section = "§5"
-claim = "Kun den, der handler, og som har en ret fra Fleet, er autoriseret; uden rettighedssæt ingen rettigheder"
-tests = ["tests/test_gate_kernel.py::test_acting_for_someone_else_is_unauthorized", "tests/test_gate_kernel.py::test_correct_schema_without_permission_is_unauthorized", "tests/test_gate_rights.py::test_no_rights_set_means_no_rights", "tests/test_gate_rights.py::test_deny_wins_over_grant", "tests/test_gate_rights.py::test_tampered_cache_file_fails_closed", "tests/test_gate_rights.py::test_setting_the_clock_back_does_not_revive_an_expired_set", "tests/test_gate_system.py::test_another_user_cannot_confirm_anne_s_poweroff"]
-mutants = ["GATE-L6-1"]
+claim = "Kun den, der handler, og som har en ret fra Fleet, er autoriseret; kun den, der foreslog, kan bekræfte; uden rettighedssæt ingen rettigheder"
+tests = ["tests/test_gate_kernel.py::test_acting_for_someone_else_is_unauthorized", "tests/test_gate_kernel.py::test_correct_schema_without_permission_is_unauthorized", "tests/test_gate_rights.py::test_no_rights_set_means_no_rights", "tests/test_gate_rights.py::test_deny_wins_over_grant", "tests/test_gate_rights.py::test_tampered_cache_file_fails_closed", "tests/test_gate_rights.py::test_setting_the_clock_back_does_not_revive_an_expired_set", "tests/test_gate_system.py::test_another_user_cannot_confirm_anne_s_poweroff", "tests/test_gate_invariants.py::test_another_member_cannot_confirm_an_action_that_needs_no_consent"]
+mutants = ["GATE-L6-1", "GATE-C-6"]
 vm = ["rights-default-active", "user-cannot-touch-rights-cache"]
 
 [[invariant]]
@@ -202,3 +202,11 @@ claim = "En opgradering giver de nye AppArmor-profiler på disk og i kernen, og 
 production_tests = ["tests/test_ci_acceptance_scope.py::test_an_upgrade_restarts_every_daemon_and_the_model", "tests/test_ci_acceptance_scope.py::test_the_upgrade_job_installs_the_base_and_upgrades_to_the_pull_request", "tests/test_os_packaging_security.py::test_postinst_loads_every_apparmor_profile_the_package_installs"]
 vm = ["upgrade-apt-succeeded", "upgrade-version-is-new", "upgrade-profiles-are-new", "upgrade-profiles-reloaded", "upgrade-daemons-restarted"]
 gap = "Opgraderingen er fra base-grenen til pull requesten; en rigtig udgivelse til den næste er først muligt, når der er udgivelser. Backup og rollback er F9"
+
+[[invariant]]
+id = "I-23"
+section = "§5"
+claim = "Kun den, der har givet en delegation, kan spørge til den, og kun med en session; modellen kun til sine egne"
+tests = ["tests/test_delegation.py::test_a_human_checks_only_their_own_delegations_under_a_session", "tests/test_delegation.py::test_a_model_may_only_check_its_own_delegations"]
+mutants = ["IPC-DLG-1", "IPC-DLG-2"]
+gap = "Kun i udviklingstilstand; intet VM-check, fordi en installeret maskine endnu ikke har en rigtig session (F0.3)"
