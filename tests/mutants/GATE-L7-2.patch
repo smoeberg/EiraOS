@@ -3,7 +3,7 @@ Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_c
 
 --- a/app/gate/store.py
 +++ b/app/gate/store.py
-@@ -155,7 +155,7 @@
+@@ -231,7 +231,7 @@
          with self._connect() as conn:
              cursor = conn.execute(
                  """UPDATE gate_actions SET state = 'executing', execution_id = ?, updated_at = ?

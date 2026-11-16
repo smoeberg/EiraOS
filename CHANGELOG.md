@@ -126,6 +126,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   session og svarer kun om delegationer, kalderen selv har givet; modellen spørger stadig kun til sine egne.
   `eira-delegation check` har fået `--session-id`. Mutanter `GATE-C-6`, `IPC-DLG-1` og `IPC-DLG-2`, ny invariant I-23
   (udviklingsplan F1c.8, gennemgang G-13, G-14).
+- Gatens audit-kæde har sin egen database, `/data/eira-gate-audit.db` (`EIRA_GATE_AUDIT_DB`), som kun `intentd`s
+  AppArmor-profil må skrive i. Før lå den i app-databasen, som `identityd` og `delegationd` også skriver i, så de
+  kunne genberegne kæden. En eksisterende kæde flyttes uændret ved første start (positioner og hashes, som ankrene
+  nævner); to kæder, der ikke stemmer, stopper gaten. `eira-audit-verify` har fået `--audit-db`. Nye tests, mutanter
+  `GATE-AU-2` til `GATE-AU-4` og fem VM-checks (udviklingsplan F1c.4, gennemgang G-4).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

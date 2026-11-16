@@ -27,6 +27,9 @@
   /data/ r,
   /data/eira-app.db rwk,
   /data/eira-app.db-{journal,shm,wal} rwk,
+  # The gate's audit chain: only this profile may write it (F1c.4, G-4).
+  /data/eira-gate-audit.db rwk,
+  /data/eira-gate-audit.db-{journal,shm,wal} rwk,
   # Rights cache: the gate advances the effective time (§4.1) on each read.
   # Audit anchor for the rights agent's heartbeat (bilag A pkt. 2).
   /data/audit/ rw,

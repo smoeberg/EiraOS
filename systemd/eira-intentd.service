@@ -17,6 +17,8 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/usr/lib/eira-os
 Environment=EIRA_APP_DB=/data/eira-app.db
+# The audit chain has its own database; only intentd's profile writes it.
+Environment=EIRA_GATE_AUDIT_DB=/data/eira-gate-audit.db
 Environment=EIRA_CONSENT_KEY_DB=/run/eira/consent-keys.db
 # Rights cache (EIRA-RIGHTS-SET-1.0): written by the governance agent, read by the gate.
 Environment=EIRA_RIGHTS_DIR=/data/rights

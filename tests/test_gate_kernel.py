@@ -574,7 +574,7 @@ def test_every_decision_is_audited_and_pass_only_after_the_result(world):
 def test_audit_log_is_append_only_and_tamper_evident(world):
     world.gate.propose("{", "s-anne", Origin.MODEL)
     world.gate.propose(raw(envelope()), "s-anne", Origin.MODEL)
-    with sqlite3.connect(world.db) as conn:
+    with sqlite3.connect(world.store.audit_path) as conn:
         with pytest.raises(sqlite3.DatabaseError):
             conn.execute("UPDATE gate_audit SET entry = '{}' WHERE seq = 1")
         with pytest.raises(sqlite3.DatabaseError):

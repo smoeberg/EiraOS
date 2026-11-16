@@ -85,7 +85,7 @@ def test_session_without_a_key_cannot_consent(world):
 def test_refusal_is_audited_with_its_own_code(world):
     digest, rendering = _proposed(world)
     _bare(world).confirm("dlg-0001", digest, rendering, "s-anne", "0" * 64)
-    with world.store._connect() as conn:
+    with world.store._connect_audit() as conn:
         entry = json.loads(conn.execute("SELECT entry FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()["entry"])
     assert entry["error"] == "E_CONSENT_PROOF" and entry["caller"]["uid"] == HUMAN.uid
 
