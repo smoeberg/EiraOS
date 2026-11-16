@@ -80,9 +80,9 @@ gap = "fleetd må stadig tilføje synkroniserede tilstande; det er dens opgave"
 [[invariant]]
 id = "I-8"
 section = "§7"
-claim = "Hver daemon kan kun oprette sin egen socket og kun forbinde til dem, den kalder; ingen fælles logmappe"
+claim = "Hver daemon kan kun oprette sin egen socket og kun forbinde til dem, den kalder; ingen fælles logmappe; fleetd lytter ikke på TCP"
 production_tests = ["tests/test_daemon_isolation.py::test_each_profile_owns_its_socket_and_reaches_only_its_callees", "tests/test_daemon_isolation.py::test_every_daemon_call_is_allowed_by_the_policy", "tests/test_daemon_isolation.py::test_no_daemon_unit_shares_a_log_directory", "tests/test_os_packaging_security.py::test_all_daemons_have_least_privilege_apparmor_profiles", "tests/test_os_packaging_security.py::test_apparmor_profiles_parse_on_ubuntu"]
-vm = ["intentd-cannot-reach-stated", "identityd-no-apparmor-denials"]
+vm = ["intentd-cannot-reach-stated", "identityd-no-apparmor-denials", "fleetd-no-tcp-listener"]
 gap = "AppArmor skelner ikke mellem at forbinde til og at slette en sti-socket"
 
 [[invariant]]

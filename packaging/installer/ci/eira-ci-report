@@ -774,6 +774,18 @@ daemon_write_as fleetd-may-append-state /usr/bin/eira-fleetd state.append accept
 daemon_write_as graphd-cannot-append-state /usr/bin/eira-graphd state.append refused
 daemon_write_as fleetd-cannot-audit /usr/bin/eira-fleetd audit.append refused
 daemon_write_as intentd-cannot-reach-stated /usr/bin/eira-intentd state.append unreachable
+# F1c.6 (G-10): fleetd has no TCP listener. The control: ss answers and
+# shows fleetd's Unix socket listening.
+fleetd_has_no_tcp_listener() {
+    unix=$(ss -lxH 2>/dev/null) || return 1
+    printf '%s\n' "$unix" | grep -qF /run/eira/fleetd.sock || { echo "ss shows no fleetd.sock"; return 1; }
+    pid=$(systemctl show -p MainPID --value eira-fleetd.service) || return 1
+    [ "${pid:-0}" -gt 0 ] || { echo "fleetd has no main pid"; return 1; }
+    tcp=$(ss -ltnpH 2>/dev/null) || return 1
+    owned=$(printf '%s\n' "$tcp" | grep -E "pid=$pid,|:8765[[:space:]]")
+    [ -z "$owned" ] || { echo "listening: $owned"; return 1; }
+}
+check fleetd-no-tcp-listener explain fleetd-no-tcp-listener fleetd_has_no_tcp_listener
 # F1c.4 (G-4): the gate's audit chain has its own database, which only
 # intentd's profile may write. identityd and delegationd write the app
 # database beside it, and the same UID; their profiles cannot open the chain.

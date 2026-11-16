@@ -22,7 +22,5 @@
   /data/eira-fleet/** rwk,
 
   network unix stream,
-  network inet stream,
-  network inet6 stream,
   deny @{HOME}/** rwklx,
 }

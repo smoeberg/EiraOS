@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import struct
 from pathlib import Path
 
@@ -93,10 +94,14 @@ def test_u1_b_n1_no_uid_in_anything_written_or_decrypted(home, ctx, device, audi
         for data in decrypted:
             for pattern in _encodings(uid):
                 assert pattern not in data, (uid, pattern)
-        # Stored objects are ciphertext (random) or the plaintext device list.
-        # A 4-byte binary form can occur by chance in random bytes; five ASCII
-        # digits practically cannot, and the readable form is what a bug writes.
+        # Stored objects are ciphertext (random) or the plaintext device list,
+        # whose keys and signatures are encoded text (hex, base64). A 4-byte
+        # binary form can occur by chance in random bytes, and five digits by
+        # chance inside encoded text (it did, in CI). What a bug writes is the
+        # readable number as a token of its own, such as "uid": 87654 or
+        # /home/87654: so the digits must not stand between non-alphanumerics.
+        token = re.compile(rb"(?<![0-9A-Za-z])" + str(uid).encode() + rb"(?![0-9A-Za-z])")
         for data in stored:
-            assert str(uid).encode() not in data, uid
+            assert not token.search(data), uid
     assert all(p.relative_to(home.root).parts[0] in {"context", "keys", "blocks", "manifests"}
                for p in home.root.rglob("*") if p.is_file())

@@ -16,9 +16,11 @@ WorkingDirectory=/usr/lib/eira-os
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/usr/lib/eira-os
-Environment=EIRA_FLEET_WS_ENABLED=1
-Environment=EIRA_FLEET_WS_HOST=127.0.0.1
-Environment=EIRA_FLEET_WS_PORT=8765
+# The WebSocket listener is off until a client exists and is described
+# (UDVIKLINGSPLAN F1c.6, vurderingen G-10). fleetd talks only over its Unix
+# socket; the address families and IP rules below keep it that way even if
+# eira.conf turns the listener on (then fleetd fails to start).
+Environment=EIRA_FLEET_WS_ENABLED=0
 Environment=EIRA_FLEET_KEY_DIR=/data/eira-fleet
 Environment=EIRA_APP_DB=/data/eira-fleet/inventory.db
 EnvironmentFile=-/etc/eira/eira.conf
@@ -42,9 +44,8 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 LockPersonality=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX
 IPAddressDeny=any
-IPAddressAllow=localhost
 RestrictSUIDSGID=true
 ReadWritePaths=/data/eira-fleet /run/eira
 AppArmorProfile=/usr/bin/eira-fleetd
