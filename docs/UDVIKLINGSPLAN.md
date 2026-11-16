@@ -133,7 +133,7 @@ Accepteret af ejeren 14. november 2026. Små PR'er mellem F2-trinnene; F1c.2 og 
 | F1c.5 | `capabilityd`, `app/routers/capability.py`, `app/services/*veritas*`, `veritas-shield/` fjernet eller arkiveret; projektbeskrivelsen opdateret | G-8, G-9 |
 | F1c.6 | `fleetd`s WebSocket-lytter slået fra i pakken, indtil en klient findes og er beskrevet | G-10 |
 | F1c.7 | C2PA: `untrusted` matcher ikke `trusted`; `trust_score` siger, hvilke lag der er vurderet, og tæller ikke et manglende lag som 0 | G-12, G-18 |
-| F1c.8 | `confirm` kræver den foreslående identitet; `delegation.check` kræver en session og svarer kun om kalderens egne delegationer (modellen som nu) | G-13, G-14 |
+| F1c.8 | `confirm` kræver den foreslående identitet; `delegation.check` kræver en session og svarer kun om kalderens egne delegationer (modellen som nu) (leveret 16. november; testen viste, at et andet medlem med rettigheder nåede helt til udførelsen) | G-13, G-14 |
 | F1c.9 | Forældede sætninger: README og `specs/README.md` om kontekster og R-6.2, `databaseskema.md` om `stated`, kommentaren i `system_api/mod.rs`, `fleetd.py:529` | G-6, G-7, G-40–G-42 |
 | F1c.10 | Samtykkeagenten: læsetimeout pr. forbindelse og stop med en klar fejl, når IPC-tokenet ikke kan læses. Ejerens beslutning om grænser: hvor mange forslag modellen må sende, hvor tit agenten må vise en dialog, og hvor længe beskedtekst og audit gemmes | G-16, G-17, G-28, G-29 |
 | F1c.11 | Ejerens beslutning om Rust-lageret: enten bygges og installeres `libeira_stated.so`, og `stated` kræver det (`EIRA_STATE_BACKEND=rust`), eller Rust-lageret, `app/core_rust.py` og `eira-ipc` arkiveres. Begge dele er bedre end en tavs fallback | G-26, G-27, G-32 |

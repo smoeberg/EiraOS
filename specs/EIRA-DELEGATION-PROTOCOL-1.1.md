@@ -24,7 +24,7 @@ Scope: human-to-model preparation delegation only ("på vegne af", GATE-KERNEL b
 | `delegation.create` | the app's Rust core | `session_id`, `proposal_id`, `content_hash`, `rendering_hash`, `proof` | the delegation |
 | `delegation.revoke` | the delegator | `session_id`, `delegation_id` | `revoked` / `not_found` |
 | `delegation.list` | human, own session | `session_id` | own active delegations |
-| `delegation.check` | any caller; a model only about itself | `delegee_id`, `action`, `target` | `valid` |
+| `delegation.check` | a model about itself; a human with a session about delegations they gave (F1c.8) | `delegee_id`, `action`, `target`, `session_id` (human) | `valid` |
 
 `proof = HMAC-SHA256(consent_key, "EIRA-CONSENT-V1" 0 "delegate" 0 uid 0 session_id 0 proposal_id 0 content_hash 0 rendering_hash)`. Shared test vectors: `tests/vectors/consent-proof.json`.
 

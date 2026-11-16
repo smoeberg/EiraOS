@@ -259,6 +259,16 @@ class Gate:
             return self._fail(
                 "confirm", None, LayerFailure(GateCode.E_STATE, "unknown action"), actor, action_id=action_id
             )
+        # Only the proposing identity confirms (UDVIKLINGSPLAN F1c.8, G-13).
+        # For an action that needs consent the consent already binds to the
+        # session; one that only needs confirming had no such binding, so
+        # another acting member of the conversation could confirm it.
+        if actor is None or actor["identity"] != record["actor_identity"]:
+            return self._fail(
+                "confirm", None,
+                LayerFailure(GateCode.E_UNAUTHORIZED, "only the proposing user may confirm"),
+                actor, action_id=action_id,
+            )
         raw = record["raw"]
         try:
             # Full re-validation from the stored input: no earlier PASS is reused.

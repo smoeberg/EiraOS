@@ -349,6 +349,13 @@ MUTANTS.update({
                    '                entry_hash = "sha256:" + hashlib.sha256((prev + body).encode()).hexdigest()',
                    '                entry_hash = "sha256:" + hashlib.sha256(body.encode()).hexdigest()')],
     },
+    # F1c.8 (G-13): only the proposing identity confirms.
+    "GATE-C-6": {
+        "why": "another acting member may confirm an action that needs no consent",
+        "tests": GATE_TESTS,
+        "edits": [(K, '        if actor is None or actor["identity"] != record["actor_identity"]:\n            return self._fail(\n                "confirm", None,',
+                   '        if actor is None:\n            return self._fail(\n                "confirm", None,')],
+    },
     # IPC access classes (F0b): the server enforces them before the handler.
     "IPC-DW-1": {
         "why": "daemon_write accepts any UID",
@@ -385,6 +392,20 @@ MUTANTS.update({
         "tests": IPC_TESTS,
         "edits": [("app/ipc/access.py", "        return daemon_from_label(label)\n",
                    "        return daemon_from_label(label) or daemon_from_cgroup(getattr(peer, \"pid\", None))\n")],
+    },
+    # F1c.8 (G-14): a human learns only about delegations they gave.
+    "IPC-DLG-1": {
+        "why": "delegation.check answers about anyone's delegations",
+        "tests": IPC_TESTS + ["tests/test_delegation.py"],
+        "edits": [("app/daemons/delegationd.py", "                                 delegator=_identity(session))",
+                   "                                 delegator=None)")],
+    },
+    "IPC-DLG-2": {
+        "why": "delegation.check answers a human without a session",
+        "tests": IPC_TESTS + ["tests/test_delegation.py"],
+        "edits": [("app/daemons/delegationd.py",
+                   '        session = _session(caller, params.get("session_id"))\n        own = svc.delegation_for(',
+                   '        session = {}\n        own = svc.delegation_for(')],
     },
     "IPC-SRV-1": {
         "why": "the server does not check daemon_write before the handler",

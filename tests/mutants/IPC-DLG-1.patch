@@ -1,0 +1,14 @@
+Mutant IPC-DLG-1: delegation.check answers about anyone's delegations
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_delegation.py
+
+--- a/app/daemons/delegationd.py
++++ b/app/daemons/delegationd.py
+@@ -176,7 +176,7 @@
+             return {"valid": svc.check_delegation(request)}
+         session = _session(caller, params.get("session_id"))
+         own = svc.delegation_for(request.delegee_id, request.action, request.target,
+-                                 delegator=_identity(session))
++                                 delegator=None)
+         return {"valid": own is not None}
+ 
+     def listing(params: dict[str, Any]) -> dict[str, Any]:

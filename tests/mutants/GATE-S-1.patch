@@ -3,7 +3,7 @@ Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_c
 
 --- a/app/gate/kernel.py
 +++ b/app/gate/kernel.py
-@@ -590,7 +590,7 @@
+@@ -600,7 +600,7 @@
          if not session or not session.get("authenticated_at"):
              return None
          expires = session.get("expires_at")

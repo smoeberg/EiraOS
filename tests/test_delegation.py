@@ -223,6 +223,23 @@ def test_a_model_may_only_check_its_own_delegations(daemon, monkeypatch):
         daemon("delegation.check", {"delegee_id": "model:other", "action": "prepare", "target": "x"}, MODEL)
 
 
+def test_a_human_checks_only_their_own_delegations_under_a_session(daemon, service):
+    """F1c.8 (G-14): no session, no answer; with one, only about delegations
+    the human gave. Bob's delegation to the model is not Anne's business."""
+    service.create_delegation("did:eira:bob", request(targets=("intent:*",)))
+    query = {"delegee_id": MODEL_ID, "action": "prepare", "target": "intent:create"}
+    for session in ({}, {"session_id": "s-unknown"}):
+        with pytest.raises(JsonRpcError) as error:
+            daemon("delegation.check", {**query, **session})
+        assert error.value.code == NOT_ALLOWED
+    assert daemon("delegation.check", {**query, "session_id": "s-anne"}) == {"valid": False}
+    service.create_delegation("did:eira:anne", request(targets=("intent:*",)))
+    assert daemon("delegation.check", {**query, "session_id": "s-anne"}) == {"valid": True}
+    # Another OS user cannot use Anne's session to ask.
+    with pytest.raises(JsonRpcError):
+        daemon("delegation.check", {**query, "session_id": "s-anne"}, OTHER_HUMAN)
+
+
 def test_the_command_line_cannot_delegate(capsys):
     from app.cli.delegation import main
 

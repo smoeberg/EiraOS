@@ -104,3 +104,23 @@ def test_a_session_that_has_ended_cannot_confirm(world):
     result = world.gate.confirm(env["id"], digest, rh(world, env["id"]), "s-anne")
     assert result.decision is Decision.REJECT
     assert outbox(world) == []
+
+
+def test_another_member_cannot_confirm_an_action_that_needs_no_consent(world):
+    """GATE-C-6 (F1c.8, G-13): Bo is an acting member of the conversation
+    with rights, but only Anne, who proposed, may confirm."""
+    from tests.test_gate_kernel import BO, CONV
+
+    world.store.add_member(CONV, BO)
+    world.fleet.grant(CONV, principal=BO).publish()
+    env = envelope("presence_changed", content={"state": "away"})
+    env["participants"] = env["participants"] + [{"identity": BO, "role": "member"}]
+    proposal = world.gate.propose(raw(env), "s-anne", Origin.MODEL)
+    assert proposal.content_hash and proposal.code is not GateCode.E_NEED_CONSENT, proposal
+    bo = world.gate.confirm("dlg-0001", proposal.content_hash, rh(world, "dlg-0001"), "s-bo")
+    assert (bo.decision, bo.code) == (Decision.REJECT, GateCode.E_UNAUTHORIZED), bo
+    assert outbox(world) == []
+    # Anne gets through every layer to execution (no executor for presence
+    # in this world): the refusal above was about who confirms, nothing else.
+    anne = world.gate.confirm("dlg-0001", proposal.content_hash, rh(world, "dlg-0001"), "s-anne")
+    assert (anne.layer, anne.code) == (8, GateCode.E_EXECUTOR_UNAVAILABLE), anne

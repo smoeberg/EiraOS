@@ -3,7 +3,7 @@ Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_c
 
 --- a/app/gate/kernel.py
 +++ b/app/gate/kernel.py
-@@ -634,7 +634,7 @@
+@@ -644,7 +644,7 @@
          # The path first, with or without a session: every attempt to decide
          # outside the consent agent gets the same code (EIRA-CONSENT-AGENT §7).
          caller = current_caller()
