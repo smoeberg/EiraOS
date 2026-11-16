@@ -38,6 +38,11 @@
   # app/ipc/access.py: which daemon a daemon_write caller is, if it has no
   # AppArmor label (its systemd unit's cgroup).
   @{PROC}/[0-9]*/cgroup r,
+  # With its own cgroup readable, Rust code in python3-cryptography (the
+  # standard library's available_parallelism) walks up to the CPU quota and
+  # reads cpu.max; the upgrade test caught that as a denial. Read-only.
+  /sys/fs/cgroup/cpu.max r,
+  /sys/fs/cgroup/**/cpu.max r,
   /run/eira/stated.sock rw,
   /run/eira/consent-keys.db rwk,
   # app/consent_keys.py: the store must be on tmpfs and keys are tied to the boot.

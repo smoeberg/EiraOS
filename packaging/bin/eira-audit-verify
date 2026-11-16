@@ -4,4 +4,5 @@
 set -eu
 export PYTHONPATH=/usr/lib/eira-os${PYTHONPATH:+:$PYTHONPATH}
 export EIRA_APP_DB=${EIRA_APP_DB:-/data/eira-app.db}
+export EIRA_GATE_AUDIT_DB=${EIRA_GATE_AUDIT_DB:-/data/eira-gate-audit.db}
 exec /usr/bin/python3 -m app.gate.audit_verify "$@"

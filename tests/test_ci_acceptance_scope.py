@@ -143,3 +143,27 @@ def test_an_upgrade_restarts_every_daemon_and_the_model():
     units = {p.name for p in (ROOT / "systemd").glob("eira-*.service")}
     policy = json.loads((ROOT / "packaging" / "daemon-policy.json").read_text(encoding="utf-8"))
     assert {f"eira-{d}.service" for d in policy["production_daemons"]} <= units
+
+
+def test_the_upgrade_check_reads_the_line_postinst_writes_for_each_profile():
+    # The kernel rate-limits its audit lines without auditd, so the upgrade
+    # test reads postinst's own line per successful "apparmor_parser -r".
+    postinst = (ROOT / "packaging" / "debian" / "postinst").read_text(encoding="utf-8")
+    report = (ROOT / "packaging" / "installer" / "ci" / "eira-ci-report").read_text(encoding="utf-8")
+    line = 'echo "eira-os-core: AppArmor-profil indlæst: $profile"'
+    assert line in postinst
+    assert 'if apparmor_parser -r "$profile"; then' in postinst
+    assert 'grep -qF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log"' in report
+
+
+def test_only_a_qemu_crash_reading_the_dvd_is_retried():
+    # The hosted runners' QEMU sometimes segfaults while the firmware reads the
+    # DVD, before the installer runs. That, and only that, gets one retry.
+    step = next(s for s in WORKFLOW["jobs"]["vm-install-acceptance"]["steps"]
+                if s.get("name") == "Install EiraOS into a blank disk (UEFI)")
+    run = step["run"]
+    assert "for attempt in 1 2; do" in run
+    assert '[ "$attempt" -eq 1 ] && [ "$status" -eq 139 ]' in run
+    assert 'grep -aq "DVD-ROM.*Device Error" install-serial.log' in run
+    assert '! grep -aq "EIRA-CI" install-serial.log' in run
+    assert '[ "${status:-0}" -eq 0 ]' in run

@@ -3,6 +3,12 @@
 Audit-tabellen er append-only (triggers afviser UPDATE og DELETE) og
 hash-kædet, så en ændring af en tidligere post kan opdages. Modeller og
 adaptere har ingen skriveadgang til den; kun :class:`Gate` skriver.
+
+Auditten ligger i sin egen database (``EIRA_GATE_AUDIT_DB``, installeret
+``/data/eira-gate-audit.db``), som kun intentd's AppArmor-profil må skrive i.
+Handlingerne og samtykkerne ligger i app-databasen, som identityd og
+delegationd også skriver i (UDVIKLINGSPLAN F1c.4, vurderingen G-4). En
+eksisterende kæde i app-databasen flyttes uændret ved første start.
 """
 
 from __future__ import annotations
@@ -10,10 +16,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterator
 
 from app.session_store import get_db_path
@@ -61,6 +69,9 @@ CREATE TABLE IF NOT EXISTS gate_members (
     identity TEXT NOT NULL,
     PRIMARY KEY (conversation_id, identity)
 );
+"""
+
+AUDIT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS gate_audit (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     entry TEXT NOT NULL,
@@ -74,6 +85,21 @@ CREATE TRIGGER IF NOT EXISTS gate_audit_no_delete
     BEFORE DELETE ON gate_audit
     BEGIN SELECT RAISE(ABORT, 'gate_audit is append-only'); END;
 """
+
+
+class AuditMigrationError(RuntimeError):
+    """The chain in the app database and the one in the audit database
+    disagree. The gate does not start: which is right is for a person."""
+
+
+def audit_db_path(db_path: str | None = None) -> str:
+    """Where the audit chain lives. EIRA_GATE_AUDIT_DB (the installed units
+    set /data/eira-gate-audit.db), else next to the app database."""
+    configured = os.environ.get("EIRA_GATE_AUDIT_DB", "").strip()
+    if configured and db_path is None:
+        return configured
+    app = Path(db_path or get_db_path())
+    return str(app.with_name(app.stem + "-gate-audit" + (app.suffix or ".db")))
 
 GENESIS = "sha256:" + "0" * 64
 
@@ -100,8 +126,11 @@ def iso(moment: datetime) -> str:
 
 
 class GateStore:
-    def __init__(self, db_path: str | None = None) -> None:
+    def __init__(self, db_path: str | None = None, audit_path: str | None = None) -> None:
         self.db_path = db_path or get_db_path()
+        self.audit_path = audit_path or audit_db_path(db_path)
+        if Path(self.audit_path).resolve() == Path(self.db_path).resolve():
+            raise ValueError("the audit chain must not share the app database (F1c.4)")
         # Called after each committed audit entry (audit_anchor.Anchorer).
         self.audit_listeners: list = []
         with self._connect() as conn:
@@ -111,10 +140,57 @@ class GateStore:
                 for name, kind in columns.items():
                     if name not in existing:
                         conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+        with self._connect_audit() as conn:
+            conn.executescript(AUDIT_SCHEMA)
+        self._move_legacy_audit()
+
+    def _move_legacy_audit(self) -> None:
+        """Before F1c.4 the chain was a table in the app database. Copy it,
+        rows unchanged (positions and hashes, which the journal and Fleet
+        anchors name), then drop it there. A crash in between is safe: the
+        next start finds the old chain as a prefix of the new and drops it."""
+        with self._connect() as app:
+            present = app.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'gate_audit'"
+            ).fetchone()
+            if not present:
+                return
+            old = [tuple(r) for r in app.execute(
+                "SELECT seq, entry, prev_hash, entry_hash FROM gate_audit ORDER BY seq")]
+        with self._connect_audit() as audit:
+            audit.execute("BEGIN IMMEDIATE")
+            try:
+                new = [tuple(r) for r in audit.execute(
+                    "SELECT seq, entry, prev_hash, entry_hash FROM gate_audit ORDER BY seq")]
+                if not new:
+                    audit.executemany(
+                        "INSERT INTO gate_audit (seq, entry, prev_hash, entry_hash) VALUES (?, ?, ?, ?)", old)
+                elif new[: len(old)] != old:
+                    raise AuditMigrationError(
+                        f"the audit chain in {self.db_path} is not the start of the one in {self.audit_path}")
+                audit.execute("COMMIT")
+            except BaseException:
+                audit.execute("ROLLBACK")
+                raise
+        if old:
+            log.info("moved %d audit entries from %s to %s", len(old), self.db_path, self.audit_path)
+        with self._connect() as app:
+            app.execute("DROP TRIGGER IF EXISTS gate_audit_no_update")
+            app.execute("DROP TRIGGER IF EXISTS gate_audit_no_delete")
+            app.execute("DROP TABLE gate_audit")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.db_path, timeout=10, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    @contextmanager
+    def _connect_audit(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(self.audit_path, timeout=10, isolation_level=None)
         conn.row_factory = sqlite3.Row
         try:
             yield conn
@@ -286,7 +362,7 @@ class GateStore:
 
     def append_audit(self, entry: dict[str, Any]) -> str:
         body = json.dumps(entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        with self._connect() as conn:
+        with self._connect_audit() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 row = conn.execute("SELECT entry_hash FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()
@@ -314,7 +390,7 @@ class GateStore:
         return entry_hash
 
     def audit_entries(self) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with self._connect_audit() as conn:
             rows = conn.execute("SELECT * FROM gate_audit ORDER BY seq").fetchall()
         return [dict(r) for r in rows]
 
@@ -327,7 +403,7 @@ class GateStore:
         return heads
 
     def audit_head(self) -> tuple[int, str]:
-        with self._connect() as conn:
+        with self._connect_audit() as conn:
             count = conn.execute("SELECT COUNT(*) AS n FROM gate_audit").fetchone()["n"]
             row = conn.execute("SELECT entry_hash FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()
         return count, row["entry_hash"] if row else GENESIS

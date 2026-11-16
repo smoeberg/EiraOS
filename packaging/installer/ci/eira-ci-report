@@ -144,37 +144,18 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
         [ "$up_found" -gt 0 ]
     }
     check upgrade-profiles-are-new explain upgrade-profiles-are-new profiles_are_new
+    # Each profile was replaced in the kernel by the new postinst: it says
+    # so for each "apparmor_parser -r" that succeeded. (The kernel's own
+    # audit lines are rate-limited without auditd, and its policy hash is
+    # not the compiled file's, so neither can prove it.)
     profiles_reloaded() {
-        up_klog=$(journalctl -k --since "$upgrade_since" --no-pager 2>/dev/null) || { echo "no kernel log"; return 1; }
         for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
             [ -f "$up_profile" ] || continue
-            # The attachment path is the profile's name (/usr/bin/eira-stated).
-            up_name=$(sed -n 's/^\(profile[[:space:]]\{1,\}\)\{0,1\}\(\/[^[:space:]]*\)[[:space:]].*{.*$/\2/p' "$up_profile" | head -n 1)
-            [ -n "$up_name" ] || { echo "no name in ${up_profile##*/}"; return 1; }
-            printf '%s\n' "$up_klog" | grep 'apparmor="STATUS"' | grep -E 'operation="profile_(replace|load)"' |
-                grep -qF "name=\"$up_name\"" && continue
-            # The kernel may rate-limit its audit lines (no auditd). Then the
-            # loaded policy itself: its raw hash is the new file's compiled.
-            kernel_has_new_policy "$up_name" "$up_profile" && continue
-            echo "not reloaded: $up_name ($up_why)"
-            printf '%s\n' "$up_klog" | grep -c 'apparmor="STATUS"' | sed 's/^/status lines: /'
-            printf '%s\n' "$up_klog" | grep -iE 'suppressed|rate limit' | tail -n 2
-            return 1
+            # Not -x: apt's progress text has no newline, so the first
+            # line from postinst can follow it on the same line.
+            grep -qF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log" ||
+                { echo "not reloaded: ${up_profile##*/}"; grep -F "AppArmor" "$upgrade_log" | tail -n 3; return 1; }
         done
-    }
-    kernel_has_new_policy() {
-        up_why="no profile dir"
-        for up_dir in /sys/kernel/security/apparmor/policy/profiles/*/; do
-            [ "$(cat "$up_dir/name" 2>/dev/null)" = "$1" ] || continue
-            up_why="no raw_sha256 in $up_dir: $(ls "$up_dir" | tr '\n' ' ')"
-            [ -r "$up_dir/raw_sha256" ] || return 1
-            up_kernel=$(cat "$up_dir/raw_sha256")
-            up_file=$(apparmor_parser -S "$2" 2>/dev/null | sha256sum | cut -d' ' -f1)
-            up_why="kernel $up_kernel, new file $up_file"
-            [ -n "$up_kernel" ] && [ "$up_kernel" = "$up_file" ]
-            return
-        done
-        return 1
     }
     check upgrade-profiles-reloaded explain upgrade-profiles-reloaded profiles_reloaded
     # The daemons run the new code: postinst restarted each that was running.
@@ -530,8 +511,10 @@ check audit-anchor-file test -s /data/audit/anchor.json
 check audit-verify-journal /usr/bin/eira-audit-verify --journal
 audit_rewrite_is_caught() {
     tmp=$(mktemp -d)
+    # F1c.4: the chain is in its own database.
     cp /data/eira-app.db "$tmp/copy.db"
-    python3 - "$tmp/copy.db" <<'PY'
+    cp /data/eira-gate-audit.db "$tmp/copy-audit.db"
+    python3 - "$tmp/copy-audit.db" <<'PY'
 import hashlib, sqlite3, sys
 conn = sqlite3.connect(sys.argv[1])
 conn.execute("DROP TRIGGER IF EXISTS gate_audit_no_update")
@@ -548,7 +531,7 @@ for entry in rows:
     prev = h
 conn.commit()
 PY
-    /usr/bin/eira-audit-verify --journal --db "$tmp/copy.db"
+    /usr/bin/eira-audit-verify --journal --db "$tmp/copy.db" --audit-db "$tmp/copy-audit.db"
     status=$?
     rm -rf "$tmp"
     [ "$status" -eq 1 ]
@@ -791,6 +774,39 @@ daemon_write_as fleetd-may-append-state /usr/bin/eira-fleetd state.append accept
 daemon_write_as graphd-cannot-append-state /usr/bin/eira-graphd state.append refused
 daemon_write_as fleetd-cannot-audit /usr/bin/eira-fleetd audit.append refused
 daemon_write_as intentd-cannot-reach-stated /usr/bin/eira-intentd state.append unreachable
+# F1c.4 (G-4): the gate's audit chain has its own database, which only
+# intentd's profile may write. identityd and delegationd write the app
+# database beside it, and the same UID; their profiles cannot open the chain.
+# The control: under intentd's profile the same probe opens it for writing.
+AUDIT_OPEN_PY='import sys
+try:
+    open("/data/eira-gate-audit.db", "r+b").close()
+except PermissionError as exc:
+    print("denied:", exc)
+    sys.exit(3)
+print("opened")'
+audit_db_open_as() {
+    # audit_db_open_as <profile> <opened|denied>
+    runuser -u eira -- python3 -c "$ONEXEC_PY" "$1" python3 -c "$AUDIT_OPEN_PY"
+    case "$?:$2" in
+        0:opened|3:denied) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+check gate-audit-db-exists test -s /data/eira-gate-audit.db
+# The control: the app database is there and readable (its sessions table).
+gate_audit_not_in_app_db() {
+    test -s /data/eira-app.db || return 1
+    python3 -c 'import sqlite3, sys
+c = sqlite3.connect("file:/data/eira-app.db?mode=ro", uri=True)
+names = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type = '"'table'"'")}
+print(sorted(names))
+sys.exit(0 if "sessions" in names and "gate_audit" not in names else 4)'
+}
+check gate-audit-not-in-app-db explain gate-audit-not-in-app-db gate_audit_not_in_app_db
+check intentd-can-write-gate-audit explain intentd-can-write-gate-audit audit_db_open_as /usr/bin/eira-intentd opened
+check identityd-cannot-write-gate-audit explain identityd-cannot-write-gate-audit audit_db_open_as /usr/bin/eira-identityd denied
+check delegationd-cannot-write-gate-audit explain delegationd-cannot-write-gate-audit audit_db_open_as /usr/bin/eira-delegationd denied
 # F1.5 (fundregister S-4/S-5): the mode belongs to the OS user on the socket,
 # so the desktop user can read and set it with no session; a claimed actor
 # gets neither a session nor a name.
