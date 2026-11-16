@@ -151,7 +151,9 @@ if [ -f "$UPGRADE_DIR/eira-os-core.deb" ]; then
     profiles_reloaded() {
         for up_profile in "$upgrade_tree"/etc/apparmor.d/*; do
             [ -f "$up_profile" ] || continue
-            grep -qxF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log" ||
+            # Not -x: apt's progress text has no newline, so the first
+            # line from postinst can follow it on the same line.
+            grep -qF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log" ||
                 { echo "not reloaded: ${up_profile##*/}"; grep -F "AppArmor" "$upgrade_log" | tail -n 3; return 1; }
         done
     }
