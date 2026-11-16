@@ -1,0 +1,14 @@
+Mutant GATE-AU-3: an existing chain is dropped instead of moved
+Tests: tests/test_gate_kernel.py tests/test_gate_invariants.py tests/test_gate_consent_proof.py tests/test_consent_agent_path.py tests/test_gate_rights.py tests/test_gate_clock.py tests/test_gate_audit_anchor.py tests/test_gate_ipc.py tests/test_gate_audit_db.py
+
+--- a/app/gate/store.py
++++ b/app/gate/store.py
+@@ -162,7 +162,7 @@
+             try:
+                 new = [tuple(r) for r in audit.execute(
+                     "SELECT seq, entry, prev_hash, entry_hash FROM gate_audit ORDER BY seq")]
+-                if not new:
++                if False:
+                     audit.executemany(
+                         "INSERT INTO gate_audit (seq, entry, prev_hash, entry_hash) VALUES (?, ?, ?, ?)", old)
+                 elif new[: len(old)] != old:

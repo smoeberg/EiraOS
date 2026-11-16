@@ -349,6 +349,28 @@ MUTANTS.update({
                    '                entry_hash = "sha256:" + hashlib.sha256((prev + body).encode()).hexdigest()',
                    '                entry_hash = "sha256:" + hashlib.sha256(body.encode()).hexdigest()')],
     },
+    # F1c.4 (G-4): the chain has its own database, only intentd writes it.
+    "GATE-AU-2": {
+        "why": "the audit chain is kept in the app database again",
+        "tests": GATE_TESTS + ["tests/test_gate_audit_db.py"],
+        "edits": [("app/gate/store.py",
+                   '    return str(app.with_name(app.stem + "-gate-audit" + (app.suffix or ".db")))',
+                   '    return str(app)'),
+                  ("app/gate/store.py",
+                   '        if Path(self.audit_path).resolve() == Path(self.db_path).resolve():',
+                   '        if False:')],
+    },
+    "GATE-AU-3": {
+        "why": "an existing chain is dropped instead of moved",
+        "tests": GATE_TESTS + ["tests/test_gate_audit_db.py"],
+        "edits": [("app/gate/store.py", "                if not new:\n                    audit.executemany(",
+                   "                if False:\n                    audit.executemany(")],
+    },
+    "GATE-AU-4": {
+        "why": "two chains that disagree are accepted and the old one dropped",
+        "tests": GATE_TESTS + ["tests/test_gate_audit_db.py"],
+        "edits": [("app/gate/store.py", "                elif new[: len(old)] != old:", "                elif False:")],
+    },
     # IPC access classes (F0b): the server enforces them before the handler.
     "IPC-DW-1": {
         "why": "daemon_write accepts any UID",

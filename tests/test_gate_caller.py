@@ -220,7 +220,7 @@ def test_model_attempt_to_decide_is_audited_with_its_own_code(world):
     """Audit/SIEM/Fleet can alert on exactly this event."""
     with acting_as(MODEL):
         world.gate.confirm("dlg-x", "sha256:" + "0" * 64, "sha256:" + "0" * 64, "s-anne")
-    with world.store._connect() as conn:
+    with world.store._connect_audit() as conn:
         entry = json.loads(conn.execute("SELECT entry FROM gate_audit ORDER BY seq DESC LIMIT 1").fetchone()["entry"])
     assert entry["error"] == "E_MODEL_CANNOT_DECIDE"
     assert entry["caller"] == {"uid": MODEL.uid, "pid": MODEL.pid, "model": True}

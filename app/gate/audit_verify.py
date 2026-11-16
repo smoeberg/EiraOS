@@ -52,7 +52,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--journal", action="store_true")
     parser.add_argument("--anchors", type=Path)
     parser.add_argument("--verify-key")
-    parser.add_argument("--db")
+    parser.add_argument("--db", help="the app database (default: EIRA_APP_DB)")
+    parser.add_argument("--audit-db", help="the audit chain (default: EIRA_GATE_AUDIT_DB)")
     args = parser.parse_args(argv)
 
     from app.gate.store import GateStore
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         anchors += journal_anchors()
     if args.anchors:
         anchors += file_anchors(args.anchors)
-    store = GateStore(args.db)
+    store = GateStore(args.db, audit_path=args.audit_db)
     if not anchors:
         verdict = audit_anchor.verify(store, [])
         print(json.dumps({"ok": verdict.ok, "anchors": 0, "problem": verdict.problem or "no_anchors"}))

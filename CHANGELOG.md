@@ -124,6 +124,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - `fleetd` lytter ikke længere på TCP `127.0.0.1:8765`: WebSocket-lytteren er slået fra i pakken, indtil en klient
   findes og er beskrevet. Unit'en tillader kun `AF_UNIX` og ingen IP-adresser, og AppArmor-profilen har ikke længere
   `network inet`. VM-checket `fleetd-no-tcp-listener` viser det (udviklingsplan F1c.6, gennemgang G-10).
+- Gatens audit-kæde har sin egen database, `/data/eira-gate-audit.db` (`EIRA_GATE_AUDIT_DB`), som kun `intentd`s
+  AppArmor-profil må skrive i. Før lå den i app-databasen, som `identityd` og `delegationd` også skriver i, så de
+  kunne genberegne kæden. En eksisterende kæde flyttes uændret ved første start (positioner og hashes, som ankrene
+  nævner); to kæder, der ikke stemmer, stopper gaten. `eira-audit-verify` har fået `--audit-db`. Nye tests, mutanter
+  `GATE-AU-2` til `GATE-AU-4` og fem VM-checks (udviklingsplan F1c.4, gennemgang G-4).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

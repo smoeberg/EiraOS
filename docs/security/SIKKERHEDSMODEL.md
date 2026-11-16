@@ -72,7 +72,7 @@ Alt, der ændrer noget uden for brugerens egen tilstand, går gennem gaten i `ei
 2. tjekker skema, policy, sikkerhedsniveau og rettigheder fra Fleet (lag 1–6);
 3. lader kun modellen foreslå under en delegation fra mennesket;
 4. kræver samtykke og bekræftelse fra samtykkeagenten for det, der er irreversibelt;
-5. skriver hver beslutning i sin egen audit-kæde, som forankres i journalen og forsegles (FSS).
+5. skriver hver beslutning i sin egen audit-kæde, som forankres i journalen og forsegles (FSS). Kæden ligger i sin egen database, `/data/eira-gate-audit.db`, som kun `intentd`s AppArmor-profil må skrive i; `identityd` og `delegationd` skriver i app-databasen ved siden af og har samme UID, men kan ikke åbne kæden (F1c.4, VM: `identityd-cannot-write-gate-audit`, `delegationd-cannot-write-gate-audit`). Kæden er stadig uden nøgle: root kan genberegne den, og det opdages ved næste anker eller segl.
 
 Beviser: `tests/test_gate_kernel.py`, `tests/test_gate_system.py`, `tests/test_intent_to_gate.py` (hele kæden; modellen kan ikke samtykke). VM: `gate-ipc-reject`, `modeld-reaches-gate-and-is-refused`, `intent-power-reaches-gate-and-is-refused`, `model-cannot-consent`, `audit-*`.
 
