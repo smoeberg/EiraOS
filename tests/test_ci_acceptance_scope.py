@@ -153,4 +153,4 @@ def test_the_upgrade_check_reads_the_line_postinst_writes_for_each_profile():
     line = 'echo "eira-os-core: AppArmor-profil indlæst: $profile"'
     assert line in postinst
     assert 'if apparmor_parser -r "$profile"; then' in postinst
-    assert '"eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log"' in report
+    assert 'grep -qF "eira-os-core: AppArmor-profil indlæst: /etc/apparmor.d/${up_profile##*/}" "$upgrade_log"' in report
