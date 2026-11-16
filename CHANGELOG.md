@@ -57,6 +57,9 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   den som nyere) og kører derefter alle checks. Fem nye checks viser, at opgraderingen lykkedes, at versionen er den nye,
   at AppArmor-profilerne på disk og i kernen er de nye, og at daemonerne blev genstartet (udviklingsplan F0c.7,
   gennemgang G-36, G-38).
+- `tests/context/test_uid.py` var ustabil: den ledte efter et UID som fem ASCII-cifre i alt gemt, også i
+  enhedslistens hex- og base64-tekst, hvor de kan forekomme tilfældigt (skete i CI). Nu skal cifrene stå som et
+  selvstændigt token (`"uid": 87654`, `/home/87654`), som er det, en fejl ville skrive.
 
 ### Gate Kernel og sikkerhed
 - Gate: sessioner uden udløbstidspunkt er ikke længere gyldige (fail-closed).
