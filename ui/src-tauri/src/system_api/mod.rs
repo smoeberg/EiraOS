@@ -130,9 +130,10 @@ impl SystemApi {
                 "operations": OPERATIONS,
             })),
             "power.get_status" => to_value(self.power.status().await),
-            // Turning the machine off is a protected action. It must arrive as
-            // an intention through the Gate (Gate Kernel 1.0) and never as a
-            // direct UI call. Until the Gate exists this fails closed.
+            // Turning the machine off is a protected action. It arrives as an
+            // intention through the Gate (Gate Kernel 1.0), whose executor
+            // calls logind (app/gate/executors.py), and never as a direct UI
+            // call. This typed path therefore always refuses it, on purpose.
             "power.request_action" => Err(EiraError::new(
                 ErrorCode::Unsupported,
                 "Sluk, genstart og dvale udføres kun via en bekræftet intention gennem Gaten",
