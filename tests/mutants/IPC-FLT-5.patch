@@ -1,0 +1,14 @@
+Mutant IPC-FLT-5: the parameters are not part of what is signed
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -75,7 +75,7 @@
+         "method": method,
+         "device_id": device_id,
+         "nonce": nonce,
+-        "params": signed_params(params),
++        "params": {},
+     })
+ 
+ 

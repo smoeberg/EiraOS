@@ -1,0 +1,14 @@
+Mutant IPC-FLT-1: a sync call is accepted without checking the signature
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -405,7 +405,7 @@
+         except (TypeError, ValueError) as exc:
+             raise DeviceAuthorizationError("Parameters cannot be signed") from exc
+         # The signature first: someone who only saw the nonce cannot use it up.
+-        if not _verify(str(device.signing_key), signature, message):
++        if False:
+             raise DeviceAuthorizationError("Signature does not verify")
+         with self._lock:
+             connection = self._connect()

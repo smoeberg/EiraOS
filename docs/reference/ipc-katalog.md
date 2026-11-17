@@ -51,6 +51,7 @@ Hver metode har en adgangsklasse ([`app/ipc/access.py`](../../app/ipc/access.py)
 | `fleet.device.revoke` | `caller` |  |
 | `fleet.pairing.create` | `caller` |  |
 | `health` | `read` |  |
+| `sync.challenge` | `signed` |  |
 | `sync.handshake` | `signed` |  |
 | `sync.push_blocks` | `signed` |  |
 | `sync.request_blocks` | `signed` |  |

@@ -14,9 +14,7 @@ Each test is an attack that worked before the fix:
 
 from __future__ import annotations
 
-import base64
 import json
-import os
 
 import pytest
 
@@ -28,10 +26,7 @@ from app.fleet.device_registry import (
     device_fingerprint,
 )
 from app.ipc.socket_security import PeerCredentials
-
-
-def key() -> str:
-    return base64.b64encode(os.urandom(32)).decode("ascii")
+from tests.fleet_device import FleetTestDevice
 
 
 @pytest.fixture
@@ -80,7 +75,7 @@ def test_non_admin_cannot_revoke_a_device(server, admin_group, peer):
     enrolled = call(
         server,
         "fleet.device.enroll",
-        {"pairing_code": code, "name": "Laptop", "os_type": "ubuntu", "public_key": key()},
+        FleetTestDevice("Laptop").enrollment(code),
         DESKTOP_USER,
     )["result"]
     device_id = enrolled["device_id"]
@@ -95,7 +90,7 @@ def test_admin_and_root_can_pair_and_revoke(server, admin_group, peer):
     enrolled = call(
         server,
         "fleet.device.enroll",
-        {"pairing_code": code, "name": "Laptop", "os_type": "ubuntu", "public_key": key()},
+        FleetTestDevice("Laptop").enrollment(code),
         DESKTOP_USER,
     )["result"]
     device_id = enrolled["device_id"]
@@ -131,52 +126,52 @@ def test_http_bridge_has_no_fleet_routes():
     assert not [r for r in app.routes if getattr(r, "path", "").startswith("/v1/fleet")]
 
 
-def test_device_id_is_the_key_fingerprint():
+def test_device_id_is_the_signing_key_fingerprint():
     registry = DeviceRegistry()
-    public_key = key()
-    code = registry.create_pairing_token()["code"]
-    enrolled = registry.enroll(
-        pairing_code=code, name="Laptop", os_type="ubuntu", public_key=public_key
-    )
-    assert enrolled.device.device_id == device_fingerprint(public_key)
+    device = FleetTestDevice("Laptop")
+    enrolled = device.enroll(registry)
+    assert enrolled.device_id == device_fingerprint(device.signing_key)
 
 
 def test_new_key_cannot_claim_an_existing_device_id():
     registry = DeviceRegistry()
-    victim_key = key()
-    victim = registry.enroll(
-        pairing_code=registry.create_pairing_token()["code"],
-        name="Victim",
-        os_type="ubuntu",
-        public_key=victim_key,
-    ).device
+    victim_device = FleetTestDevice("Victim")
+    victim = victim_device.enroll(registry)
     code = registry.create_pairing_token()["code"]
+    attacker = FleetTestDevice("Attacker").enrollment(code) | {"device_id": victim.device_id}
     with pytest.raises(DeviceAuthorizationError, match="fingerprint"):
-        registry.enroll(
-            pairing_code=code,
-            device_id=victim.device_id,
-            name="Attacker",
-            os_type="ubuntu",
-            public_key=key(),
-        )
+        registry.enroll(**attacker)
     # The refused attempt did not burn the code.
-    registry.enroll(pairing_code=code, name="Next", os_type="ubuntu", public_key=key())
-    assert registry.get(victim.device_id).public_key == victim_key
+    FleetTestDevice("Next").enroll(registry, code)
+    assert registry.get(victim.device_id).signing_key == victim_device.signing_key
 
 
-def test_same_key_cannot_enroll_twice():
+def test_same_keys_cannot_enroll_twice():
     registry = DeviceRegistry()
-    public_key = key()
-    registry.enroll(
-        pairing_code=registry.create_pairing_token()["code"],
-        name="One",
-        os_type="ubuntu",
-        public_key=public_key,
-    )
+    device = FleetTestDevice("One")
+    device.enroll(registry)
     code = registry.create_pairing_token()["code"]
     with pytest.raises(DeviceAuthorizationError, match="already enrolled"):
-        registry.enroll(pairing_code=code, name="Two", os_type="ubuntu", public_key=public_key)
-    registry.enroll(pairing_code=code, name="Three", os_type="ubuntu", public_key=key())
+        device.enroll(registry, code)
+    FleetTestDevice("Three").enroll(registry, code)
+
+
+def test_enrollment_needs_a_proof_with_the_signing_key():
+    """F1c.1: someone who only knows a device's public keys cannot enroll
+    them; the proof binds the pairing code to both keys."""
+    registry = DeviceRegistry()
+    code = registry.create_pairing_token()["code"]
+    device, other = FleetTestDevice(), FleetTestDevice()
+    request = device.enrollment(code)
+    for forged in (
+        request | {"proof": other.enrollment(code)["proof"]},
+        request | {"public_key": other.public_key},
+        request | {"pairing_code": registry.create_pairing_token()["code"]},
+        request | {"proof": "bm90IGEgc2lnbmF0dXJl"},
+    ):
+        with pytest.raises(DeviceAuthorizationError, match="proof"):
+            registry.enroll(**forged)
+    assert registry.enroll(**request).device_id == device.device_id
 
 
 def test_admin_group_is_created_without_members():
@@ -189,3 +184,44 @@ def test_admin_group_is_created_without_members():
         assert f"adduser --quiet {member} eira-fleet-admin" not in postinst
         assert f"usermod -aG eira-fleet-admin {member}" not in postinst
 
+
+
+# --- every sync call over IPC is signed over a single-use challenge (F1c.1) ---------
+
+
+def _paired(server):
+    from app.core.store import StateStore
+
+    service = fleetd.default_sync_service()
+    service.store = StateStore(":memory:")  # no stated in this test
+    device = FleetTestDevice()
+    device.enroll(service.registry)
+    return device
+
+
+def _sync(server, device, method, params=None, **kwargs):
+    signed = device.signed(fleetd.default_sync_service().registry, method, params or {}, **kwargs)
+    return call(server, method, signed, DESKTOP_USER)
+
+
+def test_a_signed_handshake_over_ipc_is_accepted(server):
+    device = _paired(server)
+    reply = _sync(server, device, "sync.handshake", {"public_key": device.public_key, "headers": []})
+    assert reply["result"]["accepted"] is True, reply
+
+
+def test_a_challenge_over_ipc_is_given_only_to_a_paired_device(server):
+    device = _paired(server)
+    reply = call(server, "sync.challenge", {"device_id": device.device_id}, DESKTOP_USER)
+    assert reply["result"]["nonce"]
+    unknown = call(server, "sync.challenge", {"device_id": FleetTestDevice().device_id}, DESKTOP_USER)
+    assert unknown["error"]["code"] == fleetd.FLEET_UNAUTHORIZED
+
+
+@pytest.mark.parametrize("method", ["sync.handshake", "sync.request_blocks", "sync.push_blocks"])
+def test_an_unsigned_or_token_call_over_ipc_is_refused(server, method):
+    device = _paired(server)
+    for params in ({"device_id": device.device_id},
+                   {"device_id": device.device_id, "auth_token": "anything"}):
+        reply = call(server, method, params, DESKTOP_USER)
+        assert reply["error"]["code"] == fleetd.FLEET_UNAUTHORIZED, reply

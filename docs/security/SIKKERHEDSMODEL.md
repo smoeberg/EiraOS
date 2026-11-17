@@ -54,7 +54,7 @@ Hver metode har præcis én klasse (`app/ipc/access.py`), og `JsonRpcServer.regi
 | `read` | 24 | Alle på socketen | Ændrer intet | `graph.spatial_snapshot`, `graph.temporal_query`, `health` |
 | `caller` | 28 | Alle, men handleren får kernens kalder og handler kun på dennes vegne | Handleren (`wants_peer`) | `dashboard.get`, `presentation.mode_set`, `identity.session`, `gate.propose`; `gate.consent`/`gate.confirm`, hvor gaten desuden kræver agentens gruppe |
 | `daemon_write` | 4 | Kun de navngivne daemons, som tjenestebrugeren (§3) | Serveren, før handleren: `E_ACCESS_DAEMON_ONLY` | `state.append` (kun `fleetd`), `audit.append` (kun `identityd`, `delegationd`), `state.sync_push` og `identity.verify_production_certificate` (ingen kalder i dag, så ingen må) |
-| `signed` | 4 | Den, der kan bevise sin ret: for `sync.*` i dag et bearer-token (`sha256` af enhedens token), ikke en signatur; F1c.1 gør det til challenge og signatur | Handleren | Fleets `fleet.device.enroll` og `sync.*` |
+| `signed` | 5 | Den, der kan bevise sin ret med en signatur: en parret enhed signerer hvert `sync.*`-kald med sin Ed25519-nøgle over en engangs-challenge; ved parring beviser den, at den har nøglen (§4a) | Handleren | Fleets `fleet.device.enroll`, `sync.challenge` og `sync.*` |
 | `refused` | 4 | Ingen | Svarer altid med en afvisning | `intent.execute`, `intent.confirm`, `journey.advance` (`E_GATE_REQUIRED`), `identity.step_up` |
 | `open_write` | **0** | Alle, uden kontrol: **et kendt hul** | Kun tilladt med et plantrin | Ingen tilbage siden F0b.4 |
 
@@ -63,6 +63,18 @@ Tallene er for de syv produktionsdaemons pr. denne PR; kataloget er den aktuelle
 Beviser: `tests/test_ipc_access.py` (hver metode har en klasse; `open_write` er præcis de kendte huller, og listen er tom; `daemon_write` afvises fra en anden bruger og uden kalder; root er ikke daemon-skriver; desktop-brugeren kan hverken skrive i `stated` eller få `identityd` til at skrive audit) og `tests/test_daemon_isolation.py` (kun de navngivne daemons; samme UID er ikke nok; etiket før cgroup; complain-tilstand tæller ikke; hvert kald i koden står i politikken, og profilerne svarer til den). Mutanter `IPC-DW-1` til `IPC-DW-6`. VM: `user-cannot-write-stated`, `user-cannot-make-identityd-audit`, `user-mode-without-session`, `eira-uid-is-not-a-daemon`, `eira-uid-cannot-audit`, `fleetd-may-append-state`, `graphd-cannot-append-state`, `fleetd-cannot-audit`, `intentd-cannot-reach-stated`.
 
 **Tilbage:** `fleetd` taler med netværket og må stadig skrive tilstande i `stated`, fordi det er dens opgave at modtage synkroniserede blokke fra parrede enheder (`sync.push_blocks`, som tjekker signaturen og hashkæden). En kompromitteret `fleetd` kan altså stadig tilføje tilstande, men ikke skrive audit og ikke bruge batch-vejen.
+
+## 4a. Fleet-synkronisering: signeret, engangs-challenge
+
+En parret enhed har to nøgler: en X25519-nøgle til de krypterede tilstande og en Ed25519-nøgle, den signerer med. Dens id er fingeraftrykket af signeringsnøglen (`app/fleet/device_registry.py`).
+
+- **Parring** (`fleet.device.enroll`): enheden sender parringskoden, begge nøgler og et bevis: en signatur med signeringsnøglen over `eira-fleet-enroll-v1`, `sha256` af koden og begge nøgler. Den, der kun kender en enheds offentlige nøgler, kan ikke parre dem.
+- **Challenge** (`sync.challenge`): en parret, aktiv enhed får en tilfældig nonce, der gælder i 60 sekunder og kun til den enhed. Højst 16 åbne ad gangen pr. enhed.
+- **Kald** (`sync.handshake`, `sync.request_blocks`, `sync.push_blocks`): enheden signerer `eira-fleet-sync-v1`, metoden, sit id, noncen og kaldets parametre som kanonisk JSON (sorterede nøgler, ingen mellemrum, UTF-8). Felter, transporten tilføjer (`_eira`, `_peer`), signeres ikke. Registret tjekker signaturen med den parrede nøgle først og bruger derefter noncen op. En forkert signatur bruger ikke noncen, så den, der kun har set noncen, kan ikke brænde den.
+- Over WebSocket signeres håndtrykket; resten af forbindelsen er bundet til den enhed.
+- Der er intet bearer-token længere. En enhed parret før F1c.1 har ingen signeringsnøgle og skal parres igen.
+
+Beviser: `tests/test_fleet_signed_sync.py` (genbrug, udløb, anden enheds nonce, ændrede parametre, anden metode, anden nøgle, manglende bevis, gammelt token, tilbagekaldt enhed, grænsen for åbne challenges, gamle registre), `tests/test_fleet_authorization.py` (beviset ved parring, over IPC). Mutanter `IPC-FLT-1` til `IPC-FLT-8`. Intet VM-check: lytteren er slået fra (F1c.6), og der er endnu ingen klient på en anden maskine.
 
 ## 5. Gaten
 

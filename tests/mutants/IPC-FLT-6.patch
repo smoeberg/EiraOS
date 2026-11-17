@@ -1,0 +1,14 @@
+Mutant IPC-FLT-6: the method is not part of what is signed
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -72,7 +72,7 @@
+ def sync_message(method: str, device_id: str, nonce: str, params: Any) -> bytes:
+     return canonical_json({
+         "v": SYNC_CONTEXT,
+-        "method": method,
++        "method": "sync",
+         "device_id": device_id,
+         "nonce": nonce,
+         "params": signed_params(params),

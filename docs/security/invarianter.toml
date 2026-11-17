@@ -220,3 +220,11 @@ production_tests = ["tests/test_service_limits.py::test_every_long_running_unit_
 mutants = ["IPC-SRV-3", "IPC-WD-1", "IPC-WD-2", "IPC-WD-3", "IPC-WD-4", "IPC-WD-5"]
 vm = ["unit-limits-set", "unit-limits-headroom", "gate-watchdog-pings", "gate-hang-is-restarted"]
 gap = "Kun gaten har watchdog; de øvrige daemons genstartes kun, hvis de dør"
+
+[[invariant]]
+id = "I-25"
+section = "§4a"
+claim = "Hvert synkroniseringskald er signeret af den parrede enheds nøgle over en engangs-challenge; parring kræver bevis for nøglen"
+tests = ["tests/test_fleet_signed_sync.py::test_a_challenge_is_used_once", "tests/test_fleet_signed_sync.py::test_changed_parameters_are_refused", "tests/test_fleet_signed_sync.py::test_a_signature_with_another_key_is_refused", "tests/test_fleet_signed_sync.py::test_another_devices_challenge_cannot_be_used", "tests/test_fleet_signed_sync.py::test_an_expired_challenge_is_refused", "tests/test_fleet_signed_sync.py::test_an_old_bearer_token_is_no_proof", "tests/test_fleet_authorization.py::test_enrollment_needs_a_proof_with_the_signing_key", "tests/test_fleet_authorization.py::test_an_unsigned_or_token_call_over_ipc_is_refused"]
+mutants = ["IPC-FLT-1", "IPC-FLT-2", "IPC-FLT-3", "IPC-FLT-4", "IPC-FLT-5", "IPC-FLT-6", "IPC-FLT-7", "IPC-FLT-8"]
+gap = "Kun i udviklingstilstand; intet VM-check, fordi lytteren er slået fra (F1c.6) og der endnu ingen klient er på en anden maskine"
