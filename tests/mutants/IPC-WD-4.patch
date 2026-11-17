@@ -1,0 +1,13 @@
+Mutant IPC-WD-4: the runner never tells systemd it is ready
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_service_limits.py
+
+--- a/app/daemons/runner.py
++++ b/app/daemons/runner.py
+@@ -163,7 +163,6 @@
+         # and a ping per period only while each daemon answers its own
+         # health call. Without systemd's variables this is the old loop.
+         notifier = ServiceNotifier(servers)
+-        notifier.ready()
+         while not _PROCESS_STOP.wait(notifier.interval or 1.0):
+             notifier.tick()
+     finally:

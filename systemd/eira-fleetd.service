@@ -5,6 +5,11 @@ PartOf=eira.target
 Before=eira.target
 Requires=eira-stated.service
 After=eira-stated.service
+# A crash loop stops after 10 starts in two minutes and shows as failed
+# (UDVIKLINGSPLAN F1c.13). systemd's default, 5 in 10 s, is never reached
+# at RestartSec=2s, so a crash loop ran for ever.
+StartLimitIntervalSec=120s
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -27,6 +32,11 @@ EnvironmentFile=-/etc/eira/eira.conf
 ExecStart=/usr/bin/eira-fleetd
 Restart=always
 RestartSec=2s
+# Idle it uses 20 to 46 MB and 2 to 5 threads; one thread per connection.
+# At the limits it is killed and restarted (memory) or refuses the
+# connection (threads), instead of taking the machine with it.
+MemoryMax=512M
+TasksMax=128
 RuntimeDirectory=eira
 RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes

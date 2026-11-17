@@ -436,6 +436,42 @@ MUTANTS.update({
                    "            if self._access[method] is Access.DAEMON_WRITE and not daemon_write_allowed(",
                    "            if False and not daemon_write_allowed(")],
     },
+    # F1c.13 (G-39): limits and the gate's watchdog.
+    "IPC-SRV-3": {
+        "why": "at the thread limit the accept loop ends instead of refusing one connection",
+        "tests": IPC_TESTS + ["tests/test_service_limits.py"],
+        "edits": [("app/daemons/base.py", "                except RuntimeError as exc:\n                    # No more threads",
+                   "                except ZeroDivisionError as exc:\n                    # No more threads")],
+    },
+    "IPC-WD-1": {
+        "why": "the watchdog is pinged although a daemon does not answer",
+        "tests": IPC_TESTS + ["tests/test_service_limits.py"],
+        "edits": [("app/daemons/service_notify.py", "        if not self.healthy():\n            return False\n", "")],
+    },
+    "IPC-WD-2": {
+        "why": "any reply to the health call counts as healthy",
+        "tests": IPC_TESTS + ["tests/test_service_limits.py"],
+        "edits": [("app/daemons/service_notify.py",
+                   '    return isinstance(reply, dict) and reply.get("ok") is True', "    return True")],
+    },
+    "IPC-WD-3": {
+        "why": "a daemon that does not answer in time counts as healthy",
+        "tests": IPC_TESTS + ["tests/test_service_limits.py"],
+        "edits": [("app/daemons/service_notify.py",
+                   '        logger.warning("%s does not answer its health call: %s", daemon, exc)\n        return False',
+                   '        logger.warning("%s does not answer its health call: %s", daemon, exc)\n        return True')],
+    },
+    "IPC-WD-4": {
+        "why": "the runner never tells systemd it is ready",
+        "tests": IPC_TESTS + ["tests/test_service_limits.py"],
+        "edits": [("app/daemons/runner.py", "        notifier.ready()\n", "")],
+    },
+    "IPC-WD-5": {
+        "why": "the runner pings on a timer without asking the daemon",
+        "tests": IPC_TESTS + ["tests/test_service_limits.py"],
+        "edits": [("app/daemons/runner.py", "        notifier = ServiceNotifier(servers)",
+                   "        notifier = ServiceNotifier(servers, probe=lambda _daemon: True)")],
+    },
     "IPC-SRV-2": {
         "why": "a client-supplied caller is trusted",
         "tests": IPC_TESTS,

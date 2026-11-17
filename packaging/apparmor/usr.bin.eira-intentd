@@ -58,6 +58,10 @@
   dbus receive bus=system peer=(label=unconfined),
 
   network unix stream,
+  # sd_notify to systemd: READY=1 and the watchdog ping (F1c.13). Without
+  # these a healthy gate is killed when WatchdogSec runs out.
+  network unix dgram,
+  /run/systemd/notify rw,
   deny network inet,
   deny network inet6,
   deny @{HOME}/** rwklx,

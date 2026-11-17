@@ -29,6 +29,7 @@ app/daemons/identityd.py
 app/daemons/intent_engine.py
 app/daemons/intentd.py
 app/daemons/runner.py
+app/daemons/service_notify.py
 app/daemons/stated.py
 app/daemons/veritasd.py
 app/database.py

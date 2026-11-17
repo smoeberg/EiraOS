@@ -187,6 +187,39 @@ for daemon in $DAEMONS; do
     check "daemon-$daemon" systemctl is-active --quiet "eira-$daemon.service"
     check "socket-$daemon" test -S "/run/eira/$daemon.sock"
 done
+# F1c.13 (G-39): operating limits and the gate's watchdog. Helper variables
+# are lim_*, wd_* and hang_*: check and explain use name, log and status.
+LIMITED_UNITS=eira-modeld.service
+for daemon in $DAEMONS; do LIMITED_UNITS="$LIMITED_UNITS eira-$daemon.service"; done
+unit_prop() { systemctl show -p "$2" --value "$1"; }
+is_number() { case "$1" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+# Each long-running unit has the limits systemd reads from the unit file.
+# The control: systemd knows the unit and answers with numbers.
+unit_limits_set() {
+    for lim_unit in $LIMITED_UNITS; do
+        [ "$(unit_prop "$lim_unit" LoadState)" = loaded ] || { echo "$lim_unit not loaded"; return 1; }
+        lim_mem=$(unit_prop "$lim_unit" MemoryMax)
+        lim_tasks=$(unit_prop "$lim_unit" TasksMax)
+        lim_burst=$(unit_prop "$lim_unit" StartLimitBurst)
+        lim_interval=$(unit_prop "$lim_unit" StartLimitIntervalUSec)
+        is_number "$lim_mem" && is_number "$lim_tasks" && [ "$lim_burst" = 10 ] && [ "$lim_interval" = 2min ] ||
+            { echo "$lim_unit: MemoryMax=$lim_mem TasksMax=$lim_tasks burst=$lim_burst interval=$lim_interval"; return 1; }
+    done
+}
+check unit-limits-set explain unit-limits-set unit_limits_set
+# The gate told systemd it serves (Type=notify: active means READY=1 came),
+# and its pings arrive: the time of the last one moves within a period.
+gate_watchdog_pings() {
+    [ "$(unit_prop eira-intentd.service Type)" = notify ] || { echo "Type=$(unit_prop eira-intentd.service Type)"; return 1; }
+    [ "$(unit_prop eira-intentd.service ActiveState)" = active ] || { echo "not active"; return 1; }
+    [ "$(unit_prop eira-intentd.service WatchdogUSec)" = 30s ] || { echo "WatchdogUSec=$(unit_prop eira-intentd.service WatchdogUSec)"; return 1; }
+    wd_first=$(unit_prop eira-intentd.service WatchdogTimestampMonotonic)
+    sleep 14
+    wd_second=$(unit_prop eira-intentd.service WatchdogTimestampMonotonic)
+    echo "last ping at $wd_first, then $wd_second"
+    is_number "$wd_first" && is_number "$wd_second" && [ "$wd_second" -gt "$wd_first" ]
+}
+check gate-watchdog-pings explain gate-watchdog-pings gate_watchdog_pings
 check stated-ipc-health python3 - <<'PY'
 import json, socket
 token = ""
@@ -871,6 +904,84 @@ labwc_trusts_consent_group() {
 }
 check labwc-trusts-consent-group labwc_trusts_consent_group
 check eira-shell-running wait_for 180 pgrep -u "$USER_NAME" -f eira-spatial-desktop
+
+# F1c.13, after everything else has run. The limits are far from what the
+# daemons used: at most half, by the peak where systemd has it. The usage
+# line is said either way, so the limits can be judged from any run.
+unit_limits_headroom() {
+    lim_bad=0
+    for lim_unit in $LIMITED_UNITS; do
+        lim_max=$(unit_prop "$lim_unit" MemoryMax)
+        lim_used=$(unit_prop "$lim_unit" MemoryPeak)
+        is_number "$lim_used" || lim_used=$(unit_prop "$lim_unit" MemoryCurrent)
+        lim_tmax=$(unit_prop "$lim_unit" TasksMax)
+        lim_tcur=$(unit_prop "$lim_unit" TasksCurrent)
+        if is_number "$lim_max" && is_number "$lim_used" && is_number "$lim_tmax" && is_number "$lim_tcur"; then
+            printf '%s mem=%s/%sM tasks=%s/%s; ' "${lim_unit%.service}" "$((lim_used / 1048576))" "$((lim_max / 1048576))" "$lim_tcur" "$lim_tmax"
+            [ $((lim_used * 2)) -le "$lim_max" ] && [ $((lim_tcur * 2)) -le "$lim_tmax" ] || lim_bad=1
+        else
+            printf '%s mem=%s/%s tasks=%s/%s (not numbers); ' "${lim_unit%.service}" "$lim_used" "$lim_max" "$lim_tcur" "$lim_tmax"
+            lim_bad=1
+        fi
+    done
+    return $lim_bad
+}
+lim_usage=$(unit_limits_headroom)
+lim_status=$?
+say "info unit-usage: $lim_usage"
+check unit-limits-headroom [ "$lim_status" -eq 0 ]
+
+# A gate that hangs is killed and restarted. The gate is stopped (SIGSTOP):
+# alive, but it answers nothing, which Restart=always alone never notices.
+# The control: while stopped its health call gets no answer. Last, because
+# it restarts the gate.
+GATE_HEALTH_PY='import json, socket, sys
+token = ""
+for line in open("/etc/eira/eira.conf", encoding="utf-8"):
+    if line.startswith("EIRA_IPC_TOKEN="):
+        token = line.split("=", 1)[1].strip()
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(float(sys.argv[1]))
+s.connect("/run/eira/intentd.sock")
+s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "health",
+                       "params": {"_eira": {"ipc_token": token}}}) + "\n").encode())
+reply = json.loads(s.makefile().readline())
+sys.exit(0 if reply.get("result", {}).get("ok") is True else 1)'
+gate_answers() { python3 -c "$GATE_HEALTH_PY" "$1" >/dev/null 2>&1; }
+gate_hang_is_restarted() {
+    gate_answers 5 || { echo "the gate did not answer before the test"; return 1; }
+    hang_pid=$(unit_prop eira-intentd.service MainPID)
+    is_number "$hang_pid" && [ "$hang_pid" -gt 0 ] || { echo "no main pid"; return 1; }
+    hang_restarts=$(unit_prop eira-intentd.service NRestarts)
+    hang_since=$(date '+%Y-%m-%d %H:%M:%S')
+    kill -STOP "$hang_pid" || return 1
+    if gate_answers 3; then
+        kill -CONT "$hang_pid"
+        echo "a stopped gate answered"
+        return 1
+    fi
+    hang_waited=0
+    hang_new=$hang_pid
+    while [ "$hang_waited" -lt 100 ]; do
+        hang_new=$(unit_prop eira-intentd.service MainPID)
+        if is_number "$hang_new" && [ "$hang_new" -gt 0 ] && [ "$hang_new" != "$hang_pid" ] && gate_answers 3; then
+            break
+        fi
+        sleep 2
+        hang_waited=$((hang_waited + 2))
+    done
+    hang_after=$(unit_prop eira-intentd.service NRestarts)
+    echo "waited ${hang_waited}s; pid $hang_pid -> $hang_new; restarts $hang_restarts -> $hang_after"
+    if [ "$hang_waited" -ge 100 ]; then
+        [ "$hang_new" != "$hang_pid" ] || kill -CONT "$hang_pid" 2>/dev/null
+        systemctl show -p ActiveState,SubState,Result eira-intentd.service | tr '\n' ' '
+        return 1
+    fi
+    journalctl -b -u eira-intentd.service --since "$hang_since" --no-pager 2>/dev/null | grep -qi watchdog ||
+        { echo "no watchdog line in the journal"; return 1; }
+    is_number "$hang_after" && [ "$hang_after" -gt "$hang_restarts" ]
+}
+check gate-hang-is-restarted explain gate-hang-is-restarted gate_hang_is_restarted
 
 if [ "$failed" -ne 0 ]; then
     {

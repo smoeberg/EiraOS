@@ -206,11 +206,21 @@ class JsonRpcServer:
                     break
                 with self._connections_lock:
                     self._connections.add(conn)
-                threading.Thread(
-                    target=self._serve_client,
-                    args=(conn,),
-                    daemon=True,
-                ).start()
+                try:
+                    threading.Thread(
+                        target=self._serve_client,
+                        args=(conn,),
+                        daemon=True,
+                    ).start()
+                except RuntimeError as exc:
+                    # No more threads (the unit's TasksMax, F1c.13): refuse
+                    # this connection and keep accepting. Before, the error
+                    # ended the accept loop and left a daemon that was alive
+                    # and served nobody.
+                    logger.warning("%s: connection refused, cannot start a thread: %s", self.daemon, exc)
+                    with self._connections_lock:
+                        self._connections.discard(conn)
+                    conn.close()
         except BaseException as exc:  # surfaced synchronously by start()
             self._startup_error = exc
             self._ready.set()

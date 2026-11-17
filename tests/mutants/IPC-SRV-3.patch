@@ -1,0 +1,14 @@
+Mutant IPC-SRV-3: at the thread limit the accept loop ends instead of refusing one connection
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_service_limits.py
+
+--- a/app/daemons/base.py
++++ b/app/daemons/base.py
+@@ -212,7 +212,7 @@
+                         args=(conn,),
+                         daemon=True,
+                     ).start()
+-                except RuntimeError as exc:
++                except ZeroDivisionError as exc:
+                     # No more threads (the unit's TasksMax, F1c.13): refuse
+                     # this connection and keep accepting. Before, the error
+                     # ended the accept loop and left a daemon that was alive
