@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.daemons.base import JsonRpcServer
+from app.daemons.service_notify import ServiceNotifier
 from app.ipc.paths import run_dir
 
 DAEMON_NAMES = (
@@ -155,11 +156,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     _PROCESS_STOP.clear()
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
+    notifier: ServiceNotifier | None = None
     try:
-        start_daemons(args.daemon, args.socket_dir)
-        while not _PROCESS_STOP.wait(1.0):
-            pass
+        servers = start_daemons(args.daemon, args.socket_dir)
+        # systemd (Type=notify, WatchdogSec): ready once the sockets serve,
+        # and a ping per period only while each daemon answers its own
+        # health call. Without systemd's variables this is the old loop.
+        notifier = ServiceNotifier(servers)
+        notifier.ready()
+        while not _PROCESS_STOP.wait(notifier.interval or 1.0):
+            notifier.tick()
     finally:
+        if notifier is not None:
+            notifier.stopping()
         stop_daemons()
     return 0
 

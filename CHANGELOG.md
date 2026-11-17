@@ -142,6 +142,12 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   kunne genberegne kæden. En eksisterende kæde flyttes uændret ved første start (positioner og hashes, som ankrene
   nævner); to kæder, der ikke stemmer, stopper gaten. `eira-audit-verify` har fået `--audit-db`. Nye tests, mutanter
   `GATE-AU-2` til `GATE-AU-4` og fem VM-checks (udviklingsplan F1c.4, gennemgang G-4).
+- Driftsgrænser i alle otte units: `MemoryMax=512M`, `TasksMax=128` og en startgrænse på 10 starter på 2 minutter.
+  Systemd's standard (5 på 10 sekunder) nås aldrig ved `RestartSec=2s`, så et nedbrudsloop kørte for evigt. Gaten
+  (`intentd`) er `Type=notify` med `WatchdogSec=30s`: den melder klar, når socketen svarer, og pinges kun, mens den
+  svarer på sit eget `health`-kald, så en gate, der hænger, dræbes og genstartes. En daemon ved trådgrænsen afviser
+  én forbindelse i stedet for at lukke accept-løkken. Mutanter `IPC-SRV-3` og `IPC-WD-1` til `IPC-WD-5`, fire nye
+  VM-checks og invariant I-24 (udviklingsplan F1c.13, gennemgang G-39).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).

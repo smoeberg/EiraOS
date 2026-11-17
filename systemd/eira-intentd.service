@@ -5,9 +5,22 @@ PartOf=eira.target
 Before=eira.target
 Requires=eira-stated.service
 After=eira-stated.service
+# A crash loop stops after 10 starts in two minutes and shows as failed
+# (UDVIKLINGSPLAN F1c.13). systemd's default, 5 in 10 s, is never reached
+# at RestartSec=2s, so a crash loop ran for ever.
+StartLimitIntervalSec=120s
+StartLimitBurst=10
 
 [Service]
-Type=simple
+# notify: started means the gate serves (READY=1 after its socket is bound),
+# so units ordered after it wait for that. WatchdogSec: the runner pings only
+# while the gate answers its own health call; a gate that hangs is killed and
+# restarted (Restart=always). SIGKILL, not SIGABRT: no core dump of a
+# process that holds sessions.
+Type=notify
+NotifyAccess=main
+WatchdogSec=30s
+WatchdogSignal=SIGKILL
 User=eira
 Group=eira
 # May hand its socket to the client group (not a data group).
@@ -31,6 +44,11 @@ ExecStartPre=-/usr/bin/eira-rights-apply apply-default
 ExecStart=/usr/bin/eira-intentd
 Restart=always
 RestartSec=2s
+# Idle it uses 20 to 46 MB and 2 to 5 threads; one thread per connection.
+# At the limits it is killed and restarted (memory) or refuses the
+# connection (threads), instead of taking the machine with it.
+MemoryMax=512M
+TasksMax=128
 RuntimeDirectory=eira
 RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=yes

@@ -241,6 +241,9 @@ CALL_SITES = {
     "app/daemons/graphd.py": ("graphd", "stated"),
     "app/daemons/identityd.py": ("identityd", "stated"),
     "app/veritas/layer3_graph.py": ("veritasd", "graphd"),
+    # The runner's watchdog probe: each daemon calls health on its own socket
+    # (F1c.13), which its profile already owns. No other daemon's.
+    "app/daemons/service_notify.py": (None, None),
     # Not daemons: the dev HTTP bridge, the CLI and the model (own profile).
     "app/routers/common.py": (None, None),
     "app/cli/delegation.py": (None, None),

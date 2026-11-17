@@ -1,0 +1,14 @@
+Mutant IPC-WD-3: a daemon that does not answer in time counts as healthy
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_service_limits.py
+
+--- a/app/daemons/service_notify.py
++++ b/app/daemons/service_notify.py
+@@ -67,7 +67,7 @@
+         reply = IpcClient(daemon, timeout=timeout).call("health")
+     except Exception as exc:  # noqa: BLE001 - any failure is "does not answer"
+         logger.warning("%s does not answer its health call: %s", daemon, exc)
+-        return False
++        return True
+     return isinstance(reply, dict) and reply.get("ok") is True
+ 
+ 

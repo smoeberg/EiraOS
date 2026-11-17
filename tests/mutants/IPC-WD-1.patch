@@ -1,0 +1,12 @@
+Mutant IPC-WD-1: the watchdog is pinged although a daemon does not answer
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_service_limits.py
+
+--- a/app/daemons/service_notify.py
++++ b/app/daemons/service_notify.py
+@@ -92,6 +92,4 @@
+         """One watchdog period: ping only if every daemon answers."""
+         if self.interval is None:
+             return False
+-        if not self.healthy():
+-            return False
+         return notify("WATCHDOG=1")

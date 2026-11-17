@@ -138,7 +138,7 @@ Accepteret af ejeren 14. november 2026. Små PR'er mellem F2-trinnene; F1c.2 og 
 | F1c.10 | Samtykkeagenten: læsetimeout pr. forbindelse og stop med en klar fejl, når IPC-tokenet ikke kan læses. Ejerens beslutning om grænser: hvor mange forslag modellen må sende, hvor tit agenten må vise en dialog, og hvor længe beskedtekst og audit gemmes | G-16, G-17, G-28, G-29 |
 | F1c.11 | Ejerens beslutning om Rust-lageret: enten bygges og installeres `libeira_stated.so`, og `stated` kræver det (`EIRA_STATE_BACKEND=rust`), eller Rust-lageret, `app/core_rust.py` og `eira-ipc` arkiveres. Begge dele er bedre end en tavs fallback | G-26, G-27, G-32 |
 | F1c.12 | Ejerens beslutning om en udgivelsesnøgle; derefter et signeret offline-repo (`Release` + `InRelease`) og `signed-by=` i stedet for `trusted=yes`, både i CI og på ISO'et | G-33 |
-| F1c.13 | Driftsgrænser i alle units: `MemoryMax`, `TasksMax`, `StartLimitIntervalSec`/`StartLimitBurst`, og `WatchdogSec` med `sd_notify` i gaten først | G-39 |
+| F1c.13 | Driftsgrænser i alle units: `MemoryMax`, `TasksMax`, `StartLimitIntervalSec`/`StartLimitBurst`, og `WatchdogSec` med `sd_notify` i gaten først (leveret 17. november: `MemoryMax=512M`, `TasksMax=128` og en startgrænse på 10 i 2 minutter i alle otte units; `intentd` er `Type=notify` med `WatchdogSec=30s`, og runneren pinger kun, mens gaten svarer på sit eget `health`-kald; VM-checket viser en hængt gate dræbt og genstartet. De øvrige daemons får watchdog senere) | G-39 |
 
 ### F2 — Kontekster (EIRA-CONTEXT 1.0)
 
