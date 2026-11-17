@@ -55,34 +55,38 @@ class FleetSyncService:
 
     def _authorize(
         self,
+        method: str,
         params: Mapping[str, Any],
         *,
         public_key: bool = False,
         session_authenticated: bool = False,
     ) -> str:
-        # ``session_authenticated`` is an in-process flag set only by the
-        # WebSocket handler after a token-verified handshake. It must never be
-        # read from caller-supplied params, or any client could skip the token.
+        """Each call is signed by the device over a fresh challenge
+        (UDVIKLINGSPLAN F1c.1). ``session_authenticated`` is an in-process
+        flag set only by the WebSocket handler after a signed handshake on
+        that connection; it is never read from caller-supplied params."""
         device_id = str(params.get("device_id", ""))
-        self.registry.assert_authorized(
+        if session_authenticated:
+            self.registry.assert_authorized(device_id)
+            return device_id
+        self.registry.verify_request(
+            method,
             device_id,
+            params,
             public_key=(
-                str(params.get("public_key"))
-                if public_key and params.get("public_key")
-                else None
+                str(params.get("public_key")) if public_key and params.get("public_key") else None
             ),
-            auth_token=(
-                str(params.get("auth_token")) if params.get("auth_token") else None
-            ),
-            require_token=not session_authenticated,
         )
         return device_id
+
+    def challenge(self, params: Mapping[str, Any]) -> dict[str, Any]:
+        return self.registry.challenge(str(params.get("device_id", "")))
 
     def handshake(
         self, params: Mapping[str, Any], *, session_authenticated: bool = False
     ) -> dict[str, Any]:
         device_id = self._authorize(
-            params, public_key=True, session_authenticated=session_authenticated
+            "sync.handshake", params, public_key=True, session_authenticated=session_authenticated
         )
         remote_headers = list(params.get("headers", []))
         local_states = self.store.list_states()
@@ -100,7 +104,7 @@ class FleetSyncService:
     def request_blocks(
         self, params: Mapping[str, Any], *, session_authenticated: bool = False
     ) -> dict[str, Any]:
-        self._authorize(params, session_authenticated=session_authenticated)
+        self._authorize("sync.request_blocks", params, session_authenticated=session_authenticated)
         requested = [str(value) for value in params.get("hashes", [])]
         if len(requested) > 10_000:
             raise FleetProtocolError("Too many state hashes requested")
@@ -114,7 +118,7 @@ class FleetSyncService:
     def push_blocks(
         self, params: Mapping[str, Any], *, session_authenticated: bool = False
     ) -> dict[str, Any]:
-        self._authorize(params, session_authenticated=session_authenticated)
+        self._authorize("sync.push_blocks", params, session_authenticated=session_authenticated)
         raw_blocks = list(params.get("blocks", []))
         if len(raw_blocks) > 10_000:
             raise FleetProtocolError("Too many state blocks supplied")
@@ -212,6 +216,8 @@ class FleetSyncService:
                 raise DeviceAuthorizationError("WebSocket device identity cannot change")
             params["device_id"] = authenticated_device
             session_authenticated = True
+        if method == "sync.challenge":
+            return method, self.challenge(params)
         if method == "sync.handshake":
             return method, self.handshake(
                 params, session_authenticated=session_authenticated
@@ -291,7 +297,9 @@ class FleetWebSocketServer:
                         raise FleetProtocolError("Fleet message must be a JSON object")
                     request_id = message.get("id")
                     method = str(message.get("method") or message.get("type") or "")
-                    if authenticated_device is None and method != "sync.handshake":
+                    if authenticated_device is None and method not in {
+                        "sync.challenge", "sync.handshake"
+                    }:
                         raise DeviceAuthorizationError("Handshake is required")
                     method, result = self.service.handle_message(
                         message, authenticated_device=authenticated_device
@@ -513,7 +521,8 @@ def register_fleet_handlers(server: Any) -> None:
     )
     server.register(
         "fleet.device.enroll",
-        # The pairing token and the device's key proof decide.
+        # The pairing code and the device's proof (a signature with its key
+        # over the code and both keys) decide.
         signed(_rpc_guard(lambda params: service.registry.enroll(**params).as_dict())),
     )
     server.register(
@@ -526,9 +535,11 @@ def register_fleet_handlers(server: Any) -> None:
             )
         ),
     )
-    # Each sync call is authorized by the device's token (_authorize compares
-    # sha256(auth_token) with the enrolled one). It is a bearer token, not a
-    # signature: no challenge, no nonce (vurderingen G-1, UDVIKLINGSPLAN F1c.1).
+    # Each sync call is signed by the device's enrolled Ed25519 key over a
+    # single-use challenge (UDVIKLINGSPLAN F1c.1, vurderingen G-1). The
+    # challenge itself is given only to a paired, active device, a few at a
+    # time; it proves nothing until it is signed.
+    server.register("sync.challenge", signed(_rpc_guard(service.challenge)))
     server.register("sync.handshake", signed(_rpc_guard(service.handshake)))
     server.register("sync.request_blocks", signed(_rpc_guard(service.request_blocks)))
     server.register("sync.push_blocks", signed(_rpc_guard(service.push_blocks)))

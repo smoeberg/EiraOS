@@ -1,0 +1,14 @@
+Mutant IPC-FLT-2: a challenge can be used again
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -419,7 +419,7 @@
+             connection.commit()
+             if self._shared is None:
+                 connection.close()
+-        if used.rowcount != 1:
++        if False:
+             raise DeviceAuthorizationError("Challenge is unknown, used or expired")
+         return device
+ 

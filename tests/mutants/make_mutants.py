@@ -472,6 +472,47 @@ MUTANTS.update({
         "edits": [("app/daemons/runner.py", "        notifier = ServiceNotifier(servers)",
                    "        notifier = ServiceNotifier(servers, probe=lambda _daemon: True)")],
     },
+    # F1c.1 (G-1): sync is signed over a single-use challenge.
+    "IPC-FLT-1": {
+        "why": "a sync call is accepted without checking the signature",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", '        if not _verify(str(device.signing_key), signature, message):', '        if False:')],
+    },
+    "IPC-FLT-2": {
+        "why": "a challenge can be used again",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", '        if used.rowcount != 1:', '        if False:')],
+    },
+    "IPC-FLT-3": {
+        "why": "one device's challenge can be used by another",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", 'WHERE nonce = ? AND device_id = ? AND used_at IS NULL', 'WHERE nonce = ? AND (device_id = ? OR 1) AND used_at IS NULL')],
+    },
+    "IPC-FLT-4": {
+        "why": "an expired challenge is accepted",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", 'AND used_at IS NULL AND expires_at >= ?', 'AND used_at IS NULL AND (expires_at >= ? OR 1)')],
+    },
+    "IPC-FLT-5": {
+        "why": "the parameters are not part of what is signed",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", '        "params": signed_params(params),', '        "params": {},')],
+    },
+    "IPC-FLT-6": {
+        "why": "the method is not part of what is signed",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", '        "method": method,\n        "device_id": device_id,', '        "method": "sync",\n        "device_id": device_id,')],
+    },
+    "IPC-FLT-7": {
+        "why": "a device enrolls without proving it holds the key",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", '        if not _verify(signing_key, proof, enroll_message(pairing_code, public_key, signing_key)):', '        if False:')],
+    },
+    "IPC-FLT-8": {
+        "why": "a device may hold any number of challenges",
+        "tests": IPC_TESTS + ["tests/test_fleet_signed_sync.py", "tests/test_fleet_authorization.py", "tests/test_fleet_session_flag_spoofing.py"],
+        "edits": [("app/fleet/device_registry.py", '            if open_count >= MAX_OPEN_CHALLENGES:', '            if False:')],
+    },
     "IPC-SRV-2": {
         "why": "a client-supplied caller is trusted",
         "tests": IPC_TESTS,

@@ -1,0 +1,14 @@
+Mutant IPC-FLT-8: a device may hold any number of challenges
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -369,7 +369,7 @@
+             (open_count,) = connection.execute(
+                 "SELECT COUNT(*) FROM fleet_challenges WHERE device_id = ?", (device_id,)
+             ).fetchone()
+-            if open_count >= MAX_OPEN_CHALLENGES:
++            if False:
+                 connection.commit()
+                 if self._shared is None:
+                     connection.close()

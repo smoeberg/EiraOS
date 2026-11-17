@@ -1,0 +1,14 @@
+Mutant IPC-FLT-7: a device enrolls without proving it holds the key
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -256,7 +256,7 @@
+         _ed25519_key(signing_key)
+         # The device holds the signing key: it signed the pairing code and
+         # both keys. A copied public key cannot be enrolled by someone else.
+-        if not _verify(signing_key, proof, enroll_message(pairing_code, public_key, signing_key)):
++        if False:
+             raise DeviceAuthorizationError("Enrollment proof does not verify")
+         # The id is derived from the key, never chosen by the caller: a caller
+         # cannot claim another device's id or keep an id with a new key.

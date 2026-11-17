@@ -31,19 +31,21 @@ class FakeRegistry:
         self.active = set(active or set())
         self.heartbeats: list[str] = []
         self.revoked: set[str] = set()
+        self.verified: list[str] = []
 
-    def assert_authorized(
-        self,
-        device_id: str,
-        *,
-        public_key: str | None = None,
-        auth_token: str | None = None,
-        require_token: bool = False,
-    ) -> Any:
+    def assert_authorized(self, device_id: str, *, public_key: str | None = None) -> Any:
         if device_id not in self.active or device_id in self.revoked:
             raise DeviceAuthorizationError("Device is not paired")
-        if require_token and not auth_token:
-            raise DeviceAuthorizationError("Device authentication token is required")
+        return device_id
+
+    def verify_request(self, method: str, device_id: str, params: Any, *,
+                       public_key: str | None = None) -> Any:
+        # The real check (signature over a single-use challenge) is tested
+        # with the real registry in test_fleet_signed_sync.py.
+        self.assert_authorized(device_id)
+        if params.get("signature") != "ok":
+            raise DeviceAuthorizationError("A signed challenge is required")
+        self.verified.append(method)
         return device_id
 
     def heartbeat(self, device_id: str) -> str:
@@ -141,7 +143,7 @@ def test_handshake_reports_merkle_diff_and_beats_heartbeat() -> None:
     remote = [{"id": str(s1.id), "hash": s1.hash, "version": s1.version,
                "previous_state_id": None, "timestamp_ns": s1.timestamp_ns}]
 
-    result = service.handshake({"device_id": "device-a", "auth_token": "tok", "headers": remote})
+    result = service.handshake({"device_id": "device-a", "signature": "ok", "headers": remote})
 
     assert result["accepted"] is True
     assert result["device_id"] == "device-a"
@@ -155,7 +157,7 @@ def test_handshake_reports_merkle_diff_and_beats_heartbeat() -> None:
 def test_handshake_requires_active_device() -> None:
     service, _, _ = make_service()
     with pytest.raises(DeviceAuthorizationError):
-        service.handshake({"device_id": "device-x", "auth_token": "tok", "headers": []})
+        service.handshake({"device_id": "device-x", "signature": "ok", "headers": []})
 
 
 def test_request_blocks_returns_encrypted_blocks_for_known_hashes() -> None:
@@ -164,7 +166,7 @@ def test_request_blocks_returns_encrypted_blocks_for_known_hashes() -> None:
     service.store.append(s1)
 
     result = service.request_blocks(
-        {"device_id": "device-a", "auth_token": "tok", "hashes": [s1.hash, "missing-hash"]}
+        {"device_id": "device-a", "signature": "ok", "hashes": [s1.hash, "missing-hash"]}
     )
 
     assert result["count"] == 1
@@ -174,7 +176,7 @@ def test_request_blocks_returns_encrypted_blocks_for_known_hashes() -> None:
 def test_request_blocks_rejects_unauthorized_device() -> None:
     service, _, _ = make_service()
     with pytest.raises(DeviceAuthorizationError):
-        service.request_blocks({"device_id": "device-x", "auth_token": "tok", "hashes": []})
+        service.request_blocks({"device_id": "device-x", "signature": "ok", "hashes": []})
 
 
 def test_push_blocks_accepts_blocks_arriving_out_of_order() -> None:
@@ -183,7 +185,7 @@ def test_push_blocks_accepts_blocks_arriving_out_of_order() -> None:
     s2 = signed_state(s1)
     blocks = [service.encryptor.encrypt_state(s2), service.encryptor.encrypt_state(s1)]
 
-    result = service.push_blocks({"device_id": "device-a", "auth_token": "tok", "blocks": blocks})
+    result = service.push_blocks({"device_id": "device-a", "signature": "ok", "blocks": blocks})
 
     assert result["accepted"] == 2
     assert result["invalid"] == 0
@@ -195,9 +197,9 @@ def test_push_blocks_skips_already_known_blocks() -> None:
     service, _, _ = make_service()
     s1 = signed_state()
     block = service.encryptor.encrypt_state(s1)
-    service.push_blocks({"device_id": "device-a", "auth_token": "tok", "blocks": [block]})
+    service.push_blocks({"device_id": "device-a", "signature": "ok", "blocks": [block]})
 
-    result = service.push_blocks({"device_id": "device-a", "auth_token": "tok", "blocks": [block]})
+    result = service.push_blocks({"device_id": "device-a", "signature": "ok", "blocks": [block]})
 
     assert result["skipped"] == 1
     assert result["accepted"] == 0
@@ -210,7 +212,7 @@ def test_push_blocks_fail_closed_on_missing_chain_parent() -> None:
     s2 = signed_state(s1)  # parent never pushed
     blocks = [service.encryptor.encrypt_state(s2)]
 
-    result = service.push_blocks({"device_id": "device-a", "auth_token": "tok", "blocks": blocks})
+    result = service.push_blocks({"device_id": "device-a", "signature": "ok", "blocks": blocks})
 
     assert result["accepted"] == 0
     assert result["invalid"] == 1
@@ -221,7 +223,7 @@ def test_push_blocks_rejects_forked_state_id() -> None:
     """Same state id with a different hash must never overwrite the original."""
     service, _, _ = make_service()
     original = signed_state()
-    service.push_blocks({"device_id": "device-a", "auth_token": "tok",
+    service.push_blocks({"device_id": "device-a", "signature": "ok",
                          "blocks": [service.encryptor.encrypt_state(original)]})
 
     fork = signed_state()
@@ -236,7 +238,7 @@ def test_push_blocks_rejects_forked_state_id() -> None:
     )
 
     result = service.push_blocks(
-        {"device_id": "device-a", "auth_token": "tok", "blocks": [service.encryptor.encrypt_state(fork)]}
+        {"device_id": "device-a", "signature": "ok", "blocks": [service.encryptor.encrypt_state(fork)]}
     )
 
     assert result["invalid"] == 1
@@ -256,7 +258,7 @@ def test_push_blocks_rejects_tampered_envelope() -> None:
                      separators=(",", ":")).encode("utf-8")
     block["body"] = base64.b64encode(raw).decode("ascii")
 
-    result = service.push_blocks({"device_id": "device-a", "auth_token": "tok", "blocks": [block]})
+    result = service.push_blocks({"device_id": "device-a", "signature": "ok", "blocks": [block]})
 
     assert result["invalid"] == 1
     assert result["accepted"] == 0
@@ -267,7 +269,7 @@ def test_unauthorized_push_never_touches_store() -> None:
     service, _, _ = make_service()
     s1 = signed_state()
     with pytest.raises(DeviceAuthorizationError):
-        service.push_blocks({"device_id": "device-x", "auth_token": "tok",
+        service.push_blocks({"device_id": "device-x", "signature": "ok",
                              "blocks": [service.encryptor.encrypt_state(s1)]})
     assert service.store.count() == 0
 
@@ -288,7 +290,7 @@ def test_mixed_batch_is_rejected_in_full() -> None:
 
     result = service.push_blocks({
         "device_id": "device-a",
-        "auth_token": "tok",
+        "signature": "ok",
         "blocks": [
             encryptor.encrypt_state(good),
             encryptor.encrypt_state(forged),

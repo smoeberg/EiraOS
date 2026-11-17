@@ -1,45 +1,29 @@
-import base64
 import time
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from app.fleet.device_registry import DeviceAuthorizationError, DeviceRegistry
-
-
-def public_key() -> str:
-    key = X25519PrivateKey.generate().public_key().public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    )
-    return base64.b64encode(key).decode("ascii")
+from tests.fleet_device import FleetTestDevice
 
 
 def test_enrollment_flow_and_hashed_pairing_code():
     registry = DeviceRegistry()
-    pairing = registry.create_pairing_token(ttl_seconds=30)
-    enrolled = registry.enroll(
-        pairing_code=pairing["code"], name="Phone",
-        os_type="android", public_key=public_key()
-    )
-    assert enrolled.device.status == "active"
-    assert enrolled.device.os_type == "android"
-    assert enrolled.auth_token
-    assert registry.list_active()[0].device_id == enrolled.device.device_id
+    device = FleetTestDevice(os_type="android")
+    enrolled = device.enroll(registry, registry.create_pairing_token(ttl_seconds=30)["code"])
+    assert enrolled.status == "active"
+    assert enrolled.os_type == "android"
+    assert enrolled.device_id == device.device_id
+    assert enrolled.signing_key == device.signing_key
+    assert "auth_token" not in enrolled.as_dict()  # no bearer token (F1c.1)
+    assert registry.list_active()[0].device_id == enrolled.device_id
 
 
 def test_pairing_code_cannot_be_reused():
     registry = DeviceRegistry()
     code = registry.create_pairing_token()["code"]
-    registry.enroll(
-        pairing_code=code, name="One", os_type="ubuntu",
-        public_key=public_key()
-    )
+    FleetTestDevice("One").enroll(registry, code)
     with pytest.raises(DeviceAuthorizationError):
-        registry.enroll(
-            pairing_code=code, name="Two", os_type="ubuntu",
-            public_key=public_key()
-        )
+        FleetTestDevice("Two").enroll(registry, code)
 
 
 def test_expired_pairing_code_is_rejected():
@@ -47,24 +31,15 @@ def test_expired_pairing_code_is_rejected():
     code = registry.create_pairing_token(ttl_seconds=30)["code"]
     with registry._lock:
         conn = registry._connect()
-        conn.execute(
-            "UPDATE pairing_codes SET expires_at = ?", (int(time.time()) - 1,)
-        )
+        conn.execute("UPDATE pairing_codes SET expires_at = ?", (int(time.time()) - 1,))
         conn.commit()
     with pytest.raises(DeviceAuthorizationError):
-        registry.enroll(
-            pairing_code=code, name="One", os_type="ubuntu",
-            public_key=public_key()
-        )
+        FleetTestDevice().enroll(registry, code)
 
 
 def test_revoke_removes_device_from_active_queries():
     registry = DeviceRegistry()
-    code = registry.create_pairing_token()["code"]
-    d1 = registry.enroll(
-        pairing_code=code, name="One", os_type="ubuntu",
-        public_key=public_key()
-    ).device.device_id
+    d1 = FleetTestDevice().enroll(registry).device_id
     assert registry.revoke(d1).status == "revoked"
     assert registry.list_active() == []
     with pytest.raises(DeviceAuthorizationError):
@@ -73,11 +48,7 @@ def test_revoke_removes_device_from_active_queries():
 
 def test_heartbeat_expiry_is_fail_closed():
     registry = DeviceRegistry(heartbeat_ttl_seconds=1)
-    code = registry.create_pairing_token()["code"]
-    d1 = registry.enroll(
-        pairing_code=code, name="One", os_type="ubuntu",
-        public_key=public_key()
-    ).device.device_id
+    d1 = FleetTestDevice().enroll(registry).device_id
     registry.heartbeat(d1)
     time.sleep(1.1)
     assert registry.list_active() == []
@@ -86,14 +57,13 @@ def test_heartbeat_expiry_is_fail_closed():
         registry.assert_authorized(d1)
 
 
-def test_invalid_public_key_is_rejected():
+def test_invalid_keys_are_rejected():
     registry = DeviceRegistry()
     code = registry.create_pairing_token()["code"]
-    with pytest.raises(ValueError):
-        registry.enroll(
-            pairing_code=code, name="One", os_type="ubuntu",
-            public_key="not-a-key"
-        )
+    for field in ("public_key", "signing_key"):
+        request = FleetTestDevice().enrollment(code) | {field: "not-a-key"}
+        with pytest.raises(ValueError):
+            registry.enroll(**request)
 
 
 def test_pairing_code_is_hashed_at_rest():
@@ -108,12 +78,6 @@ def test_pairing_code_is_hashed_at_rest():
 
 def test_os_type_is_normalized_and_invalid_os_rejected():
     registry = DeviceRegistry()
-    code = registry.create_pairing_token()["code"]
-    device = registry.enroll(
-        pairing_code=code, name="One", os_type="Ubuntu",
-        public_key=public_key()
-    ).device
-    assert device.os_type == "ubuntu"
-    code2 = registry.create_pairing_token()["code"]
+    assert FleetTestDevice(os_type="Ubuntu").enroll(registry).os_type == "ubuntu"
     with pytest.raises(ValueError):
-        registry.enroll(pairing_code=code2, name="Two", os_type="ios", public_key=public_key())
+        FleetTestDevice(os_type="ios").enroll(registry)

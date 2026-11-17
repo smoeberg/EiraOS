@@ -1,0 +1,14 @@
+Mutant IPC-FLT-3: one device's challenge can be used by another
+Tests: tests/test_ipc_access.py tests/test_gate_caller.py tests/test_s1_daemons_ipc.py tests/test_daemon_isolation.py tests/test_fleet_signed_sync.py tests/test_fleet_authorization.py tests/test_fleet_session_flag_spoofing.py
+
+--- a/app/fleet/device_registry.py
++++ b/app/fleet/device_registry.py
+@@ -412,7 +412,7 @@
+             used = connection.execute(
+                 """
+                 UPDATE fleet_challenges SET used_at = ?
+-                WHERE nonce = ? AND device_id = ? AND used_at IS NULL AND expires_at >= ?
++                WHERE nonce = ? AND (device_id = ? OR 1) AND used_at IS NULL AND expires_at >= ?
+                 """,
+                 (self._now(), nonce, device_id, int(time.time())),
+             )

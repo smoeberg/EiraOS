@@ -148,6 +148,11 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   svarer på sit eget `health`-kald, så en gate, der hænger, dræbes og genstartes. En daemon ved trådgrænsen afviser
   én forbindelse i stedet for at lukke accept-løkken. Mutanter `IPC-SRV-3` og `IPC-WD-1` til `IPC-WD-5`, fire nye
   VM-checks og invariant I-24 (udviklingsplan F1c.13, gennemgang G-39).
+- Fleet-synkroniseringen er signeret: en parret enhed har en Ed25519-nøgle, beviser ved parring, at den har den, og
+  signerer hvert `sync.*`-kald over en engangs-challenge (`sync.challenge`, 60 sekunder, højst 16 åbne pr. enhed).
+  Signaturen dækker metoden, enhedens id, noncen og parametrene. Bearer-tokenet er fjernet; en enhed parret før skal
+  parres igen. Enhedens id er nu fingeraftrykket af signeringsnøglen. Mutanter `IPC-FLT-1` til `IPC-FLT-8`, ny
+  invariant I-25 (udviklingsplan F1c.1, gennemgang G-1).
 
 ### Rettigheder fra Fleet (ADR-0003)
 - EIRA Rights Set 1.0 som eksekverbar kontrakt med skema, verifikator og testvektorer (#141).
