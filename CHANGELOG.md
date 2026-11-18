@@ -100,7 +100,8 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
 - Procesidentitet fra `SO_PEERCRED`; modellen kan aldrig samtykke eller bekræfte (#150).
 - Desktop-brugeren kan ikke skrive gatens database: `eira-clients` adskilt fra `eira` (#142).
 - Samtykke-TTL på `CLOCK_BOOTTIME` (#143); samtykkenøglen kun i RAM og kun for den aktuelle boot (#178).
-- Audit-anker i journald og hos Fleet (#155) og journalens FSS-segl med overdragelse af nøglen (#167).- Samtykkeagenten `eira-consent-agent` (Rust, setgid): kun den kan samtykke og bekræfte (#153, #158, #175).
+- Audit-anker i journald og hos Fleet (#155) og journalens FSS-segl med overdragelse af nøglen (#167).
+- Samtykkeagenten `eira-consent-agent` (Rust, setgid): kun den kan samtykke og bekræfte (#153, #158, #175).
 - Delegation "på vegne af" via den betroede vej, registreret i gatens audit (#157, #164).
 - Gaten og IPC-adgangsklasserne er under mutationstest: 20 mutanter (`GATE-*`, `IPC-*`) i et nyt CI-job
   `security-mutants`. Syv af de første gate-mutanter overlevede den eksisterende suite (samtykke fra en anden session,
@@ -199,6 +200,7 @@ Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 
   units ved opgradering, og intet startede dem igen. Fundet af den nye opgraderingstest. Nu
   `--no-start --restart-after-upgrade`: intet stoppes, og `postinst` genstarter de units, der kørte (udviklingsplan
   F0c.7, gennemgang G-36).
+
 ### Beslutninger og kontrakter
 - ADR-0002 (to handlingsfamilier), ADR-0003 (rettigheder fra Fleet), ADR-0004 (vendor-neutral GUI),
   ADR-0005 (kontekster), ADR-0006 (livets indbakke) (#137, #140, #168, #170, #171).
@@ -299,3 +301,13 @@ Alle sprint 5-7-PR'er er merged og CI er grøn; dette er det første tag.
 
 ### Sprint 2 — Daemons og IPC
 - Udvidede JSON-RPC-daemonregistrering og health-endpoints på tværs af kernekomponenter.
+- Strammede JSON-RPC-kontraktvalidering, fejlens `user_message`-felt og peer-credential-/Unix-socket-adgangskontrol.
+- Tilføjede systemd-units og deployment-script til at starte daemonerne under dedikeret `eira`-bruger/-gruppe.
+
+### Release-forbehold
+- Denne changelog opsummerer kode og tests, der er til stede i repositoryets Sprint 2–4-linje; den er ikke i sig selv dokumentation for en publiceret binær release.
+- Foreslået Git-tag: `v0.4.0`. Opret først tag efter review, grøn CI og ejerens releasebeslutning.
+
+## Tidligere versioner
+
+Tidligere historik er endnu ikke samlet i denne fil.
