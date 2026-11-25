@@ -22,7 +22,7 @@ Sikkerhedskernen er bygget og afprøvet på den installerede pakke i en VM (`vm-
 | Desktop | Explorer og Builder Mode, rigtig terminal, strøm via EiraSystemAPI; login gennem GDM |
 | Pakning | `.deb`, `eira-labwc`, installer-ISO på Ubuntu 26.04, offline VM-test |
 
-**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået), fordelt beregning mellem personens egne enheder (ADR-0010, foreslået; spor C, del af 1.0).
+**Besluttet, men ikke bygget:** kontekster (ADR-0005, EIRA-CONTEXT og testplan accepteret), ID-hjemmet, Web App Manager (ADR-0004), livets indbakke (ADR-0006), universets model i graphd (ADR-0004 D4), adgangskoder og passkeys (ADR-0007, foreslået), datalagets byggesten (ADR-0009, foreslået), fordelt beregning mellem personens egne enheder (ADR-0010, foreslået; spor C, del af 1.0), nyheder i livets indbakke og Veritas som kriterieliste (ADR-0011, foreslået; efter F6).
 
 **Ikke besluttet:** økonomi. Det eneste af personens kerneområder uden en ADR (§3, spor P).
 

@@ -28,6 +28,10 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
 ### Dokumentation
+- ADR-0011 (forslag, 25. november 2026): nyheder som kanal i livets indbakke. Afsenderen vurderes på bevist oprindelse
+  (signatur, C2PA, ansvarligt medie), håndværket efter et versioneret kriteriesæt, og sandhed efterprøves kun pr. påstand
+  mod en primærkilde. Ingen sandhedsværdi eller samlet score for artikler; ingen domænelister i koden; filtrering er
+  personens eget valg og kan ikke styres af Fleet.
 - `docs/proposals/Civita_Opsamling_v0.1.md` (forslag, 25. november 2026): opsamling af det stoppede Civita-koncept. Det
   offentlige torv opgives. Foreningens livsforløb, afstemning, kontingent og "siden sidst" føres ind i
   fællesskabsfundamentet (#165). Data Wallet, datasalg, reklamer, Facebook-import af venner, Civita Search og blockchain
