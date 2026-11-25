@@ -34,7 +34,8 @@ Civita forsøgte at bygge et bedre Facebook. Vurderingen er, at netop den katego
 - **Gruppechatten er en dårlig infrastruktur.** Den har ingen hukommelse, ingen roller, ingen kalender, intet arkiv og ingen grænse mellem arbejde og fritid. Det hul er det, EiraOS kan fylde.
 - **AI-genereret indhold gør den offentlige feed værdiløs.** Værdien flytter til *verificerede mennesker, man kender*, inden for fællesskaber med en grænse.
 - **Grænsefladen bliver en agent, ikke en feed.** En agent, der samler indgangene, er præcis "livets indbakke" (ADR-0006). Opmærksomhedsøkonomien og dermed en reklamemodel passer ikke ind.
-- **Reklamemodellen gør platformene til markedspladser for handel og svindel.** Forskere peger på, at shopping og svindel i stigende grad præger de sociale medier (DR, november 2026). Ifølge Forbrugerrådet Tænk kom over halvdelen af den svindel, danskerne mødte i 2025, fra Facebook, og kun hver fjerde anmeldte svindelannonce blev fjernet. En model, hvor platformen tjener på annoncer, har ikke et incitament til at rydde op.
+- **Selv forskningen kalder dem ikke længere sociale.** Rapporten *Sociale platformes økonomiske magt* (Magtudredningen 2.0, lektorerne Andreas Lindegaard Gregersen og Jacob Ørmen, Københavns Universitet) konkluderer, at betegnelsen "sociale medier" i dag er misvisende. Platformene er styret af fastholdelse og annoncer, og indhold fra ens virkelige venner trænges i baggrunden, fordi det ikke fastholder nok (DR, 25. november 2026).
+- **Reklamemodellen gør platformene til markedspladser for handel og svindel.** Ifølge interne Meta-dokumenter, som omtales i samme artikel, anslog Meta selv, at over ti procent af omsætningen kom fra annoncer for svindel og forbudte varer. Meta bestrider, at dokumenterne giver et retvisende billede. Ifølge Forbrugerrådet Tænk kom over halvdelen af den svindel, danskerne mødte i 2025, fra Facebook, og kun hver fjerde anmeldte svindelannonce blev fjernet. En model, hvor platformen tjener på annoncer, har ikke et incitament til at rydde op.
 - **Pengene ligger i tilhørsforhold, ikke i opmærksomhed.** Fællesskaber betaler allerede for at fungere (kontingent). Brugerne skal ikke sælges.
 
 Konklusion: Civitas oprindelige ambition (mennesket og dets relationer frem for platformen) er bedre realiseret som et lag i EiraOS end som en app. Lagets form er allerede beskrevet i fællesskabsfundamentet (#165). Civita bidrager med konkret indhold til det.
@@ -137,6 +138,6 @@ Dokumentet ændrer ikke rækkefølgen. Fællesskabsfunktioner forudsætter ident
 
 ## Kilder
 
-- DR: [Forskere: Shopping og svindel definerer i højere grad dine sociale medier](https://www.dr.dk/nyheder/indland/forskere-shopping-og-svindel-definerer-i-hoejere-grad-dine-sociale-medier) (november 2026)
+- DR: [Forskere: Shopping og svindel definerer i højere grad dine sociale medier](https://www.dr.dk/nyheder/indland/forskere-shopping-og-svindel-definerer-i-hoejere-grad-dine-sociale-medier) (25. november 2026), om rapporten *Sociale platformes økonomiske magt* fra Magtudredningen 2.0
 - Forbrugerrådet Tænk: [Kun hver 4. svindelannonce bliver fjernet fra sociale medier](https://taenk.dk/forbrugerliv/elektronik-og-digitale-tjenester/kun-hver-4-svindelannonce-fjernes-sociale-medier)
 - Fællesskabsfundamentet (#165), ADR-0005, ADR-0006, EIRA-CONTEXT 1.0 (se øverst)
