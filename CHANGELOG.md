@@ -4,6 +4,9 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 
 ## [Unreleased]
 
+### Hardware Trust & Open Silicon (forslag)
+- Tilføjet et ikke-normativt arkitekturudkast om hardwareprofiler, evidensniveauer, Fleet/Gate-grænser, den eksisterende TPM-enrollment og en mulig rolle for GoIT Hardware Hub. Ingen runtime, daemon, Gate-, Fleet- eller Phase 0-kontrakter ændres; notatet afventer ejerreview.
+
 ### Kontekster (EIRA-CONTEXT 1.0)
 - F2.1: lagerformatet (§6) i `app/context/`: blokke, manifester, enhedsliste, FastCDC og et lokalt hjem; referenceværktøjet
   `tools/eira-context-export/`, som læser et hjem uden EiraOS; testvektorer; B-1, B-2 og B-3 verificeret på N1 med 16
