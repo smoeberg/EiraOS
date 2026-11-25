@@ -1,12 +1,14 @@
 # ADR-0011 — Nyheder i livets indbakke: afsender, håndværk og efterprøvede påstande
 
-**Status:** Foreslået, til ejerens accept (25. november 2026). N1, N2, N4 og N6 er ejerens retning; resten er et forslag.
+**Status:** Foreslået, til ejerens accept (25. november 2026). N1, N2, N4, N6 og N10 er ejerens retning; resten er et forslag.
 **Gælder for:** `veritasd` og `app/veritas/`, Veritas HUD (`ui/src/components/VeritasHUD.tsx`), livets indbakke og dens adaptere (ADR-0006), kontekster (ADR-0005), Fleet-rettigheder (ADR-0003)
 **Relateret:** [ADR-0003](ADR-0003-rettigheder-fra-fleet.md), [ADR-0005](ADR-0005-kontekster-og-datas-hjem.md), [ADR-0006](ADR-0006-livets-indbakke.md), [EDP 1.0](../../specs/EDP-1.0.md), [AI-INTERFACE 1.0](../../specs/AI-INTERFACE-1.0.md), [fællesskabsfundamentet](../proposals/EIRA_Human_and_Community_Centric_Foundation_v0.1.md) (#165), [arkitekturen §9](../architecture/eiraos-system-architecture.md), fundregistret G-8 og G-12
 
 ## Normativ regel
 
 > **EiraOS viser, hvem der står bag en nyhed, og hvordan den er lavet. EiraOS afgør aldrig, om en nyhed er sand. Kun en konkret påstand kan efterprøves, og kun mod en primærkilde, der vises. Hvad personen vil se, er personens eget valg.**
+>
+> **Det er en samfundspligt at levere et sted, hvor man kan få troværdige nyheder. Derfor er det gratis for medierne at være med, og det er et eksternt nævn, ikke Eira, der afgør, hvem der er med.** (ejeren, 25. november 2026)
 
 ## Kontekst
 
@@ -26,7 +28,9 @@ Det, der findes i dag:
 
 ### N1 — Nyheder er en kanal, ikke en feed (ejerens retning)
 
-Nyheder kommer ind gennem en adapter efter ADR-0006 L1–L2 (først RSS/Atom) og lander i livets indbakke i personens egen kontekst. Personen vælger selv sine kilder.
+Nyheder kommer ind gennem en adapter efter ADR-0006 L1–L2 og lander i livets indbakke i personens egen kontekst. Personen vælger selv sine kilder: fra mediekataloget (N10) eller ved selv at tilføje en kilde (fx RSS/Atom). Selvvalgte kilder uden for kataloget spærres ikke ude, men vises som *ikke verificeret afsender* (N2, N6).
+
+Det, der vises fra et tilmeldt medie, er overskrifter og korte nyheder med link til mediets egen uddybende historie, også når den ligger bag mediets betalingsmur.
 
 - Ingen central nyhedsstrøm, ingen rangering efter engagement, ingen anbefalinger fra Eira (#165 §6 og §8).
 - Rækkefølgen er tid eller personens egen sortering.
@@ -40,12 +44,12 @@ Afsenderen skal vurderes, og kravet er, at indholdet er skabt af et menneske, de
 |---|---|---|
 | Signatur på artiklen | Et navngivet menneske eller medie står ved netop denne tekst | Lag 2 (QEAA/EUDI) |
 | Content credentials på billeder og video | Hvor billedet kommer fra, og om det er redigeret eller genereret | C2PA |
-| Ansvarligt medie | Afsenderen kan holdes ansvarlig efter dansk ret (fx medieansvarsloven) | Opslag, se O-2 |
+| Optaget i mediekataloget | Et eksternt nævn har konstateret, at mediet opfylder de offentlige kriterier, og mediets nøgle er registreret | Mediekataloget (N10) |
 
 Resultatet er en status med begrundelse: *verificeret afsender* (med hvad der er verificeret) eller *ikke verificeret afsender*. Det er aldrig "upålidelig".
 
 - **AI-detektion er ikke et grundlag.** Værktøjer, der gætter på, om en tekst er maskinskrevet, rammer forkert på mennesker og kan omgås. De må ikke indgå i afsendervurderingen.
-- **Ingen lister over godkendte medier i koden.** `DEFAULT_ALLOWLIST` og `DEFAULT_DENYLIST` fjernes fra `layer1_rules.py`. Eira afgør ikke, hvilke medier man kan stole på; det afgør beviserne.
+- **Ingen lister over godkendte medier i koden.** `DEFAULT_ALLOWLIST` og `DEFAULT_DENYLIST` fjernes fra `layer1_rules.py`. Eira afgør ikke, hvilke medier man kan stole på. Mediekataloget (N10) er noget andet end en liste i koden: optagelsen sker efter offentlige kriterier, afgøres af et eksternt nævn og kan påklages.
 
 ### N3 — Artiklens håndværk som kriterieliste
 
@@ -106,6 +110,34 @@ Vurderingen skrives, så alle kan forstå den, og den peger på en handling:
 
 Ingen fagudtryk i fladen. Detaljerne (hvilke kriterier, hvilke fund, hvor i teksten, hvilken kriterieversion) ligger ét klik væk.
 
+### N10 — Mediekataloget: medierne tilmelder sig (ejerens retning)
+
+Troværdige medier tilmelder sig et katalog og kan derefter levere signerede overskrifter og korte nyheder til EiraOS.
+
+**Optagelse ved et eksternt nævn.** Det er ikke Eira, der afgør, hvem der optages. Det gør et eksternt nævn. Hvilket nævn er ikke afgjort; Pressenævnet er ejerens første bud (O-5). Nævnet er ikke kontaktet, og intet i denne ADR forudsætter, at det siger ja.
+
+**Kriterierne er objektive og offentlige.** De handler om ansvar, ikke om kvalitet eller holdning. Forslag:
+
+- mediet er anmeldt efter medieansvarsloven og underlagt Pressenævnet
+- der er en navngiven ansvarshavende redaktør
+- mediet signerer det, det leverer til kataloget
+- mediet har en offentlig rettelsespraksis
+
+Et medie, der opfylder kriterierne, optages, uanset størrelse eller holdning. Et afslag eller en udelukkelse begrundes og kan påklages efter nævnets regler.
+
+**Gratis, altid.** Det koster aldrig penge at blive optaget eller at være med, og troværdighed kan ikke købes. Eira tager heller ikke betaling for tillægsydelser til medierne, der hviler på kataloget.
+
+**Eira driver kun det tekniske register.** Det rummer de optagne medier, deres offentlige nøgler, deres feed-adresser og nævnets afgørelser med dato. Eira ændrer ikke nævnets afgørelser.
+
+**Eira kan ikke se, hvem der læser hvad.**
+
+- Medierne udgiver selv deres signerede feeds; indholdet går ikke gennem Eira.
+- EiraOS på personens egen enhed henter direkte fra mediet og tjekker signaturen mod registeret.
+- Registeret hentes som helhed, ikke slået op pr. artikel, så opslag ikke afslører læsning.
+- Ingen klikstatistik, ingen måling af læsning og ingen data om læsere til medierne fra Eira. Hvad mediet selv ser, når personen følger linket til mediets side, er mellem personen og mediet.
+
+**Ingen rangering.** Katalogets medier vises alfabetisk eller efter personens eget valg. Kataloget fremhæver ingen.
+
 ## Konsekvenser
 
 - `veritasd` får en ny evaluering for nyhedsartikler, der returnerer N2–N4 som strukturerede fund i stedet for en score. Den eksisterende evaluering for handlinger (EDP) bevares.
@@ -113,7 +145,9 @@ Ingen fagudtryk i fladen. Detaljerne (hvilke kriterier, hvilke fund, hvor i teks
 - Veritas HUD'en ændres fra score til kriterieliste (N5, N9).
 - `veritas-shield/` fjernes eller arkiveres i F1c.5 som planlagt; denne ADR overtager dens formål.
 - En RSS/Atom-adapter kræver Input-kontrakten fra ADR-0006 og kommer først efter den.
-- **I begyndelsen vil næsten alt være "ikke verificeret afsender".** Få medier signerer deres artikler i dag. Det er et korrekt billede af virkeligheden og en grund til, at N6 markerer frem for at skjule.
+- Mediekataloget (N10) er en ny tjeneste: et register med offentlige nøgler og afgørelser, et format for signerede feeds og et værktøj, medierne kan signere med. Registeret er offentligt og kan spejles.
+- Kataloget løser, at næsten alt ellers ville stå som "ikke verificeret afsender", fordi få medier signerer i dag. Det gør det kun for de medier, der tilmelder sig. Selvvalgte kilder uden for kataloget forbliver markeret (N6).
+- Kataloget kræver et nævn, der vil påtage sig opgaven, og en aftale om, hvordan afgørelser når registeret. Uden et nævn bygges kataloget ikke; N1–N9 gælder uanset.
 
 ## Afvist
 
@@ -124,6 +158,9 @@ Ingen fagudtryk i fladen. Detaljerne (hvilke kriterier, hvilke fund, hvor i teks
 | Lister over godkendte eller afviste medier i koden | N2; Eira bliver redaktør |
 | AI-detektion af maskinskrevet tekst som grundlag for afsendervurdering | N2; for upålidelig |
 | Filtrering af nyheder styret af Fleet eller arbejdsgiver | N6; censur |
+| Eira afgør selv optagelsen i mediekataloget | N10; Eira bliver redaktør |
+| Betaling for optagelse, synlighed eller tillægsydelser | N10; troværdighed kan ikke købes |
+| Nyheder hentet gennem en central Eira-server eller klikstatistik | N10; Eira må ikke kunne se læsning |
 | En central nyhedsfeed eller anbefalingsalgoritme | N1; #165 §8 |
 
 ## Åbne spørgsmål
@@ -131,9 +168,11 @@ Ingen fagudtryk i fladen. Detaljerne (hvilke kriterier, hvilke fund, hvor i teks
 | # | Spørgsmål | Blokerer |
 |---|---|---|
 | O-1 | Hvilke primærkilder kommer først (Danmarks Statistik, Retsinformation, domstolene, EU-kilder), og hvordan håndteres en kilde, der er nede eller ændret? | N4 |
-| O-2 | Hvordan verificeres "ansvarligt medie" maskinelt? Findes der et register (fx hos Pressenævnet), der kan slås op, og hvem vedligeholder opslaget? | N2, tredje række |
+| O-2 | ~~Hvordan verificeres "ansvarligt medie" maskinelt?~~ Besvaret af N10: medierne tilmelder sig, og nævnets afgørelse står i registeret | — |
 | O-3 | Hvem ejer kriteriesættet i N3: Eira, eller en ekstern, åben proces (fx med journalistuddannelser eller medieforskere)? | N3 |
-| O-4 | Juridisk vurdering af N4 og N6 i forhold til ærekrænkelse og censurforbuddet, før funktionen tilbydes offentlige kunder | Udgivelse |
+| O-4 | Juridisk vurdering af N4, N6 og N10 i forhold til ærekrænkelse og censurforbuddet, før funktionen tilbydes offentlige kunder | Udgivelse |
+| O-5 | Hvilket eksternt nævn? Pressenævnet er ejerens første bud. Har det hjemmel og vilje til opgaven, eller kræver det en anden instans (fx et uafhængigt nævn nedsat sammen med branchen)? | N10 |
+| O-6 | Hvem betaler for drift af registeret og nævnets sagsbehandling, når medierne ikke betaler? Fx Eira, offentlig støtte eller EU-midler | N10 |
 
 ## Kilder
 
