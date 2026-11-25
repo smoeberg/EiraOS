@@ -24,7 +24,7 @@ Kildematerialet lægges ikke i repoet. Kun dette dokument gælder.
 
 > **Det offentlige torv opgives. Det handler om mennesket og dets relationer.** (ejeren, 25. november 2026)
 
-Civita videreføres ikke som selvstændigt socialt netværk, app eller brand med egen platform. Det, der kan bruges, går ind i EiraOS' fællesskabslag gennem de eksisterende primitiver: kontekst, fællesskab, medlemskab, rolle, aktivitet, beslutning og økonomisk hændelse.
+Civita videreføres ikke som selvstændigt socialt netværk, app eller platform. Navnet lever videre som navnet på fællesskabslaget i EiraOS (CO-1). Det, der kan bruges, går ind i EiraOS' fællesskabslag gennem de eksisterende primitiver: kontekst, fællesskab, medlemskab, rolle, aktivitet, beslutning og økonomisk hændelse.
 
 ## 3. Begrundelse
 
@@ -98,7 +98,7 @@ Aktiviteter med et fysisk sted, tilmelding og kortvisning. Det passer med kalend
 
 Kommuner har allerede en relation til foreningerne gennem tilskud og dokumentation. Det er de samme kunder som ECK. Hypotesen er, at et foreningslag kan være en konkret demonstration af EiraOS-kontekster over for en kommune, og at en eksport af medlems- og aktivitetstal i kommunens format kan være en indgang.
 
-**Er ikke valideret.** Den skal afprøves i samtale med en kommunes fritidsafdeling, før der bygges noget til den.
+**Parkeret** (CO-3). Den er ikke valideret og afprøves ikke sammen med ECK. Der bygges intet til den.
 
 ### C8 — Eget arkiv med fra andre tjenester (lav prioritet)
 
@@ -119,15 +119,15 @@ Disse dele af Civita må ikke genindføres i EiraOS. Listen står her, så de ik
 | **Realtidsauktion** (Prebid.js o.l.) | Følger af afvisningen af reklamer |
 | **Et globalt offentligt torv**, én fælles feed og én fælles social graf | Ejerens beslutning (§2). Strider også mod skarpe grænser mellem kontekster (ADR-0005, ADR-0006 L5) |
 | **"Luminous Glassmorphism"**-designspecifikationen og stemmepanelet "Hey Nova" | Ikke forankret i EiraOS' GUI-arkitektur (ADR-0004) og i strid med Civitas egne mockups. UI følger EiraOS' egne designdokumenter |
-| **Civita som separat app**, eget brand og egen platform | Fundamentets anti-pattern: et separat subsystem ved siden af EiraOS |
+| **Civita som separat app** og egen platform (navnet bruges om fællesskabslaget, CO-1) | Fundamentets anti-pattern: et separat subsystem ved siden af EiraOS |
 
-## 6. Åbne spørgsmål til ejeren
+## 6. Ejerens svar (25. november 2026)
 
-| # | Spørgsmål | Blokerer |
+| # | Spørgsmål | Svar |
 |---|---|---|
-| CO-1 | Skal navnet "Civita" (af latin *civitas*, borgerfællesskab) leve videre som navnet på fællesskabslaget i EiraOS, eller skal det forsvinde? | Intet teknisk; formuleringer og kommunikation |
-| CO-2 | Skal C1 (foreningens livsforløb) være det end-to-end referenceforløb, fundamentet §9 pkt. 5 kræver, i stedet for eller ved siden af skole og idrætshold? | Prioritering i F4–F6 |
-| CO-3 | Skal hypotesen C7 (kommunen som kanal) afprøves sammen med ECK-samtalerne? | Ingenting før validering |
+| CO-1 | Skal navnet "Civita" (af latin *civitas*, borgerfællesskab) leve videre som navnet på fællesskabslaget i EiraOS? | **Ja.** Fællesskabslaget i EiraOS hedder Civita. Det er et navn på et lag, ikke en separat app eller platform (§5) |
+| CO-2 | Skal C1 (foreningens livsforløb) være det end-to-end referenceforløb, fundamentet §9 pkt. 5 kræver? | **Nej.** Referenceforløbet forbliver skole og idrætsforening som i #165. C1 er indhold, der skal kunne konfigureres på samme model |
+| CO-3 | Skal hypotesen C7 (kommunen som kanal) afprøves sammen med ECK-samtalerne? | **Nej.** C7 parkeres. ECK-samtalerne holdes fri af fællesskabslaget |
 
 ## 7. Forhold til udviklingsplanen
 
