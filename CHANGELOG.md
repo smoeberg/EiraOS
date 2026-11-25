@@ -25,6 +25,10 @@ Alle væsentlige ændringer i EiraOS dokumenteres her. Datoer angiver leveringsp
 Leveret 6.–12. november 2026 (PR #128 og frem). Ingen release er tagget siden 0.7.0.
 
 ### Dokumentation
+- `docs/proposals/Civita_Opsamling_v0.1.md` (forslag, 25. november 2026): opsamling af det stoppede Civita-koncept. Det
+  offentlige torv opgives. Foreningens livsforløb, afstemning, kontingent og "siden sidst" føres ind i
+  fællesskabsfundamentet (#165). Data Wallet, datasalg, reklamer, Facebook-import af venner, Civita Search og blockchain
+  afvises.
 - `CONTRIBUTING.md`: hvad der gælder, de hårde regler og vejen for en ny beskyttet handling (skema → policy →
   gengivelse → executor → rettighed → AppArmor → model → UI → test → VM-check → audit). PR-skabelon. `.cursor`-reglen
   pegede på arkiverede filer og sessionsbundet tilstand og er rettet.
