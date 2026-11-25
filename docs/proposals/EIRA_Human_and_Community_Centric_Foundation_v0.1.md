@@ -189,3 +189,4 @@ Dette dokument fastlægger retningen, ikke en færdig implementering.
 - EIRA Cognitive Runtime: `docs/archive/specs-v0/EIRA_Cognitive_Runtime_v1.0.md`
 - EIRA Object Graph Specification: `docs/archive/specs-v0/EIRA_Object_Graph_Specification_v0.3.md` (findes i tre versioner, v0.1–v0.3; skal afklares ved oprydningen af `docs/specs/`)
 - ADR-0005, ADR-0006 og EIRA-CONTEXT 1.0 (se øverst)
+- [Civita: hvad EiraOS overtager, og hvad der afvises](Civita_Opsamling_v0.1.md): foreningens livsforløb, afstemning, kontingent og en liste over afviste mønstre
