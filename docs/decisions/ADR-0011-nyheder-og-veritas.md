@@ -122,6 +122,7 @@ Troværdige medier tilmelder sig et katalog og kan derefter levere signerede ove
 - der er en navngiven ansvarshavende redaktør
 - mediet signerer det, det leverer til kataloget
 - mediet har en offentlig rettelsespraksis
+- mediet er selv udgiver af det, det leverer: kun indhold, mediet selv har produceret og har det redaktionelle ansvar for. Aggregatorer, der samler andres indhold (fx MSN, Google News), kan ikke optages (ejerens beslutning, 25. november 2026)
 
 Et medie, der opfylder kriterierne, optages, uanset størrelse eller holdning. Et afslag eller en udelukkelse begrundes og kan påklages efter nævnets regler.
 
@@ -159,6 +160,7 @@ Et medie, der opfylder kriterierne, optages, uanset størrelse eller holdning. E
 | AI-detektion af maskinskrevet tekst som grundlag for afsendervurdering | N2; for upålidelig |
 | Filtrering af nyheder styret af Fleet eller arbejdsgiver | N6; censur |
 | Eira afgør selv optagelsen i mediekataloget | N10; Eira bliver redaktør |
+| Aggregatorer i mediekataloget | N10; kun den oprindelige udgiver kan stå ved og signere indholdet |
 | Betaling for optagelse, synlighed eller tillægsydelser | N10; troværdighed kan ikke købes |
 | Nyheder hentet gennem en central Eira-server eller klikstatistik | N10; Eira må ikke kunne se læsning |
 | En central nyhedsfeed eller anbefalingsalgoritme | N1; #165 §8 |
